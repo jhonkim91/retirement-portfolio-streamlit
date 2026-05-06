@@ -12,7 +12,7 @@ import streamlit as st
 SUPABASE_URL = os.getenv("SUPABASE_URL", "https://iyszkybxostbjfzbbymq.supabase.co")
 
 HEADERS = {
-    "apikey": SUPABASE_KEY,
+    "apikey": SUPABASE_KEY, sb_publishable_FiwkEap5DuLz4ksGDUPlFQ_qKmp-lml
     "Authorization": f"Bearer {SUPABASE_KEY}",
     "Content-Type": "application/json",
 }
