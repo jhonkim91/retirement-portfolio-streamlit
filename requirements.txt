@@ -1,7 +1,7 @@
 streamlit==1.55.0
 requests>=2.31,<3
 pandas>=2.2,<3
-altair>=5.0,<6
+altair==5.0.1
 yfinance>=0.2.66,<0.3
 supabase>=2.0.0,<3
 python-dateutil>=2.8,<3
