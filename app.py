@@ -7,8 +7,15 @@ import altair as alt
 import pandas as pd
 import streamlit as st
 
-from src.analytics import account_summary, build_portfolio_trend, holdings_frame, realized_summary
-from src import db as _db
+from src.analytics import (
+    account_summary,
+    build_portfolio_trend,
+    holdings_frame,
+    realized_summary,
+)
+
+import src.db as _db
+from src.market import fetch_latest_price
 
 create_account = _db.create_account
 export_dataframe_rows = _db.export_dataframe_rows
@@ -21,7 +28,6 @@ record_cash_flow = _db.record_cash_flow
 record_trade = _db.record_trade
 set_holding_price = _db.set_holding_price
 update_cash_balance = _db.update_cash_balance
-from src.market import fetch_latest_price
 
 
 st.set_page_config(
