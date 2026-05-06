@@ -1,100 +1,123 @@
 from __future__ import annotations
 
 import os
-import sqlite3
-from contextlib import contextmanager
-from datetime import date, datetime
-from pathlib import Path
-from typing import Any, Iterator
+from datetime import datetime
+from typing import Any
+
+import requests
+import streamlit as st
 
 
-ROOT_DIR = Path(__file__).resolve().parents[1]
-DB_PATH = Path(os.getenv("RETIREMENT_DB_PATH", ROOT_DIR / "data" / "portfolio.db"))
+# Supabase 설정
+SUPABASE_URL = os.getenv("SUPABASE_URL", "https://iyszkybxostbjfzbbymq.supabase.co")
+
+HEADERS = {
+    "apikey": SUPABASE_KEY,
+    "Authorization": f"Bearer {SUPABASE_KEY}",
+    "Content-Type": "application/json",
+}
 
 
 def now_iso() -> str:
     return datetime.utcnow().replace(microsecond=0).isoformat()
 
 
-@contextmanager
-def connect() -> Iterator[sqlite3.Connection]:
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    connection = sqlite3.connect(DB_PATH)
-    connection.row_factory = sqlite3.Row
-    connection.execute("PRAGMA foreign_keys = ON")
-    try:
-        yield connection
-    finally:
-        connection.close()
+def _supabase_request(
+    method: str,
+    table: str,
+    data: dict[str, Any] | None = None,
+    filters: dict[str, str | int] | None = None,
+) -> list[dict[str, Any]] | dict[str, Any] | None:
+    """Supabase REST API 요청"""
+    url = f"{SUPABASE_URL}/rest/v1/{table}"
+    headers = HEADERS.copy()
+
+    if method == "GET":
+        params = ""
+        if filters:
+            for key, value in filters.items():
+                if params:
+                    params += "&"
+                params += f'{key}=eq.{value}'
+        if params:
+            url += f"?{params}"
+
+        response = requests.get(url, headers=headers, timeout=10)
+        response.raise_for_status()
+        return response.json()
+
+    elif method == "POST":
+        response = requests.post(url, json=data, headers=headers, timeout=10)
+        response.raise_for_status()
+        result = response.json()
+        return result[0] if isinstance(result, list) and result else result
+
+    elif method == "PATCH":
+        if filters:
+            params = ""
+            for key, value in filters.items():
+                if params:
+                    params += "&"
+                params += f'{key}=eq.{value}'
+            if params:
+                url += f"?{params}"
+
+        response = requests.patch(url, json=data, headers=headers, timeout=10)
+        response.raise_for_status()
+        result = response.json()
+        return result[0] if isinstance(result, list) and result else result
+
+    elif method == "DELETE":
+        if filters:
+            params = ""
+            for key, value in filters.items():
+                if params:
+                    params += "&"
+                params += f'{key}=eq.{value}'
+            if params:
+                url += f"?{params}"
+
+        response = requests.delete(url, headers=headers, timeout=10)
+        response.raise_for_status()
+        return None
 
 
 def initialize_database() -> None:
-    with connect() as connection:
-        connection.executescript(
-            """
-            CREATE TABLE IF NOT EXISTS accounts (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL UNIQUE,
-                account_type TEXT NOT NULL DEFAULT 'retirement',
-                cash_balance REAL NOT NULL DEFAULT 0,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL
-            );
-
-            CREATE TABLE IF NOT EXISTS holdings (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                account_id INTEGER NOT NULL,
-                symbol TEXT NOT NULL,
-                product_name TEXT NOT NULL,
-                asset_type TEXT NOT NULL DEFAULT 'risk',
-                quantity REAL NOT NULL DEFAULT 0,
-                avg_cost REAL NOT NULL DEFAULT 0,
-                current_price REAL NOT NULL DEFAULT 0,
-                price_updated_at TEXT,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL,
-                UNIQUE(account_id, symbol),
-                FOREIGN KEY(account_id) REFERENCES accounts(id) ON DELETE CASCADE
-            );
-
-            CREATE TABLE IF NOT EXISTS trade_logs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                account_id INTEGER NOT NULL,
-                symbol TEXT,
-                product_name TEXT NOT NULL,
-                trade_type TEXT NOT NULL,
-                asset_type TEXT NOT NULL DEFAULT 'risk',
-                quantity REAL NOT NULL DEFAULT 0,
-                price REAL NOT NULL DEFAULT 0,
-                total_amount REAL NOT NULL DEFAULT 0,
-                trade_date TEXT NOT NULL,
-                notes TEXT NOT NULL DEFAULT '',
-                created_at TEXT NOT NULL,
-                FOREIGN KEY(account_id) REFERENCES accounts(id) ON DELETE CASCADE
-            );
+    """테이블 초기화 (Supabase는 수동으로 생성 필요)"""
+    # Supabase SQL Editor에서 setup_supabase.sql 실행 필요
+    try:
+        # 테이블 존재 여부 확인
+        _supabase_request("GET", "accounts", filters={})
+    except Exception as e:
+        st.error(
+            f"""
+            ⚠️ Supabase 테이블을 초기화해야 합니다.
+            
+            1. https://app.supabase.com 에서 프로젝트 선택
+            2. SQL Editor > New query 클릭
+            3. setup_supabase.sql 파일의 내용 복사 & 실행
+            
+            에러: {e}
             """
         )
-        connection.commit()
-
-
-def _fetch_all(query: str, parameters: tuple[Any, ...] = ()) -> list[dict[str, Any]]:
-    with connect() as connection:
-        rows = connection.execute(query, parameters).fetchall()
-    return [dict(row) for row in rows]
-
-
-def _fetch_one(query: str, parameters: tuple[Any, ...] = ()) -> dict[str, Any] | None:
-    with connect() as connection:
-        row = connection.execute(query, parameters).fetchone()
-    return dict(row) if row else None
 
 
 def list_accounts() -> list[dict[str, Any]]:
-    return _fetch_all("SELECT * FROM accounts ORDER BY name COLLATE NOCASE ASC")
+    try:
+        result = _supabase_request("GET", "accounts", filters={})
+        return sorted(result or [], key=lambda x: x.get("name", "").lower())
+    except Exception as e:
+        st.error(f"계좌 목록 조회 실패: {e}")
+        return []
 
 
 def get_account(account_id: int) -> dict[str, Any] | None:
-    return _fetch_one("SELECT * FROM accounts WHERE id = ?", (account_id,))
+    try:
+        result = _supabase_request("GET", "accounts", filters={"id": account_id})
+        return result[0] if isinstance(result, list) and result else result
+    except Exception as e:
+        st.error(f"계좌 조회 실패: {e}")
+        return None
 
 
 def create_account(name: str, account_type: str = "retirement", opening_cash: float = 0) -> int:
@@ -107,73 +130,90 @@ def create_account(name: str, account_type: str = "retirement", opening_cash: fl
         raise ValueError("계좌 유형은 retirement 또는 brokerage만 지원합니다.")
 
     timestamp = now_iso()
-    with connect() as connection:
-        try:
-            cursor = connection.execute(
-                """
-                INSERT INTO accounts (name, account_type, cash_balance, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?)
-                """,
-                (cleaned_name, cleaned_type, float(opening_cash or 0), timestamp, timestamp),
-            )
-        except sqlite3.IntegrityError as exc:
-            raise ValueError("같은 이름의 계좌가 이미 있습니다.") from exc
-        connection.commit()
-        return int(cursor.lastrowid)
+    try:
+        result = _supabase_request(
+            "POST",
+            "accounts",
+            data={
+                "name": cleaned_name,
+                "account_type": cleaned_type,
+                "cash_balance": float(opening_cash or 0),
+                "created_at": timestamp,
+                "updated_at": timestamp,
+            },
+        )
+        return int(result.get("id") if isinstance(result, dict) else result[0]["id"])
+    except Exception as e:
+        if "unique" in str(e).lower():
+            raise ValueError("같은 이름의 계좌가 이미 있습니다.") from e
+        raise
 
 
 def update_cash_balance(account_id: int, amount: float) -> None:
     if float(amount) < 0:
         raise ValueError("현금은 0 이상이어야 합니다.")
-    with connect() as connection:
-        connection.execute(
-            "UPDATE accounts SET cash_balance = ?, updated_at = ? WHERE id = ?",
-            (float(amount), now_iso(), account_id),
+    try:
+        _supabase_request(
+            "PATCH",
+            "accounts",
+            data={"cash_balance": float(amount), "updated_at": now_iso()},
+            filters={"id": account_id},
         )
-        connection.commit()
+    except Exception as e:
+        raise ValueError(f"현금 잔액 업데이트 실패: {e}") from e
 
 
 def list_holdings(account_id: int, include_closed: bool = False) -> list[dict[str, Any]]:
-    operator = ">=" if include_closed else ">"
-    query = f"""
-        SELECT *
-        FROM holdings
-        WHERE account_id = ?
-          AND quantity {operator} 0
-        ORDER BY current_price * quantity DESC, product_name COLLATE NOCASE ASC
-    """
-    return _fetch_all(query, (account_id,))
+    try:
+        result = _supabase_request("GET", "holdings", filters={"account_id": account_id})
+        holdings = result or []
+        if not include_closed:
+            holdings = [h for h in holdings if float(h.get("quantity", 0)) > 0]
+        return sorted(
+            holdings,
+            key=lambda x: float(x.get("current_price", 0)) * float(x.get("quantity", 0)),
+            reverse=True,
+        )
+    except Exception as e:
+        st.error(f"보유 종목 조회 실패: {e}")
+        return []
 
 
 def set_holding_price(holding_id: int, current_price: float, as_of: str | None = None) -> None:
-    with connect() as connection:
-        connection.execute(
-            """
-            UPDATE holdings
-            SET current_price = ?, price_updated_at = ?, updated_at = ?
-            WHERE id = ?
-            """,
-            (float(current_price or 0), as_of or now_iso(), now_iso(), holding_id),
+    try:
+        _supabase_request(
+            "PATCH",
+            "holdings",
+            data={
+                "current_price": float(current_price or 0),
+                "price_updated_at": as_of or now_iso(),
+                "updated_at": now_iso(),
+            },
+            filters={"id": holding_id},
         )
-        connection.commit()
+    except Exception as e:
+        raise ValueError(f"시세 업데이트 실패: {e}") from e
 
 
 def list_trade_logs(account_id: int) -> list[dict[str, Any]]:
-    return _fetch_all(
-        """
-        SELECT *
-        FROM trade_logs
-        WHERE account_id = ?
-        ORDER BY trade_date DESC, id DESC
-        """,
-        (account_id,),
-    )
+    try:
+        result = _supabase_request("GET", "trade_logs", filters={"account_id": account_id})
+        logs = result or []
+        return sorted(logs, key=lambda x: (x.get("trade_date", ""), x.get("id", 0)), reverse=True)
+    except Exception as e:
+        st.error(f"거래 기록 조회 실패: {e}")
+        return []
 
 
 def export_dataframe_rows(table_name: str) -> list[dict[str, Any]]:
     if table_name not in {"accounts", "holdings", "trade_logs"}:
         raise ValueError("지원하지 않는 테이블입니다.")
-    return _fetch_all(f"SELECT * FROM {table_name} ORDER BY id ASC")
+    try:
+        result = _supabase_request("GET", table_name, filters={})
+        return sorted(result or [], key=lambda x: x.get("id", 0))
+    except Exception as e:
+        st.error(f"테이블 조회 실패: {e}")
+        return []
 
 
 def record_trade(
@@ -210,113 +250,101 @@ def record_trade(
     total_amount = share_count * trade_price
     timestamp = now_iso()
 
-    with connect() as connection:
-        account_row = connection.execute("SELECT * FROM accounts WHERE id = ?", (account_id,)).fetchone()
-        if not account_row:
+    try:
+        # 계좌 확인
+        account = get_account(account_id)
+        if not account:
             raise ValueError("계좌를 찾을 수 없습니다.")
 
-        holding_row = connection.execute(
-            "SELECT * FROM holdings WHERE account_id = ? AND symbol = ?",
-            (account_id, cleaned_symbol),
-        ).fetchone()
+        # 보유 종목 확인
+        holdings = _supabase_request("GET", "holdings", filters={"account_id": account_id})
+        holdings = [h for h in (holdings or []) if h.get("symbol") == cleaned_symbol]
+        holding_row = holdings[0] if holdings else None
 
-        cash_balance = float(account_row["cash_balance"] or 0)
+        cash_balance = float(account.get("cash_balance", 0))
 
         if cleaned_type == "buy":
             if cash_balance + 0.000001 < total_amount:
                 raise ValueError("현금이 부족합니다. 현금 입금 후 다시 시도해 주세요.")
 
             if holding_row:
-                previous_quantity = float(holding_row["quantity"] or 0)
-                previous_cost = float(holding_row["avg_cost"] or 0)
+                previous_quantity = float(holding_row.get("quantity", 0))
+                previous_cost = float(holding_row.get("avg_cost", 0))
                 next_quantity = previous_quantity + share_count
                 weighted_avg_cost = ((previous_quantity * previous_cost) + total_amount) / next_quantity
-                connection.execute(
-                    """
-                    UPDATE holdings
-                    SET product_name = ?, asset_type = ?, quantity = ?, avg_cost = ?, updated_at = ?
-                    WHERE id = ?
-                    """,
-                    (cleaned_name, cleaned_asset_type, next_quantity, weighted_avg_cost, timestamp, int(holding_row["id"])),
+                _supabase_request(
+                    "PATCH",
+                    "holdings",
+                    data={
+                        "product_name": cleaned_name,
+                        "asset_type": cleaned_asset_type,
+                        "quantity": next_quantity,
+                        "avg_cost": weighted_avg_cost,
+                        "updated_at": timestamp,
+                    },
+                    filters={"id": holding_row["id"]},
                 )
             else:
-                connection.execute(
-                    """
-                    INSERT INTO holdings (
-                        account_id, symbol, product_name, asset_type, quantity, avg_cost, current_price,
-                        price_updated_at, created_at, updated_at
-                    )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        account_id,
-                        cleaned_symbol,
-                        cleaned_name,
-                        cleaned_asset_type,
-                        share_count,
-                        trade_price,
-                        trade_price,
-                        timestamp,
-                        timestamp,
-                        timestamp,
-                    ),
+                _supabase_request(
+                    "POST",
+                    "holdings",
+                    data={
+                        "account_id": account_id,
+                        "symbol": cleaned_symbol,
+                        "product_name": cleaned_name,
+                        "asset_type": cleaned_asset_type,
+                        "quantity": share_count,
+                        "avg_cost": trade_price,
+                        "current_price": trade_price,
+                        "price_updated_at": timestamp,
+                        "created_at": timestamp,
+                        "updated_at": timestamp,
+                    },
                 )
 
-            connection.execute(
-                "UPDATE accounts SET cash_balance = ?, updated_at = ? WHERE id = ?",
-                (cash_balance - total_amount, timestamp, account_id),
-            )
-        else:
+            update_cash_balance(account_id, cash_balance - total_amount)
+        else:  # sell
             if not holding_row:
                 raise ValueError("매도할 보유 종목이 없습니다.")
 
-            previous_quantity = float(holding_row["quantity"] or 0)
+            previous_quantity = float(holding_row.get("quantity", 0))
             if previous_quantity + 0.000001 < share_count:
                 raise ValueError("보유 수량보다 많은 수량을 매도할 수 없습니다.")
 
             next_quantity = previous_quantity - share_count
-            avg_cost = float(holding_row["avg_cost"] or 0)
-            connection.execute(
-                """
-                UPDATE holdings
-                SET quantity = ?, avg_cost = ?, updated_at = ?
-                WHERE id = ?
-                """,
-                (
-                    max(next_quantity, 0),
-                    avg_cost if next_quantity > 0 else 0,
-                    timestamp,
-                    int(holding_row["id"]),
-                ),
+            avg_cost = float(holding_row.get("avg_cost", 0))
+            _supabase_request(
+                "PATCH",
+                "holdings",
+                data={
+                    "quantity": max(next_quantity, 0),
+                    "avg_cost": avg_cost if next_quantity > 0 else 0,
+                    "updated_at": timestamp,
+                },
+                filters={"id": holding_row["id"]},
             )
-            connection.execute(
-                "UPDATE accounts SET cash_balance = ?, updated_at = ? WHERE id = ?",
-                (cash_balance + total_amount, timestamp, account_id),
-            )
+            update_cash_balance(account_id, cash_balance + total_amount)
 
-        connection.execute(
-            """
-            INSERT INTO trade_logs (
-                account_id, symbol, product_name, trade_type, asset_type,
-                quantity, price, total_amount, trade_date, notes, created_at
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                account_id,
-                cleaned_symbol,
-                cleaned_name,
-                cleaned_type,
-                cleaned_asset_type,
-                share_count,
-                trade_price,
-                total_amount,
-                str(trade_date),
-                str(notes or "").strip(),
-                timestamp,
-            ),
+        # 거래 기록
+        _supabase_request(
+            "POST",
+            "trade_logs",
+            data={
+                "account_id": account_id,
+                "symbol": cleaned_symbol,
+                "product_name": cleaned_name,
+                "trade_type": cleaned_type,
+                "asset_type": cleaned_asset_type,
+                "quantity": share_count,
+                "price": trade_price,
+                "total_amount": total_amount,
+                "trade_date": trade_date,
+                "notes": str(notes or "").strip(),
+                "created_at": timestamp,
+            },
         )
-        connection.commit()
+    except Exception as e:
+        raise ValueError(f"거래 기록 실패: {e}") from e
 
 
 def record_cash_flow(
@@ -327,46 +355,48 @@ def record_cash_flow(
     trade_date: str,
     notes: str = "",
 ) -> None:
+    """현금 입출금 기록"""
     cleaned_type = str(flow_type or "").strip().lower()
     if cleaned_type not in {"deposit", "withdraw"}:
-        raise ValueError("입금 또는 출금만 기록할 수 있습니다.")
+        raise ValueError("입금/출금만 기록할 수 있습니다.")
 
-    cash_delta = float(amount or 0)
-    if cash_delta <= 0:
+    flow_amount = float(amount or 0)
+    if flow_amount <= 0:
         raise ValueError("금액은 0보다 커야 합니다.")
 
+    account = get_account(account_id)
+    if not account:
+        raise ValueError("계좌를 찾을 수 없습니다.")
+
+    cash_balance = float(account.get("cash_balance", 0))
+
+    if cleaned_type == "deposit":
+        new_balance = cash_balance + flow_amount
+    else:
+        if cash_balance + 0.000001 < flow_amount:
+            raise ValueError("출금 금액이 현금 잔액을 초과합니다.")
+        new_balance = cash_balance - flow_amount
+
     timestamp = now_iso()
-    with connect() as connection:
-        account_row = connection.execute("SELECT * FROM accounts WHERE id = ?", (account_id,)).fetchone()
-        if not account_row:
-            raise ValueError("계좌를 찾을 수 없습니다.")
+    try:
+        update_cash_balance(account_id, new_balance)
 
-        current_cash = float(account_row["cash_balance"] or 0)
-        next_cash = current_cash + cash_delta if cleaned_type == "deposit" else current_cash - cash_delta
-        if next_cash < -0.000001:
-            raise ValueError("현금이 부족합니다.")
-
-        connection.execute(
-            "UPDATE accounts SET cash_balance = ?, updated_at = ? WHERE id = ?",
-            (next_cash, timestamp, account_id),
+        # 현금 흐름 기록 (별도 테이블이 없으면 trade_logs에 기록)
+        _supabase_request(
+            "POST",
+            "trade_logs",
+            data={
+                "account_id": account_id,
+                "product_name": "현금 입출금",
+                "trade_type": cleaned_type,
+                "asset_type": "cash",
+                "quantity": flow_amount,
+                "price": 1,
+                "total_amount": flow_amount,
+                "trade_date": trade_date,
+                "notes": str(notes or "").strip(),
+                "created_at": timestamp,
+            },
         )
-        connection.execute(
-            """
-            INSERT INTO trade_logs (
-                account_id, symbol, product_name, trade_type, asset_type,
-                quantity, price, total_amount, trade_date, notes, created_at
-            )
-            VALUES (?, '', ?, ?, 'cash', 1, ?, ?, ?, ?, ?)
-            """,
-            (
-                account_id,
-                "Cash Deposit" if cleaned_type == "deposit" else "Cash Withdraw",
-                cleaned_type,
-                cash_delta,
-                cash_delta,
-                str(trade_date),
-                str(notes or "").strip(),
-                timestamp,
-            ),
-        )
-        connection.commit()
+    except Exception as e:
+        raise ValueError(f"현금 흐름 기록 실패: {e}") from e

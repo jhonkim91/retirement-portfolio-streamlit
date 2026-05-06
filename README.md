@@ -29,16 +29,61 @@ streamlit run app.py
 
 ## 배포 메모
 
-이 앱은 기본적으로 로컬 SQLite를 사용합니다. 따라서 수정 데이터가 계속 유지되어야 한다면 영구 스토리지를 제공하는 환경이 더 적합합니다.
+### Supabase 연동 (권장)
 
-- 데모/개인 테스트용: Streamlit Community Cloud
-- 데이터 유지가 필요한 운영용: Railway, Render, VM, Docker 호스팅
+이 앱은 **Supabase PostgreSQL**을 사용하도록 수정되었습니다. 데이터를 영구 저장할 수 있습니다.
 
-Streamlit Community Cloud 공식 문서:
+#### 1단계: Supabase 테이블 생성
 
-- [Community Cloud overview](https://docs.streamlit.io/deploy/streamlit-community-cloud)
-- [Deploy your app](https://docs.streamlit.io/deploy/streamlit-community-cloud/deploy-your-app/deploy)
-- [App dependencies](https://docs.streamlit.io/deploy/streamlit-community-cloud/deploy-your-app/app-dependencies)
+1. https://app.supabase.com 에서 프로젝트 선택
+2. **SQL Editor** > **New query** 클릭
+3. `setup_supabase.sql` 파일의 모든 코드 복사 & 실행
+4. 실행 완료 확인
+
+#### 2단계: 환경 변수 설정
+
+Streamlit Cloud에 배포할 때:
+
+1. https://share.streamlit.io 에서 앱 배포 후
+2. **Settings** > **Secrets** 에서 다음 추가:
+```toml
+SUPABASE_URL = "https://your-project.supabase.co"
+SUPABASE_KEY = "your-anon-public-key"
+```
+
+3. **Redeploy** 클릭
+
+#### 3단계: Streamlit Cloud에 배포
+
+1. GitHub에 코드 업로드 (위 방법 참고)
+2. https://share.streamlit.io 접속
+3. **New app** 클릭
+4. Repository: `YOUR_USERNAME/retirement-portfolio-streamlit`
+   Branch: `main`
+   Main file path: `app.py`
+5. **Deploy!** 클릭
+
+---
+
+### 로컬 테스트 (Supabase 사용)
+
+```powershell
+# 환경 변수 설정
+$env:SUPABASE_URL = "https://your-project.supabase.co"
+$env:SUPABASE_KEY = "your-anon-public-key"
+
+# 앱 실행
+streamlit run app.py
+```
+
+---
+
+### 구성 요소
+
+- **UI**: Streamlit
+- **데이터베이스**: Supabase (PostgreSQL)
+- **시세**: yfinance
+- **배포**: Streamlit Community Cloud
 
 ## 주의
 
