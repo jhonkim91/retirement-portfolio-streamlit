@@ -8,14 +8,44 @@ import requests
 import streamlit as st
 
 
-# Supabase 설정
-SUPABASE_URL = os.getenv("SUPABASE_URL", "https://iyszkybxostbjfzbbymq.supabase.co")
+DEFAULT_SUPABASE_URL = "https://iyszkybxostbjfzbbymq.supabase.co"
 
-HEADERS = {
-    "apikey": SUPABASE_KEY, sb_publishable_FiwkEap5DuLz4ksGDUPlFQ_qKmp-lml
-    "Authorization": f"Bearer {SUPABASE_KEY}",
-    "Content-Type": "application/json",
-}
+
+def _get_config_value(name: str, default: str = "") -> str:
+    try:
+        secret_value = st.secrets.get(name)
+    except Exception:
+        secret_value = None
+    if secret_value not in (None, ""):
+        return str(secret_value).strip()
+    return str(os.getenv(name, default)).strip()
+
+
+SUPABASE_URL = _get_config_value("SUPABASE_URL", DEFAULT_SUPABASE_URL)
+SUPABASE_KEY = _get_config_value("SUPABASE_KEY")
+
+
+def _ensure_supabase_config() -> None:
+    missing: list[str] = []
+    if not SUPABASE_URL:
+        missing.append("SUPABASE_URL")
+    if not SUPABASE_KEY:
+        missing.append("SUPABASE_KEY")
+    if missing:
+        raise RuntimeError(
+            "Supabase 설정이 누락되었습니다. Streamlit Secrets 또는 환경 변수에 "
+            + ", ".join(missing)
+            + " 값을 추가해 주세요."
+        )
+
+
+def _build_headers() -> dict[str, str]:
+    _ensure_supabase_config()
+    return {
+        "apikey": SUPABASE_KEY,
+        "Authorization": f"Bearer {SUPABASE_KEY}",
+        "Content-Type": "application/json",
+    }
 
 
 def now_iso() -> str:
@@ -29,8 +59,9 @@ def _supabase_request(
     filters: dict[str, str | int] | None = None,
 ) -> list[dict[str, Any]] | dict[str, Any] | None:
     """Supabase REST API 요청"""
+    _ensure_supabase_config()
     url = f"{SUPABASE_URL}/rest/v1/{table}"
-    headers = HEADERS.copy()
+    headers = _build_headers()
 
     if method == "GET":
         params = ""
