@@ -8,9 +8,19 @@ import pandas as pd
 import streamlit as st
 
 from src.analytics import account_summary, build_portfolio_trend, holdings_frame, realized_summary
-from src.db import (
-    create_account,export_dataframe_rows,get_account,initialize_database,list_accounts,list_holdings,list_trade_logs,record_cash_flow,record_trade,set_holding_price,update_cash_balance,
-)
+from src import db as _db
+
+create_account = _db.create_account
+export_dataframe_rows = _db.export_dataframe_rows
+get_account = _db.get_account
+initialize_database = _db.initialize_database
+list_accounts = _db.list_accounts
+list_holdings = _db.list_holdings
+list_trade_logs = _db.list_trade_logs
+record_cash_flow = _db.record_cash_flow
+record_trade = _db.record_trade
+set_holding_price = _db.set_holding_price
+update_cash_balance = _db.update_cash_balance
 from src.market import fetch_latest_price
 
 
