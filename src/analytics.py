@@ -161,6 +161,27 @@ def realized_summary(trade_logs: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def snapshot_trend_frame(snapshots: list[dict[str, Any]]) -> pd.DataFrame:
+    """일별 계좌 스냅샷 목록을 대시보드 추이용 데이터프레임으로 변환한다."""
+
+    frame = pd.DataFrame(snapshots)
+    if frame.empty:
+        return frame
+
+    result = frame.copy()
+    result["date"] = pd.to_datetime(result["snapshot_date"])
+    result["cash_balance"] = result["cash_balance"].astype(float)
+    result["market_value"] = result["market_value"].astype(float)
+    result["total_value"] = result["total_value"].astype(float)
+    result["total_cost"] = result["total_cost"].astype(float)
+    result["profit_loss"] = result["total_value"] - result["total_cost"]
+    result["profit_rate"] = result.apply(
+        lambda row: (row["profit_loss"] / row["total_cost"] * 100) if row["total_cost"] else 0,
+        axis=1,
+    )
+    return result.sort_values("date").reset_index(drop=True)
+
+
 def build_portfolio_trend(holdings: list[dict[str, Any]], period: str = "6mo") -> tuple[pd.DataFrame, pd.DataFrame]:
     frame = holdings_frame(holdings)
     if frame.empty:

@@ -1,0 +1,80 @@
+name: Daily Rollup
+
+on:
+  schedule:
+    - cron: "10 15 * * *"
+  workflow_dispatch:
+    inputs:
+      target_date:
+        description: "처리 기준일(YYYY-MM-DD). 비우면 시간대 기준 전일"
+        required: false
+        type: string
+      annual_rate:
+        description: "연이율. 예: 0.05"
+        required: false
+        default: "0.05"
+        type: string
+      backend:
+        description: "실행 백엔드"
+        required: false
+        default: "supabase"
+        type: choice
+        options:
+          - supabase
+          - auto
+      dry_run:
+        description: "쓰기 없이 점검만 수행"
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  run-daily-rollup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      ROLLUP_TIMEZONE: Asia/Seoul
+      ROLLUP_ANNUAL_RATE: ${{ github.event.inputs.annual_rate }}
+      ROLLUP_TARGET_DATE: ${{ github.event.inputs.target_date }}
+      ROLLUP_BACKEND: ${{ github.event.inputs.backend }}
+      ROLLUP_DRY_RUN: ${{ github.event.inputs.dry_run }}
+
+    steps:
+      - name: 코드 체크아웃
+        uses: actions/checkout@v4
+
+      - name: Python 설정
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 필수 시크릿 확인
+        shell: bash
+        run: |
+          if [ -z "${SUPABASE_URL}" ]; then
+            echo "SUPABASE_URL 시크릿이 필요합니다."
+            exit 1
+          fi
+          if [ -z "${SUPABASE_SERVICE_ROLE_KEY}" ]; then
+            echo "SUPABASE_SERVICE_ROLE_KEY 시크릿이 필요합니다."
+            exit 1
+          fi
+
+      - name: 의존성 설치
+        run: python -m pip install -r requirements.txt
+
+      - name: 일별 롤업 실행
+        shell: bash
+        run: |
+          ANNUAL_RATE="${ROLLUP_ANNUAL_RATE:-0.05}"
+          BACKEND="${ROLLUP_BACKEND:-supabase}"
+          ARGS=(scripts/run_daily_rollup.py --backend "${BACKEND}" --annual-rate "${ANNUAL_RATE}" --timezone "${ROLLUP_TIMEZONE}")
+          if [ -n "${ROLLUP_TARGET_DATE}" ]; then
+            ARGS+=(--date "${ROLLUP_TARGET_DATE}")
+          fi
+          if [ "${ROLLUP_DRY_RUN}" = "true" ]; then
+            ARGS+=(--dry-run)
+          fi
+          python "${ARGS[@]}"

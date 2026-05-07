@@ -36,27 +36,102 @@ CREATE TABLE IF NOT EXISTS public.trade_logs (
     quantity DOUBLE PRECISION NOT NULL DEFAULT 0,
     price DOUBLE PRECISION NOT NULL DEFAULT 0,
     total_amount DOUBLE PRECISION NOT NULL DEFAULT 0,
+    cash_delta DOUBLE PRECISION NOT NULL DEFAULT 0,
+    event_group_id TEXT,
+    counterparty_account_id BIGINT REFERENCES public.accounts(id) ON DELETE SET NULL,
+    metadata_json JSONB NOT NULL DEFAULT '{}'::jsonb,
     trade_date TEXT NOT NULL,
     notes TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS public.daily_interest (
+    id BIGSERIAL PRIMARY KEY,
+    account_id BIGINT NOT NULL REFERENCES public.accounts(id) ON DELETE CASCADE,
+    date DATE NOT NULL,
+    interest_amount DOUBLE PRECISION NOT NULL,
+    created_at TEXT NOT NULL,
+    UNIQUE(account_id, date)
+);
+
+CREATE TABLE IF NOT EXISTS public.daily_account_snapshot (
+    id BIGSERIAL PRIMARY KEY,
+    account_id BIGINT NOT NULL REFERENCES public.accounts(id) ON DELETE CASCADE,
+    snapshot_date DATE NOT NULL,
+    cash_balance DOUBLE PRECISION NOT NULL,
+    market_value DOUBLE PRECISION NOT NULL,
+    total_value DOUBLE PRECISION NOT NULL,
+    total_cost DOUBLE PRECISION NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE(account_id, snapshot_date)
+);
+
+ALTER TABLE public.trade_logs
+    ADD COLUMN IF NOT EXISTS cash_delta DOUBLE PRECISION NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS event_group_id TEXT,
+    ADD COLUMN IF NOT EXISTS counterparty_account_id BIGINT REFERENCES public.accounts(id) ON DELETE SET NULL,
+    ADD COLUMN IF NOT EXISTS metadata_json JSONB NOT NULL DEFAULT '{}'::jsonb;
+
 CREATE INDEX IF NOT EXISTS idx_accounts_name ON public.accounts(name);
 CREATE INDEX IF NOT EXISTS idx_holdings_account_id ON public.holdings(account_id);
 CREATE INDEX IF NOT EXISTS idx_trade_logs_account_id ON public.trade_logs(account_id);
+CREATE INDEX IF NOT EXISTS idx_trade_logs_event_group_id ON public.trade_logs(event_group_id);
+CREATE INDEX IF NOT EXISTS idx_daily_interest_account_date ON public.daily_interest(account_id, date);
+CREATE INDEX IF NOT EXISTS idx_daily_account_snapshot_account_date ON public.daily_account_snapshot(account_id, snapshot_date);
+
+UPDATE public.trade_logs
+SET trade_type = 'personal_deposit'
+WHERE trade_type = 'deposit';
+
+UPDATE public.trade_logs
+SET metadata_json = '{}'::jsonb
+WHERE metadata_json IS NULL;
+
+UPDATE public.trade_logs
+SET asset_type = 'cash',
+    quantity = 0,
+    price = 0,
+    product_name = CASE
+        WHEN trade_type = 'personal_deposit' AND COALESCE(product_name, '') IN ('', '현금 입금', '현금 흐름') THEN '개인 입금'
+        WHEN trade_type = 'withdraw' AND COALESCE(product_name, '') IN ('', '현금 출금', '현금 흐름') THEN '일반 출금'
+        WHEN trade_type = 'interest' AND COALESCE(product_name, '') = '' THEN '일별 이자'
+        WHEN trade_type = 'transfer_out' AND COALESCE(product_name, '') = '' THEN '계좌 이체 출금'
+        WHEN trade_type = 'transfer_in' AND COALESCE(product_name, '') = '' THEN '계좌 이체 입금'
+        WHEN trade_type = 'cash_adjustment' AND COALESCE(product_name, '') = '' THEN '현금 조정'
+        WHEN trade_type = 'employer_deposit' AND COALESCE(product_name, '') = '' THEN '회사 납입금'
+        ELSE product_name
+    END
+WHERE trade_type IN ('personal_deposit', 'employer_deposit', 'withdraw', 'interest', 'transfer_out', 'transfer_in', 'cash_adjustment');
+
+UPDATE public.trade_logs
+SET cash_delta = CASE
+    WHEN trade_type = 'buy' THEN -ABS(total_amount)
+    WHEN trade_type = 'sell' THEN ABS(total_amount)
+    WHEN trade_type IN ('personal_deposit', 'employer_deposit', 'interest', 'transfer_in') THEN ABS(total_amount)
+    WHEN trade_type IN ('withdraw', 'transfer_out') THEN -ABS(total_amount)
+    ELSE COALESCE(cash_delta, 0)
+END
+WHERE trade_type IN ('buy', 'sell', 'personal_deposit', 'employer_deposit', 'withdraw', 'interest', 'transfer_out', 'transfer_in');
 
 GRANT USAGE ON SCHEMA public TO authenticated, service_role;
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.accounts TO authenticated, service_role;
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.holdings TO authenticated, service_role;
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.trade_logs TO authenticated, service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.daily_interest TO authenticated, service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.daily_account_snapshot TO authenticated, service_role;
 
 GRANT USAGE, SELECT ON SEQUENCE public.accounts_id_seq TO authenticated, service_role;
 GRANT USAGE, SELECT ON SEQUENCE public.holdings_id_seq TO authenticated, service_role;
 GRANT USAGE, SELECT ON SEQUENCE public.trade_logs_id_seq TO authenticated, service_role;
+GRANT USAGE, SELECT ON SEQUENCE public.daily_interest_id_seq TO authenticated, service_role;
+GRANT USAGE, SELECT ON SEQUENCE public.daily_account_snapshot_id_seq TO authenticated, service_role;
 
 ALTER TABLE public.accounts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.holdings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.trade_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.daily_interest ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.daily_account_snapshot ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS accounts_select_own ON public.accounts;
 DROP POLICY IF EXISTS accounts_insert_own ON public.accounts;
@@ -239,6 +314,146 @@ USING (
         SELECT 1
         FROM public.accounts
         WHERE accounts.id = trade_logs.account_id
+          AND split_part(accounts.name, '::', 1) = auth.uid()::text
+    )
+);
+
+DROP POLICY IF EXISTS daily_interest_select_own ON public.daily_interest;
+DROP POLICY IF EXISTS daily_interest_insert_own ON public.daily_interest;
+DROP POLICY IF EXISTS daily_interest_update_own ON public.daily_interest;
+DROP POLICY IF EXISTS daily_interest_delete_own ON public.daily_interest;
+
+CREATE POLICY daily_interest_select_own
+ON public.daily_interest
+FOR SELECT
+TO authenticated
+USING (
+    auth.uid() IS NOT NULL
+    AND EXISTS (
+        SELECT 1
+        FROM public.accounts
+        WHERE accounts.id = daily_interest.account_id
+          AND split_part(accounts.name, '::', 1) = auth.uid()::text
+    )
+);
+
+CREATE POLICY daily_interest_insert_own
+ON public.daily_interest
+FOR INSERT
+TO authenticated
+WITH CHECK (
+    auth.uid() IS NOT NULL
+    AND EXISTS (
+        SELECT 1
+        FROM public.accounts
+        WHERE accounts.id = daily_interest.account_id
+          AND split_part(accounts.name, '::', 1) = auth.uid()::text
+    )
+);
+
+CREATE POLICY daily_interest_update_own
+ON public.daily_interest
+FOR UPDATE
+TO authenticated
+USING (
+    auth.uid() IS NOT NULL
+    AND EXISTS (
+        SELECT 1
+        FROM public.accounts
+        WHERE accounts.id = daily_interest.account_id
+          AND split_part(accounts.name, '::', 1) = auth.uid()::text
+    )
+)
+WITH CHECK (
+    auth.uid() IS NOT NULL
+    AND EXISTS (
+        SELECT 1
+        FROM public.accounts
+        WHERE accounts.id = daily_interest.account_id
+          AND split_part(accounts.name, '::', 1) = auth.uid()::text
+    )
+);
+
+CREATE POLICY daily_interest_delete_own
+ON public.daily_interest
+FOR DELETE
+TO authenticated
+USING (
+    auth.uid() IS NOT NULL
+    AND EXISTS (
+        SELECT 1
+        FROM public.accounts
+        WHERE accounts.id = daily_interest.account_id
+          AND split_part(accounts.name, '::', 1) = auth.uid()::text
+    )
+);
+
+DROP POLICY IF EXISTS daily_account_snapshot_select_own ON public.daily_account_snapshot;
+DROP POLICY IF EXISTS daily_account_snapshot_insert_own ON public.daily_account_snapshot;
+DROP POLICY IF EXISTS daily_account_snapshot_update_own ON public.daily_account_snapshot;
+DROP POLICY IF EXISTS daily_account_snapshot_delete_own ON public.daily_account_snapshot;
+
+CREATE POLICY daily_account_snapshot_select_own
+ON public.daily_account_snapshot
+FOR SELECT
+TO authenticated
+USING (
+    auth.uid() IS NOT NULL
+    AND EXISTS (
+        SELECT 1
+        FROM public.accounts
+        WHERE accounts.id = daily_account_snapshot.account_id
+          AND split_part(accounts.name, '::', 1) = auth.uid()::text
+    )
+);
+
+CREATE POLICY daily_account_snapshot_insert_own
+ON public.daily_account_snapshot
+FOR INSERT
+TO authenticated
+WITH CHECK (
+    auth.uid() IS NOT NULL
+    AND EXISTS (
+        SELECT 1
+        FROM public.accounts
+        WHERE accounts.id = daily_account_snapshot.account_id
+          AND split_part(accounts.name, '::', 1) = auth.uid()::text
+    )
+);
+
+CREATE POLICY daily_account_snapshot_update_own
+ON public.daily_account_snapshot
+FOR UPDATE
+TO authenticated
+USING (
+    auth.uid() IS NOT NULL
+    AND EXISTS (
+        SELECT 1
+        FROM public.accounts
+        WHERE accounts.id = daily_account_snapshot.account_id
+          AND split_part(accounts.name, '::', 1) = auth.uid()::text
+    )
+)
+WITH CHECK (
+    auth.uid() IS NOT NULL
+    AND EXISTS (
+        SELECT 1
+        FROM public.accounts
+        WHERE accounts.id = daily_account_snapshot.account_id
+          AND split_part(accounts.name, '::', 1) = auth.uid()::text
+    )
+);
+
+CREATE POLICY daily_account_snapshot_delete_own
+ON public.daily_account_snapshot
+FOR DELETE
+TO authenticated
+USING (
+    auth.uid() IS NOT NULL
+    AND EXISTS (
+        SELECT 1
+        FROM public.accounts
+        WHERE accounts.id = daily_account_snapshot.account_id
           AND split_part(accounts.name, '::', 1) = auth.uid()::text
     )
 );

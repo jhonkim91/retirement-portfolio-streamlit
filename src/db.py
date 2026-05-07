@@ -20,6 +20,21 @@ BACKEND_SUPABASE = "supabase"
 BACKEND_STATE_KEY = "db_backend_state"
 ACCOUNT_NAMESPACE_SEPARATOR = "::"
 _FALLBACK_STATE: dict[str, Any] = {}
+BUY_SELL_TRADE_TYPES = {"buy", "sell"}
+LEGACY_CASH_FLOW_TYPE_MAP = {
+    "deposit": "personal_deposit",
+    "withdraw": "withdraw",
+}
+CASH_EVENT_LABELS = {
+    "personal_deposit": "개인 입금",
+    "employer_deposit": "회사 납입금",
+    "withdraw": "일반 출금",
+    "interest": "일별 이자",
+    "transfer_out": "계좌 이체 출금",
+    "transfer_in": "계좌 이체 입금",
+    "cash_adjustment": "현금 조정",
+}
+EXPORTABLE_TABLES = {"accounts", "holdings", "trade_logs", "daily_interest", "daily_account_snapshot"}
 
 
 def _state_store() -> dict[str, Any]:
@@ -132,6 +147,20 @@ def now_iso() -> str:
     return datetime.utcnow().replace(microsecond=0).isoformat()
 
 
+def _normalize_cash_flow_type(flow_type: str) -> str:
+    normalized = str(flow_type or "").strip().lower()
+    return LEGACY_CASH_FLOW_TYPE_MAP.get(normalized, normalized)
+
+
+def _cash_event_label(trade_type: str) -> str:
+    normalized = _normalize_cash_flow_type(trade_type)
+    return CASH_EVENT_LABELS.get(normalized, normalized)
+
+
+def _metadata_payload(metadata: dict[str, Any] | None = None) -> dict[str, Any]:
+    return dict(metadata or {})
+
+
 def _supabase_request(
     method: str,
     table: str,
@@ -164,6 +193,47 @@ def _supabase_request(
     if method in {"POST", "PATCH"}:
         return payload[0] if isinstance(payload, list) and payload else payload
     return payload
+
+
+def _supabase_insert_trade_log(
+    *,
+    account_id: int,
+    symbol: str,
+    product_name: str,
+    trade_type: str,
+    asset_type: str,
+    quantity: float,
+    price: float,
+    total_amount: float,
+    cash_delta: float,
+    trade_date: str,
+    notes: str,
+    created_at: str,
+    event_group_id: str | None = None,
+    counterparty_account_id: int | None = None,
+    metadata_json: dict[str, Any] | None = None,
+) -> None:
+    _supabase_request(
+        "POST",
+        "trade_logs",
+        data={
+            "account_id": account_id,
+            "symbol": symbol,
+            "product_name": product_name,
+            "trade_type": trade_type,
+            "asset_type": asset_type,
+            "quantity": quantity,
+            "price": price,
+            "total_amount": total_amount,
+            "cash_delta": cash_delta,
+            "event_group_id": event_group_id,
+            "counterparty_account_id": counterparty_account_id,
+            "metadata_json": _metadata_payload(metadata_json),
+            "trade_date": trade_date,
+            "notes": str(notes or "").strip(),
+            "created_at": created_at,
+        },
+    )
 
 
 def _fallback_reason(exc: Exception) -> str:
@@ -362,8 +432,27 @@ def _supabase_list_trade_logs(account_id: int) -> list[dict[str, Any]]:
     return sorted(logs, key=lambda row: (row.get("trade_date", ""), row.get("id", 0)), reverse=True)
 
 
+def _supabase_list_daily_interest(account_id: int) -> list[dict[str, Any]]:
+    if not _supabase_get_account(account_id):
+        return []
+    result = _supabase_request("GET", "daily_interest", filters={"account_id": f"eq.{account_id}"})
+    rows = result or []
+    return sorted(rows, key=lambda row: (row.get("date", ""), row.get("id", 0)))
+
+
+def _supabase_list_account_snapshots(account_id: int, start_date: str | None = None) -> list[dict[str, Any]]:
+    if not _supabase_get_account(account_id):
+        return []
+    filters: dict[str, str | int] = {"account_id": f"eq.{account_id}"}
+    if start_date:
+        filters["snapshot_date"] = f"gte.{start_date}"
+    result = _supabase_request("GET", "daily_account_snapshot", filters=filters)
+    rows = result or []
+    return sorted(rows, key=lambda row: (row.get("snapshot_date", ""), row.get("id", 0)))
+
+
 def _supabase_export_dataframe_rows(table_name: str) -> list[dict[str, Any]]:
-    if table_name not in {"accounts", "holdings", "trade_logs"}:
+    if table_name not in EXPORTABLE_TABLES:
         raise ValueError("지원하지 않는 테이블입니다.")
 
     accounts = _supabase_list_accounts()
@@ -393,7 +482,7 @@ def _supabase_record_trade(
     cleaned_type = str(trade_type or "").strip().lower()
     cleaned_asset_type = str(asset_type or "risk").strip().lower()
 
-    if cleaned_type not in {"buy", "sell"}:
+    if cleaned_type not in BUY_SELL_TRADE_TYPES:
         raise ValueError("매수 또는 매도만 기록할 수 있습니다.")
     if cleaned_asset_type not in {"risk", "safe"}:
         raise ValueError("자산군 값이 올바르지 않습니다.")
@@ -412,16 +501,18 @@ def _supabase_record_trade(
         raise ValueError("계좌를 찾을 수 없습니다.")
 
     total_amount = share_count * trade_price
+    cash_delta = -total_amount if cleaned_type == "buy" else total_amount
     timestamp = now_iso()
     holdings = _supabase_request("GET", "holdings", filters={"account_id": f"eq.{account_id}"}) or []
     holdings = [row for row in holdings if row.get("symbol") == cleaned_symbol]
     holding_row = holdings[0] if holdings else None
     cash_balance = float(account.get("cash_balance", 0) or 0)
+    next_cash = cash_balance + cash_delta
+
+    if next_cash < -0.000001:
+        raise ValueError("매수하기에 현금이 부족합니다." if cleaned_type == "buy" else "현금 잔액 계산에 실패했습니다.")
 
     if cleaned_type == "buy":
-        if cash_balance + 0.000001 < total_amount:
-            raise ValueError("매수하기에 현금이 부족합니다.")
-
         if holding_row:
             previous_quantity = float(holding_row.get("quantity", 0) or 0)
             previous_cost = float(holding_row.get("avg_cost", 0) or 0)
@@ -456,8 +547,6 @@ def _supabase_record_trade(
                     "updated_at": timestamp,
                 },
             )
-
-        _supabase_update_cash_balance(account_id, cash_balance - total_amount)
     else:
         if not holding_row:
             raise ValueError("매도할 보유 종목이 없습니다.")
@@ -478,24 +567,22 @@ def _supabase_record_trade(
             },
             filters={"id": f"eq.{holding_row['id']}"},
         )
-        _supabase_update_cash_balance(account_id, cash_balance + total_amount)
 
-    _supabase_request(
-        "POST",
-        "trade_logs",
-        data={
-            "account_id": account_id,
-            "symbol": cleaned_symbol,
-            "product_name": cleaned_name,
-            "trade_type": cleaned_type,
-            "asset_type": cleaned_asset_type,
-            "quantity": share_count,
-            "price": trade_price,
-            "total_amount": total_amount,
-            "trade_date": trade_date,
-            "notes": str(notes or "").strip(),
-            "created_at": timestamp,
-        },
+    _supabase_update_cash_balance(account_id, next_cash)
+    _supabase_insert_trade_log(
+        account_id=account_id,
+        symbol=cleaned_symbol,
+        product_name=cleaned_name,
+        trade_type=cleaned_type,
+        asset_type=cleaned_asset_type,
+        quantity=share_count,
+        price=trade_price,
+        total_amount=total_amount,
+        cash_delta=cash_delta,
+        trade_date=trade_date,
+        notes=notes,
+        created_at=timestamp,
+        metadata_json={},
     )
 
 
@@ -507,9 +594,9 @@ def _supabase_record_cash_flow(
     trade_date: str,
     notes: str = "",
 ) -> None:
-    cleaned_type = str(flow_type or "").strip().lower()
-    if cleaned_type not in {"deposit", "withdraw"}:
-        raise ValueError("입금 또는 출금만 기록할 수 있습니다.")
+    cleaned_type = _normalize_cash_flow_type(flow_type)
+    if cleaned_type not in {"personal_deposit", "employer_deposit", "withdraw"}:
+        raise ValueError("개인 입금, 회사 납입금, 일반 출금만 기록할 수 있습니다.")
 
     flow_amount = float(amount or 0)
     if flow_amount <= 0:
@@ -520,32 +607,233 @@ def _supabase_record_cash_flow(
         raise ValueError("계좌를 찾을 수 없습니다.")
 
     cash_balance = float(account.get("cash_balance", 0) or 0)
-    if cleaned_type == "deposit":
-        new_balance = cash_balance + flow_amount
-    else:
-        if cash_balance + 0.000001 < flow_amount:
-            raise ValueError("출금 금액이 현재 현금 잔액을 초과합니다.")
-        new_balance = cash_balance - flow_amount
+    cash_delta = flow_amount if cleaned_type in {"personal_deposit", "employer_deposit"} else -flow_amount
+    new_balance = cash_balance + cash_delta
+    if new_balance < -0.000001:
+        raise ValueError("출금 금액이 현재 현금 잔액을 초과합니다.")
 
     timestamp = now_iso()
     _supabase_update_cash_balance(account_id, new_balance)
+    _supabase_insert_trade_log(
+        account_id=account_id,
+        symbol="",
+        product_name=_cash_event_label(cleaned_type),
+        trade_type=cleaned_type,
+        asset_type="cash",
+        quantity=0,
+        price=0,
+        total_amount=flow_amount,
+        cash_delta=cash_delta,
+        trade_date=trade_date,
+        notes=notes,
+        created_at=timestamp,
+        metadata_json={},
+    )
+
+
+def _supabase_adjust_cash_balance(
+    account_id: int,
+    *,
+    target_amount: float,
+    trade_date: str,
+    notes: str,
+) -> None:
+    next_cash = float(target_amount or 0)
+    if next_cash < 0:
+        raise ValueError("현금 잔액은 0 이상이어야 합니다.")
+
+    cleaned_notes = str(notes or "").strip()
+    if not cleaned_notes:
+        raise ValueError("현금 조정 사유를 입력해 주세요.")
+
+    account = _supabase_get_account(account_id)
+    if not account:
+        raise ValueError("계좌를 찾을 수 없습니다.")
+
+    current_cash = float(account.get("cash_balance", 0) or 0)
+    cash_delta = next_cash - current_cash
+    if abs(cash_delta) <= 0.000001:
+        raise ValueError("현재 현금과 동일해 조정할 내용이 없습니다.")
+
+    timestamp = now_iso()
+    _supabase_update_cash_balance(account_id, next_cash)
+    _supabase_insert_trade_log(
+        account_id=account_id,
+        symbol="",
+        product_name=_cash_event_label("cash_adjustment"),
+        trade_type="cash_adjustment",
+        asset_type="cash",
+        quantity=0,
+        price=0,
+        total_amount=abs(cash_delta),
+        cash_delta=cash_delta,
+        trade_date=trade_date,
+        notes=cleaned_notes,
+        created_at=timestamp,
+        metadata_json={"target_amount": round(next_cash, 4)},
+    )
+
+
+def _supabase_record_daily_interest(account_id: int, *, interest_date: str, amount: float) -> None:
+    interest_amount = float(amount or 0)
+    if interest_amount <= 0:
+        raise ValueError("이자 금액은 0보다 커야 합니다.")
+
+    account = _supabase_get_account(account_id)
+    if not account:
+        raise ValueError("계좌를 찾을 수 없습니다.")
+
+    existing = _supabase_request(
+        "GET",
+        "daily_interest",
+        filters={
+            "account_id": f"eq.{account_id}",
+            "date": f"eq.{interest_date}",
+        },
+    ) or []
+    if existing:
+        raise ValueError("해당 일자의 이자가 이미 기록되어 있습니다.")
+
+    current_cash = float(account.get("cash_balance", 0) or 0)
+    next_cash = current_cash + interest_amount
+    timestamp = now_iso()
     _supabase_request(
         "POST",
-        "trade_logs",
+        "daily_interest",
         data={
             "account_id": account_id,
-            "symbol": "",
-            "product_name": "현금 흐름",
-            "trade_type": cleaned_type,
-            "asset_type": "cash",
-            "quantity": flow_amount,
-            "price": 1,
-            "total_amount": flow_amount,
-            "trade_date": trade_date,
-            "notes": str(notes or "").strip(),
+            "date": interest_date,
+            "interest_amount": interest_amount,
             "created_at": timestamp,
         },
     )
+    _supabase_update_cash_balance(account_id, next_cash)
+    _supabase_insert_trade_log(
+        account_id=account_id,
+        symbol="",
+        product_name=_cash_event_label("interest"),
+        trade_type="interest",
+        asset_type="cash",
+        quantity=0,
+        price=0,
+        total_amount=interest_amount,
+        cash_delta=interest_amount,
+        trade_date=interest_date,
+        notes="일별 이자 적립",
+        created_at=timestamp,
+        metadata_json={},
+    )
+
+
+def _supabase_record_account_transfer(
+    from_account_id: int,
+    *,
+    to_account_id: int,
+    amount: float,
+    trade_date: str,
+    notes: str = "",
+) -> None:
+    if int(from_account_id) == int(to_account_id):
+        raise ValueError("같은 계좌로는 이체할 수 없습니다.")
+
+    transfer_amount = float(amount or 0)
+    if transfer_amount <= 0:
+        raise ValueError("이체 금액은 0보다 커야 합니다.")
+
+    from_account = _supabase_get_account(from_account_id)
+    to_account = _supabase_get_account(to_account_id)
+    if not from_account or not to_account:
+        raise ValueError("이체 대상 계좌를 찾을 수 없습니다.")
+
+    from_cash = float(from_account.get("cash_balance", 0) or 0)
+    to_cash = float(to_account.get("cash_balance", 0) or 0)
+    next_from_cash = from_cash - transfer_amount
+    next_to_cash = to_cash + transfer_amount
+    if next_from_cash < -0.000001:
+        raise ValueError("이체할 현금이 부족합니다.")
+
+    timestamp = now_iso()
+    event_group_id = str(uuid4())
+    _supabase_update_cash_balance(from_account_id, next_from_cash)
+    _supabase_update_cash_balance(to_account_id, next_to_cash)
+    _supabase_insert_trade_log(
+        account_id=from_account_id,
+        symbol="",
+        product_name=_cash_event_label("transfer_out"),
+        trade_type="transfer_out",
+        asset_type="cash",
+        quantity=0,
+        price=0,
+        total_amount=transfer_amount,
+        cash_delta=-transfer_amount,
+        trade_date=trade_date,
+        notes=notes,
+        created_at=timestamp,
+        event_group_id=event_group_id,
+        counterparty_account_id=to_account_id,
+        metadata_json={},
+    )
+    _supabase_insert_trade_log(
+        account_id=to_account_id,
+        symbol="",
+        product_name=_cash_event_label("transfer_in"),
+        trade_type="transfer_in",
+        asset_type="cash",
+        quantity=0,
+        price=0,
+        total_amount=transfer_amount,
+        cash_delta=transfer_amount,
+        trade_date=trade_date,
+        notes=notes,
+        created_at=timestamp,
+        event_group_id=event_group_id,
+        counterparty_account_id=from_account_id,
+        metadata_json={},
+    )
+
+
+def _supabase_record_account_snapshot(
+    account_id: int,
+    *,
+    snapshot_date: str,
+    cash_balance: float,
+    market_value: float,
+    total_value: float,
+    total_cost: float,
+) -> None:
+    if not _supabase_get_account(account_id):
+        raise ValueError("계좌를 찾을 수 없습니다.")
+
+    timestamp = now_iso()
+    existing = _supabase_request(
+        "GET",
+        "daily_account_snapshot",
+        filters={
+            "account_id": f"eq.{account_id}",
+            "snapshot_date": f"eq.{snapshot_date}",
+        },
+    ) or []
+    payload = {
+        "account_id": account_id,
+        "snapshot_date": snapshot_date,
+        "cash_balance": float(cash_balance or 0),
+        "market_value": float(market_value or 0),
+        "total_value": float(total_value or 0),
+        "total_cost": float(total_cost or 0),
+        "updated_at": timestamp,
+    }
+    if existing:
+        snapshot_id = int(existing[0]["id"])
+        _supabase_request(
+            "PATCH",
+            "daily_account_snapshot",
+            data=payload,
+            filters={"id": f"eq.{snapshot_id}"},
+        )
+        return
+
+    payload["created_at"] = timestamp
+    _supabase_request("POST", "daily_account_snapshot", data=payload)
 
 
 def _sqlite_list_accounts() -> list[dict[str, Any]]:
@@ -595,6 +883,18 @@ def _sqlite_list_trade_logs(account_id: int) -> list[dict[str, Any]]:
     if not _sqlite_get_account(account_id):
         return []
     return sqlite_db.list_trade_logs(account_id)
+
+
+def _sqlite_list_daily_interest(account_id: int) -> list[dict[str, Any]]:
+    if not _sqlite_get_account(account_id):
+        return []
+    return sqlite_db.list_daily_interest(account_id)
+
+
+def _sqlite_list_account_snapshots(account_id: int, start_date: str | None = None) -> list[dict[str, Any]]:
+    if not _sqlite_get_account(account_id):
+        return []
+    return sqlite_db.list_account_snapshots(account_id, start_date=start_date)
 
 
 def _sqlite_export_dataframe_rows(table_name: str) -> list[dict[str, Any]]:
@@ -651,6 +951,73 @@ def _sqlite_record_cash_flow(
         amount=amount,
         trade_date=trade_date,
         notes=notes,
+    )
+
+
+def _sqlite_adjust_cash_balance(
+    account_id: int,
+    *,
+    target_amount: float,
+    trade_date: str,
+    notes: str,
+) -> None:
+    if not _sqlite_get_account(account_id):
+        raise ValueError("계좌를 찾을 수 없습니다.")
+    sqlite_db.adjust_cash_balance(
+        account_id,
+        target_amount=target_amount,
+        trade_date=trade_date,
+        notes=notes,
+    )
+
+
+def _sqlite_record_daily_interest(account_id: int, *, interest_date: str, amount: float) -> None:
+    if not _sqlite_get_account(account_id):
+        raise ValueError("계좌를 찾을 수 없습니다.")
+    sqlite_db.record_daily_interest(
+        account_id,
+        interest_date=interest_date,
+        amount=amount,
+    )
+
+
+def _sqlite_record_account_transfer(
+    from_account_id: int,
+    *,
+    to_account_id: int,
+    amount: float,
+    trade_date: str,
+    notes: str = "",
+) -> None:
+    if not _sqlite_get_account(from_account_id) or not _sqlite_get_account(to_account_id):
+        raise ValueError("이체 대상 계좌를 찾을 수 없습니다.")
+    sqlite_db.record_account_transfer(
+        from_account_id,
+        to_account_id=to_account_id,
+        amount=amount,
+        trade_date=trade_date,
+        notes=notes,
+    )
+
+
+def _sqlite_record_account_snapshot(
+    account_id: int,
+    *,
+    snapshot_date: str,
+    cash_balance: float,
+    market_value: float,
+    total_value: float,
+    total_cost: float,
+) -> None:
+    if not _sqlite_get_account(account_id):
+        raise ValueError("계좌를 찾을 수 없습니다.")
+    sqlite_db.record_account_snapshot(
+        account_id,
+        snapshot_date=snapshot_date,
+        cash_balance=cash_balance,
+        market_value=market_value,
+        total_value=total_value,
+        total_cost=total_cost,
     )
 
 
@@ -713,6 +1080,34 @@ def list_trade_logs(account_id: int) -> list[dict[str, Any]]:
         supabase_call=lambda: _supabase_list_trade_logs(account_id),
         sqlite_call=lambda: _sqlite_list_trade_logs(account_id),
     )
+
+
+def list_daily_interest(account_id: int) -> list[dict[str, Any]]:
+    """계좌의 일별 이자 기록을 조회한다."""
+
+    if _current_backend() == BACKEND_SQLITE:
+        return _sqlite_list_daily_interest(account_id)
+
+    try:
+        return _supabase_list_daily_interest(account_id)
+    except Exception as exc:
+        if _should_fallback(exc):
+            return []
+        raise
+
+
+def list_account_snapshots(account_id: int, start_date: str | None = None) -> list[dict[str, Any]]:
+    """계좌의 일별 스냅샷을 조회한다."""
+
+    if _current_backend() == BACKEND_SQLITE:
+        return _sqlite_list_account_snapshots(account_id, start_date)
+
+    try:
+        return _supabase_list_account_snapshots(account_id, start_date)
+    except Exception as exc:
+        if _should_fallback(exc):
+            return []
+        raise
 
 
 def export_dataframe_rows(table_name: str) -> list[dict[str, Any]]:
@@ -779,6 +1174,107 @@ def record_cash_flow(
         sqlite_call=lambda: _sqlite_record_cash_flow(
             account_id,
             flow_type=flow_type,
+            amount=amount,
+            trade_date=trade_date,
+            notes=notes,
+        ),
+    )
+
+
+def adjust_cash_balance(
+    account_id: int,
+    *,
+    target_amount: float,
+    trade_date: str,
+    notes: str,
+) -> None:
+    """목표 현금 잔액에 맞는 조정 이벤트를 기록한다."""
+
+    _run_with_fallback(
+        supabase_call=lambda: _supabase_adjust_cash_balance(
+            account_id,
+            target_amount=target_amount,
+            trade_date=trade_date,
+            notes=notes,
+        ),
+        sqlite_call=lambda: _sqlite_adjust_cash_balance(
+            account_id,
+            target_amount=target_amount,
+            trade_date=trade_date,
+            notes=notes,
+        ),
+    )
+
+
+def record_daily_interest(account_id: int, *, interest_date: str, amount: float) -> None:
+    """일별 이자를 상세 테이블과 거래 원장에 함께 기록한다."""
+
+    _run_with_fallback(
+        supabase_call=lambda: _supabase_record_daily_interest(
+            account_id,
+            interest_date=interest_date,
+            amount=amount,
+        ),
+        sqlite_call=lambda: _sqlite_record_daily_interest(
+            account_id,
+            interest_date=interest_date,
+            amount=amount,
+        ),
+    )
+
+
+def record_account_snapshot(
+    account_id: int,
+    *,
+    snapshot_date: str,
+    cash_balance: float,
+    market_value: float,
+    total_value: float,
+    total_cost: float,
+) -> None:
+    """계좌의 일별 총자산 스냅샷을 저장한다."""
+
+    _run_with_fallback(
+        supabase_call=lambda: _supabase_record_account_snapshot(
+            account_id,
+            snapshot_date=snapshot_date,
+            cash_balance=cash_balance,
+            market_value=market_value,
+            total_value=total_value,
+            total_cost=total_cost,
+        ),
+        sqlite_call=lambda: _sqlite_record_account_snapshot(
+            account_id,
+            snapshot_date=snapshot_date,
+            cash_balance=cash_balance,
+            market_value=market_value,
+            total_value=total_value,
+            total_cost=total_cost,
+        ),
+    )
+
+
+def record_account_transfer(
+    from_account_id: int,
+    *,
+    to_account_id: int,
+    amount: float,
+    trade_date: str,
+    notes: str = "",
+) -> None:
+    """두 계좌 사이의 현금 이체를 출금/입금 2건으로 기록한다."""
+
+    _run_with_fallback(
+        supabase_call=lambda: _supabase_record_account_transfer(
+            from_account_id,
+            to_account_id=to_account_id,
+            amount=amount,
+            trade_date=trade_date,
+            notes=notes,
+        ),
+        sqlite_call=lambda: _sqlite_record_account_transfer(
+            from_account_id,
+            to_account_id=to_account_id,
             amount=amount,
             trade_date=trade_date,
             notes=notes,

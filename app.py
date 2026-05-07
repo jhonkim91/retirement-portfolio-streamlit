@@ -7,12 +7,14 @@ from typing import Any
 import altair as alt
 import pandas as pd
 import streamlit as st
+from dateutil.relativedelta import relativedelta
 
 from src.analytics import (
     account_summary,
     build_portfolio_trend,
     holdings_frame,
     realized_summary,
+    snapshot_trend_frame,
 )
 
 import src.auth as app_auth
@@ -24,16 +26,19 @@ fetch_latest_price = market_module.fetch_latest_price
 search_products = getattr(market_module, "search_products", lambda query, limit=8: [])
 
 create_account = _db.create_account
+adjust_cash_balance = _db.adjust_cash_balance
 export_dataframe_rows = _db.export_dataframe_rows
 get_account = _db.get_account
 initialize_database = _db.initialize_database
 list_accounts = _db.list_accounts
+list_account_snapshots = _db.list_account_snapshots
+list_daily_interest = _db.list_daily_interest
 list_holdings = _db.list_holdings
 list_trade_logs = _db.list_trade_logs
+record_account_transfer = _db.record_account_transfer
 record_cash_flow = _db.record_cash_flow
 record_trade = _db.record_trade
 set_holding_price = _db.set_holding_price
-update_cash_balance = _db.update_cash_balance
 backend_status = _db.backend_status
 
 
@@ -61,6 +66,10 @@ CASH_FLOW_TYPE_KEY = "cash_flow_type"
 CASH_FLOW_AMOUNT_KEY = "cash_flow_amount"
 CASH_FLOW_DATE_KEY = "cash_flow_date"
 CASH_FLOW_NOTES_KEY = "cash_flow_notes"
+TRANSFER_TARGET_ACCOUNT_KEY = "transfer_target_account_id"
+TRANSFER_AMOUNT_KEY = "transfer_amount"
+TRANSFER_DATE_KEY = "transfer_date"
+TRANSFER_NOTES_KEY = "transfer_notes"
 PAGE_LABELS = {
     "Dashboard": "대시보드",
     "Trades": "거래",
@@ -81,12 +90,20 @@ ASSET_TYPE_LABELS = {
 }
 CASH_FLOW_TYPE_LABELS = {
     "deposit": "입금",
-    "withdraw": "출금",
+    "personal_deposit": "개인 입금",
+    "employer_deposit": "회사 납입금",
+    "withdraw": "일반 출금",
+    "interest": "일별 이자",
+    "transfer_out": "계좌 이체 출금",
+    "transfer_in": "계좌 이체 입금",
+    "cash_adjustment": "현금 조정",
 }
 TABLE_LABELS = {
     "accounts": "계좌",
     "holdings": "보유 종목",
     "trade_logs": "거래 기록",
+    "daily_interest": "일별 이자",
+    "daily_account_snapshot": "일별 자산 스냅샷",
 }
 DETAIL_MEASURE_LABELS = {
     "market_value": "평가금액",
@@ -169,6 +186,20 @@ def label_period(value: Any) -> str:
     return PERIOD_LABELS.get(str(value), str(value))
 
 
+def period_start_date(period: str) -> date:
+    """선택한 기간에 해당하는 시작 날짜를 반환한다."""
+
+    today = date.today()
+    normalized = str(period or "6mo")
+    if normalized == "1mo":
+        return today - relativedelta(months=1)
+    if normalized == "3mo":
+        return today - relativedelta(months=3)
+    if normalized == "1y":
+        return today - relativedelta(years=1)
+    return today - relativedelta(months=6)
+
+
 def label_product_type(value: Any) -> str:
     return PRODUCT_TYPE_LABELS.get(str(value), str(value))
 
@@ -226,10 +257,14 @@ def init_state() -> None:
     st.session_state.setdefault(TRADE_DATE_KEY, date.today())
     st.session_state.setdefault(TRADE_NOTES_KEY, "")
     st.session_state.setdefault(TRADE_PREFILL_MARKER_KEY, "")
-    st.session_state.setdefault(CASH_FLOW_TYPE_KEY, "deposit")
+    st.session_state.setdefault(CASH_FLOW_TYPE_KEY, "personal_deposit")
     st.session_state.setdefault(CASH_FLOW_AMOUNT_KEY, 0.0)
     st.session_state.setdefault(CASH_FLOW_DATE_KEY, date.today())
     st.session_state.setdefault(CASH_FLOW_NOTES_KEY, "")
+    st.session_state.setdefault(TRANSFER_TARGET_ACCOUNT_KEY, None)
+    st.session_state.setdefault(TRANSFER_AMOUNT_KEY, 0.0)
+    st.session_state.setdefault(TRANSFER_DATE_KEY, date.today())
+    st.session_state.setdefault(TRANSFER_NOTES_KEY, "")
 
 
 def set_auth_feedback(level: str, message: str) -> None:
@@ -539,15 +574,18 @@ def sidebar(accounts: list[dict[str, Any]], selected_account_id: int | None, use
 def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]]) -> None:
     frame = holdings_frame(holdings)
     summary = account_summary(account, holdings)
+    interest_rows = list_daily_interest(int(account["id"]))
+    total_interest = sum(float(row.get("interest_amount") or 0) for row in interest_rows)
 
     st.title(account["name"])
     st.caption(f"계좌 유형: `{label_account_type(account['account_type'])}`")
 
-    metric_1, metric_2, metric_3, metric_4 = st.columns(4)
+    metric_1, metric_2, metric_3, metric_4, metric_5 = st.columns(5)
     metric_1.metric("포트폴리오 평가액", format_won(summary["total_value"]))
     metric_2.metric("투입 원금", format_won(summary["total_cost"]))
     metric_3.metric("평가 손익", format_won(summary["profit_loss"]), metric_delta(summary["profit_loss"]))
     metric_4.metric("현금", format_won(summary["cash"]))
+    metric_5.metric("누적 이자", format_won(total_interest))
 
     top_left, top_right = st.columns((1, 1), gap="large")
     with top_left:
@@ -558,17 +596,29 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]]) -> N
         else:
             st.altair_chart(chart, use_container_width=True)
 
-        st.subheader("현금")
-        with st.form("cash-balance-form"):
-            amount = st.number_input("현금 잔액 직접 수정", min_value=0.0, value=float(account["cash_balance"] or 0), step=100000.0)
-            submitted = st.form_submit_button("현금 저장", use_container_width=True)
+        st.subheader("현금 조정")
+        with st.form("cash-adjustment-form"):
+            amount = st.number_input("목표 현금 잔액", min_value=0.0, value=float(account["cash_balance"] or 0), step=100000.0)
+            adjustment_date = st.date_input("조정 기준일", value=date.today(), key=f"cash-adjustment-date:{account['id']}")
+            adjustment_notes = st.text_area(
+                "조정 사유",
+                height=80,
+                key=f"cash-adjustment-notes:{account['id']}",
+                placeholder="예: 외부 계좌에서 별도 입금했던 현금 맞춤",
+            )
+            submitted = st.form_submit_button("현금 조정 기록", use_container_width=True)
         if submitted:
             try:
-                update_cash_balance(int(account["id"]), amount)
+                adjust_cash_balance(
+                    int(account["id"]),
+                    target_amount=amount,
+                    trade_date=adjustment_date.isoformat(),
+                    notes=adjustment_notes,
+                )
             except ValueError as exc:
                 st.error(str(exc))
             else:
-                st.success("현금을 저장했습니다.")
+                st.success("현금 조정을 기록했습니다.")
                 st.rerun()
 
     with top_right:
@@ -603,25 +653,51 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]]) -> N
         default="6mo",
         key=f"trend-period:{account['id']}",
     )
+    snapshot_rows = list_account_snapshots(int(account["id"]), start_date=period_start_date(period).isoformat())
+    snapshot_frame = snapshot_trend_frame(snapshot_rows)
     portfolio_trend, holding_trend = build_portfolio_trend(holdings, period=period)
-    if portfolio_trend.empty:
-        st.info("추이 데이터가 잠시 준비되지 않았습니다. 야후 파이낸스 조회 제한이 걸렸거나, 아직 이력이 충분하지 않을 수 있습니다.")
+    trend_source = snapshot_frame if not snapshot_frame.empty else portfolio_trend
+    if trend_source.empty:
+        st.info("추이 데이터가 아직 없습니다. 일별 스냅샷이 쌓이기 전에는 보유 종목 시세 이력도 함께 필요합니다.")
         return
 
-    trend_chart = (
-        alt.Chart(portfolio_trend)
-        .mark_line(point=True, strokeWidth=3)
-        .encode(
-            x=alt.X("date:T", title="날짜"),
-            y=alt.Y("market_value:Q", title="포트폴리오 평가액"),
-            tooltip=[
-                alt.Tooltip("date:T", title="날짜"),
-                alt.Tooltip("market_value:Q", title="평가금액", format=",.0f"),
-                alt.Tooltip("profit_rate:Q", title="수익률 (%)", format=".2f"),
-            ],
+    if not snapshot_frame.empty:
+        trend_chart = (
+            alt.Chart(trend_source)
+            .mark_line(point=True, strokeWidth=3)
+            .encode(
+                x=alt.X("date:T", title="날짜"),
+                y=alt.Y("total_value:Q", title="포트폴리오 총자산"),
+                tooltip=[
+                    alt.Tooltip("date:T", title="날짜"),
+                    alt.Tooltip("total_value:Q", title="총자산", format=",.0f"),
+                    alt.Tooltip("market_value:Q", title="평가금액", format=",.0f"),
+                    alt.Tooltip("cash_balance:Q", title="현금", format=",.0f"),
+                ],
+            )
         )
-    )
+    else:
+        trend_chart = (
+            alt.Chart(trend_source)
+            .mark_line(point=True, strokeWidth=3)
+            .encode(
+                x=alt.X("date:T", title="날짜"),
+                y=alt.Y("market_value:Q", title="포트폴리오 평가액"),
+                tooltip=[
+                    alt.Tooltip("date:T", title="날짜"),
+                    alt.Tooltip("market_value:Q", title="평가금액", format=",.0f"),
+                    alt.Tooltip("profit_rate:Q", title="수익률 (%)", format=".2f"),
+                ],
+            )
+        )
     st.altair_chart(trend_chart, use_container_width=True)
+
+    if not snapshot_frame.empty:
+        st.caption("일별 자산 스냅샷 기준 추이를 표시하고 있습니다.")
+
+    if holding_trend.empty:
+        st.info("종목별 비교 추이는 아직 준비되지 않았습니다.")
+        return
 
     latest_names = (
         holding_trend.sort_values(["date", "market_value"], ascending=[True, False])
@@ -629,6 +705,10 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]]) -> N
         .tail(1)["product_name"]
         .tolist()
     )
+    if not latest_names:
+        st.info("종목별 비교 추이는 아직 준비되지 않았습니다.")
+        return
+
     selected_names = st.multiselect(
         "비교할 종목",
         options=latest_names,
@@ -661,7 +741,7 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]]) -> N
         st.altair_chart(detail_chart, use_container_width=True)
 
 
-def trade_entry_page(account: dict[str, Any], holdings: list[dict[str, Any]]) -> None:
+def trade_entry_page(account: dict[str, Any], holdings: list[dict[str, Any]], accounts: list[dict[str, Any]]) -> None:
     st.title("거래")
     left, right = st.columns((1, 1), gap="large")
 
@@ -752,10 +832,10 @@ def trade_entry_page(account: dict[str, Any], holdings: list[dict[str, Any]]) ->
                 st.rerun()
 
     with right:
-        st.subheader("현금 입출금")
+        st.subheader("현금 흐름")
         flow_type = st.selectbox(
             "현금 흐름",
-            ["deposit", "withdraw"],
+            ["personal_deposit", "employer_deposit", "withdraw"],
             format_func=label_cash_flow_type,
             key=CASH_FLOW_TYPE_KEY,
         )
@@ -779,6 +859,50 @@ def trade_entry_page(account: dict[str, Any], holdings: list[dict[str, Any]]) ->
                 st.session_state[CASH_FLOW_AMOUNT_KEY] = 0.0
                 st.session_state[CASH_FLOW_NOTES_KEY] = ""
                 st.rerun()
+
+        st.divider()
+        st.subheader("계좌 간 이체")
+        transfer_targets = [item for item in accounts if int(item["id"]) != int(account["id"])]
+        if not transfer_targets:
+            st.info("이체하려면 계좌를 하나 더 만들어 주세요.")
+        else:
+            target_account_options = [int(item["id"]) for item in transfer_targets]
+            saved_target_account_id = st.session_state.get(TRANSFER_TARGET_ACCOUNT_KEY)
+            default_target_account_id = (
+                saved_target_account_id
+                if saved_target_account_id in target_account_options
+                else target_account_options[0]
+            )
+            st.caption(f"출금 계좌: `{account_label(account)}`")
+            target_account_id = st.selectbox(
+                "입금 계좌",
+                options=target_account_options,
+                index=target_account_options.index(default_target_account_id),
+                format_func=lambda item_id: account_label(
+                    next(item for item in transfer_targets if int(item["id"]) == int(item_id))
+                ),
+                key=TRANSFER_TARGET_ACCOUNT_KEY,
+            )
+            transfer_amount = st.number_input("이체 금액", min_value=0.0, step=100000.0, key=TRANSFER_AMOUNT_KEY)
+            transfer_date = st.date_input("이체일", key=TRANSFER_DATE_KEY)
+            transfer_notes = st.text_area("이체 메모", height=90, key=TRANSFER_NOTES_KEY)
+            submitted = st.button("이체 기록", use_container_width=True, key=f"transfer-save:{account['id']}")
+            if submitted:
+                try:
+                    record_account_transfer(
+                        int(account["id"]),
+                        to_account_id=int(target_account_id),
+                        amount=transfer_amount,
+                        trade_date=transfer_date.isoformat(),
+                        notes=transfer_notes,
+                    )
+                except ValueError as exc:
+                    st.error(str(exc))
+                else:
+                    st.success("계좌 이체를 기록했습니다.")
+                    st.session_state[TRANSFER_AMOUNT_KEY] = 0.0
+                    st.session_state[TRANSFER_NOTES_KEY] = ""
+                    st.rerun()
 
     logs = list_trade_logs(int(account["id"]))
     realized = realized_summary(logs)
@@ -820,13 +944,34 @@ def trade_entry_page(account: dict[str, Any], holdings: list[dict[str, Any]]) ->
         st.dataframe(position_frame, use_container_width=True, hide_index=True, height=280)
 
     if logs:
+        account_name_map = {int(item["id"]): account_label(item) for item in accounts}
         log_frame = pd.DataFrame(logs)
-        log_frame = log_frame[["trade_date", "product_name", "symbol", "trade_type", "asset_type", "quantity", "price", "total_amount", "notes"]].copy()
-        log_frame.columns = ["거래일", "종목명", "코드", "유형", "자산군", "수량", "단가", "총액", "메모"]
+        for column_name in ("counterparty_account_id", "cash_delta"):
+            if column_name not in log_frame.columns:
+                log_frame[column_name] = None if column_name == "counterparty_account_id" else 0.0
+        log_frame["counterparty_account"] = log_frame["counterparty_account_id"].map(
+            lambda value: account_name_map.get(int(value), "") if pd.notna(value) else ""
+        )
+        log_frame = log_frame[
+            [
+                "trade_date",
+                "product_name",
+                "symbol",
+                "trade_type",
+                "counterparty_account",
+                "asset_type",
+                "quantity",
+                "price",
+                "total_amount",
+                "cash_delta",
+                "notes",
+            ]
+        ].copy()
+        log_frame.columns = ["거래일", "종목명", "코드", "유형", "상대 계좌", "자산군", "수량", "단가", "총액", "현금증감", "메모"]
         log_frame["유형"] = log_frame["유형"].map(label_transaction_type).fillna(log_frame["유형"])
         log_frame["자산군"] = log_frame["자산군"].map(label_asset_type).fillna(log_frame["자산군"])
         log_frame["수량"] = log_frame["수량"].map(lambda value: f"{float(value or 0):,.4f}".rstrip("0").rstrip("."))
-        for column in ("단가", "총액"):
+        for column in ("단가", "총액", "현금증감"):
             log_frame[column] = log_frame[column].map(lambda value: f"{float(value or 0):,.0f}")
         st.subheader("거래 기록")
         st.dataframe(log_frame, use_container_width=True, hide_index=True, height=420)
@@ -838,7 +983,7 @@ def data_page() -> None:
     st.title("데이터")
     st.caption("현재 앱에서 사용하는 데이터를 CSV로 내려받을 수 있습니다.")
 
-    for table_name in ("accounts", "holdings", "trade_logs"):
+    for table_name in ("accounts", "holdings", "trade_logs", "daily_interest", "daily_account_snapshot"):
         rows = export_dataframe_rows(table_name)
         frame = pd.DataFrame(rows)
         csv_bytes = frame.to_csv(index=False).encode("utf-8-sig") if not frame.empty else b""
@@ -898,7 +1043,7 @@ def main() -> None:
     if active_page == "Dashboard":
         dashboard_page(account, holdings)
     elif active_page == "Trades":
-        trade_entry_page(account, holdings)
+        trade_entry_page(account, holdings, accounts)
     else:
         data_page()
 
