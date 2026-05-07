@@ -14,7 +14,7 @@ from . import sqlite_db
 T = TypeVar("T")
 
 DEFAULT_SUPABASE_URL = "https://iyszkybxostbjfzbbymq.supabase.co"
-DEFAULT_BACKEND = "supabase"
+DEFAULT_BACKEND = "sqlite"
 BACKEND_SQLITE = "sqlite"
 BACKEND_SUPABASE = "supabase"
 BACKEND_STATE_KEY = "db_backend_state"
