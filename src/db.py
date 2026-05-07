@@ -64,7 +64,25 @@ def _has_supabase_config() -> bool:
     return bool(SUPABASE_URL and SUPABASE_KEY)
 
 
+def _sqlite_has_user_data() -> bool:
+    try:
+        user_id = app_auth.get_user_id()
+    except Exception:
+        return False
+    if not user_id:
+        return False
+
+    prefix = f"{user_id}{ACCOUNT_NAMESPACE_SEPARATOR}"
+    try:
+        sqlite_db.initialize_database()
+        return any(str(account.get("name") or "").startswith(prefix) for account in sqlite_db.list_accounts())
+    except Exception:
+        return False
+
+
 def _select_initial_backend() -> str:
+    if _sqlite_has_user_data():
+        return BACKEND_SQLITE
     if BACKEND_OVERRIDE in {BACKEND_SQLITE, BACKEND_SUPABASE}:
         return BACKEND_OVERRIDE
     return BACKEND_SUPABASE if _has_supabase_config() else BACKEND_SQLITE
