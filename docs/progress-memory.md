@@ -104,27 +104,29 @@
 - `2b839b7`: 데이터 화면 `운영 상태` 패널 추가
 - `09814cc`: 배포 환경에서 `Supabase`를 우선 사용하도록 백엔드 선택 로직 수정
 - `4cb0a9a`: 사이드바와 대시보드 레이아웃 정리, 컨텍스트 배너 추가
+- `83af6df`: 배포 웹 자동 점검 스크립트 추가 및 진행 메모 갱신
 
 ## 현재 운영 상태
 
-- 원격 `main`에는 `4cb0a9a`까지 반영됨
+- 원격 `main`에는 `83af6df`까지 반영됨
 - 웹 앱 로그인은 검증됨
 - 2026-05-08 자동 검증 결과 `데이터 저장소=로컬 SQLite`, `Supabase 설정 감지=아니오`, `이자 롤업=0건`, `자산 스냅샷=0건`
-- 다만 2026-05-08 기준 배포 웹은 아직 이전 빌드를 보고 있어 `로컬 SQLite`로 표시되며, 새 대시보드 UI도 아직 반영되지 않음
-- 따라서 다음 실제 운영 체크포인트는 `Streamlit Cloud 재배포 반영 여부` 확인이다
+- 2026-05-08 재검증에서 새 사이드바/컨텍스트 배너/UI 문구가 배포 웹에 반영된 것까지 확인됨
+- 현재 실제 병목은 `재배포 반영`이 아니라 `Streamlit secrets에 SUPABASE_URL/SUPABASE_KEY가 감지되지 않음`이다
+- 따라서 다음 실제 운영 체크포인트는 `Streamlit secrets 확인`과 `Supabase 운영 전환 후 재검증`이다
 
 ## 현재 작업 트리 메모
 
 - 커밋되지 않은 진행 중 작업:
-  - [scripts/verify_streamlit_deployment.py](/C:/Users/JKKIM/retirement-portfolio-streamlit/scripts/verify_streamlit_deployment.py)
   - [README.md](/C:/Users/JKKIM/retirement-portfolio-streamlit/README.md)
+  - 로컬 검증 산출물 PNG/TXT 파일들
 - 용도:
-  - 배포된 웹 앱에 로그인해서 `데이터 > 운영 상태`를 자동 점검하는 스크립트는 동작 확인 완료
-  - 현재는 스크립트 커밋/푸시와 Streamlit Cloud 재배포 반영 재확인 단계
+  - `verify_streamlit_deployment.py`는 커밋 및 원격 반영 완료
+  - 현재는 운영 secrets 정리 전까지 검증 기록과 보조 문서를 로컬에 유지하는 단계
 
 ## 다음 권장 순서
 
-1. `verify_streamlit_deployment.py` 커밋 및 원격 반영
-2. Streamlit Cloud 최신 커밋 반영 여부 재확인
-3. 반영 후에도 `SQLite`면 Streamlit secrets와 Supabase 스키마/RLS/Data API 노출 상태 점검
+1. Streamlit Cloud secrets의 `SUPABASE_URL`, `SUPABASE_KEY` 설정 여부 확인
+2. `setup_supabase.sql`이 운영 Supabase에 적용되었는지 확인
+3. 설정 후 `verify_streamlit_deployment.py --page data --expect-backend supabase`로 재검증
 4. 운영 전환이 끝나면 5단계 잔여 분석 계산 고도화 진행
