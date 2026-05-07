@@ -8,6 +8,18 @@ import pandas as pd
 from .market import fetch_price_history
 
 
+def _trade_match_key(log: dict[str, Any]) -> str:
+    symbol = str(log.get("symbol") or "").strip().upper()
+    if symbol:
+        return f"symbol:{symbol}"
+
+    product_name = str(log.get("product_name") or "").strip().casefold()
+    if product_name:
+        return f"name:{product_name}"
+
+    return ""
+
+
 def holdings_frame(holdings: list[dict[str, Any]]) -> pd.DataFrame:
     frame = pd.DataFrame(holdings)
     if frame.empty:
@@ -53,13 +65,17 @@ def realized_summary(trade_logs: list[dict[str, Any]]) -> dict[str, Any]:
     lots_by_symbol: dict[str, list[dict[str, Any]]] = defaultdict(list)
     realized: list[dict[str, Any]] = []
 
-    ordered_logs = sorted(trade_logs, key=lambda row: (row["trade_date"], row["id"]))
+    ordered_logs = sorted(
+        trade_logs,
+        key=lambda row: (row.get("trade_date", ""), row.get("created_at", ""), row.get("id", 0)),
+    )
     for log in ordered_logs:
         trade_type = str(log.get("trade_type") or "").lower()
         if trade_type not in {"buy", "sell"}:
             continue
 
-        symbol = str(log.get("symbol") or "").strip().upper()
+        symbol = _trade_match_key(log)
+        display_symbol = str(log.get("symbol") or "").strip().upper()
         quantity = float(log.get("quantity") or 0)
         total_amount = float(log.get("total_amount") or 0)
         if quantity <= 0 or total_amount <= 0:
@@ -104,7 +120,7 @@ def realized_summary(trade_logs: list[dict[str, Any]]) -> dict[str, Any]:
         profit_loss = total_amount - matched_cost
         realized.append(
             {
-                "symbol": symbol,
+                "symbol": display_symbol,
                 "product_name": log.get("product_name"),
                 "asset_type": log.get("asset_type"),
                 "buy_amount": matched_cost,

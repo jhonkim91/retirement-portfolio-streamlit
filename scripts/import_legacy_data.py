@@ -36,6 +36,56 @@ PASSWORD_MAP = {
 }
 
 
+def normalize_name(value: Any) -> str:
+    return str(value or "").strip().casefold()
+
+
+def build_product_code_lookup(products: list[dict[str, Any]]) -> tuple[dict[int, str], dict[str, str]]:
+    by_id: dict[int, str] = {}
+    by_name: dict[str, str] = {}
+
+    for product in products:
+        code = str(product.get("product_code") or "").strip().upper()
+        if not code:
+            continue
+
+        product_id = product.get("id")
+        if product_id is not None:
+            try:
+                by_id[int(product_id)] = code
+            except (TypeError, ValueError):
+                pass
+
+        product_name = normalize_name(product.get("product_name"))
+        if product_name and product_name not in by_name:
+            by_name[product_name] = code
+
+    return by_id, by_name
+
+
+def resolve_trade_symbol(log: dict[str, Any], by_id: dict[int, str], by_name: dict[str, str]) -> str:
+    explicit = str(log.get("symbol") or "").strip().upper()
+    if explicit:
+        return explicit
+
+    product_id = log.get("product_id")
+    if product_id is not None:
+        try:
+            code = by_id.get(int(product_id))
+        except (TypeError, ValueError):
+            code = None
+        if code:
+            return code
+
+    product_name = normalize_name(log.get("product_name"))
+    if product_name:
+        code = by_name.get(product_name)
+        if code:
+            return code
+
+    return ""
+
+
 def now_iso() -> str:
     return datetime.utcnow().replace(microsecond=0).isoformat()
 
@@ -196,14 +246,23 @@ def insert_holding(access_token: str, account_id: int, product: dict[str, Any]) 
     request_json("POST", "/rest/v1/holdings", access_token=access_token, json_data=payload)
 
 
-def insert_trade_log(access_token: str, account_id: int, log: dict[str, Any]) -> None:
+def insert_trade_log(
+    access_token: str,
+    account_id: int,
+    log: dict[str, Any],
+    *,
+    product_code_by_id: dict[int, str],
+    product_code_by_name: dict[str, str],
+) -> None:
     trade_type = str(log.get("trade_type") or "").strip().lower()
     if trade_type not in {"buy", "sell", "deposit", "withdraw"}:
         return
 
+    resolved_symbol = resolve_trade_symbol(log, product_code_by_id, product_code_by_name)
+
     payload = {
         "account_id": int(account_id),
-        "symbol": str(log.get("symbol") or "").strip().upper() or None,
+        "symbol": resolved_symbol or None,
         "product_name": str(log.get("product_name") or "").strip(),
         "trade_type": trade_type,
         "asset_type": str(log.get("asset_type") or "risk").strip().lower(),
@@ -232,6 +291,7 @@ def import_user(legacy_name: str, user_data: dict[str, Any]) -> dict[str, Any]:
         cash = account.get("cash") or {}
         products = account.get("products") or []
         trade_logs = account.get("trade_logs") or []
+        product_code_by_id, product_code_by_name = build_product_code_lookup(products)
 
         account_row = create_or_update_account(
             access_token=access_token,
@@ -245,7 +305,13 @@ def import_user(legacy_name: str, user_data: dict[str, Any]) -> dict[str, Any]:
         for product in products:
             insert_holding(access_token, account_id, product)
         for log in trade_logs:
-            insert_trade_log(access_token, account_id, log)
+            insert_trade_log(
+                access_token,
+                account_id,
+                log,
+                product_code_by_id=product_code_by_id,
+                product_code_by_name=product_code_by_name,
+            )
 
         imported_accounts.append(
             {
