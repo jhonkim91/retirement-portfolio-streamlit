@@ -5,6 +5,7 @@
 CREATE TABLE IF NOT EXISTS public.accounts (
     id BIGSERIAL PRIMARY KEY,
     name TEXT NOT NULL UNIQUE,
+    owner_user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
     account_type TEXT NOT NULL DEFAULT 'retirement',
     cash_balance DOUBLE PRECISION NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL,
@@ -67,13 +68,25 @@ CREATE TABLE IF NOT EXISTS public.daily_account_snapshot (
     UNIQUE(account_id, snapshot_date)
 );
 
+ALTER TABLE public.accounts
+    ADD COLUMN IF NOT EXISTS owner_user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE;
+
 ALTER TABLE public.trade_logs
     ADD COLUMN IF NOT EXISTS cash_delta DOUBLE PRECISION NOT NULL DEFAULT 0,
     ADD COLUMN IF NOT EXISTS event_group_id TEXT,
     ADD COLUMN IF NOT EXISTS counterparty_account_id BIGINT REFERENCES public.accounts(id) ON DELETE SET NULL,
     ADD COLUMN IF NOT EXISTS metadata_json JSONB NOT NULL DEFAULT '{}'::jsonb;
 
+UPDATE public.accounts
+SET owner_user_id = NULLIF(split_part(name, '::', 1), '')::uuid
+WHERE owner_user_id IS NULL
+  AND split_part(name, '::', 1) ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$';
+
+ALTER TABLE public.accounts
+    ALTER COLUMN owner_user_id SET DEFAULT auth.uid();
+
 CREATE INDEX IF NOT EXISTS idx_accounts_name ON public.accounts(name);
+CREATE INDEX IF NOT EXISTS idx_accounts_owner_user_id ON public.accounts(owner_user_id);
 CREATE INDEX IF NOT EXISTS idx_holdings_account_id ON public.holdings(account_id);
 CREATE INDEX IF NOT EXISTS idx_trade_logs_account_id ON public.trade_logs(account_id);
 CREATE INDEX IF NOT EXISTS idx_trade_logs_event_group_id ON public.trade_logs(event_group_id);
@@ -143,8 +156,8 @@ ON public.accounts
 FOR SELECT
 TO authenticated
 USING (
-    auth.uid() IS NOT NULL
-    AND split_part(name, '::', 1) = auth.uid()::text
+    (select auth.uid()) IS NOT NULL
+    AND owner_user_id = (select auth.uid())
 );
 
 CREATE POLICY accounts_insert_own
@@ -152,8 +165,8 @@ ON public.accounts
 FOR INSERT
 TO authenticated
 WITH CHECK (
-    auth.uid() IS NOT NULL
-    AND split_part(name, '::', 1) = auth.uid()::text
+    (select auth.uid()) IS NOT NULL
+    AND owner_user_id = (select auth.uid())
 );
 
 CREATE POLICY accounts_update_own
@@ -161,12 +174,12 @@ ON public.accounts
 FOR UPDATE
 TO authenticated
 USING (
-    auth.uid() IS NOT NULL
-    AND split_part(name, '::', 1) = auth.uid()::text
+    (select auth.uid()) IS NOT NULL
+    AND owner_user_id = (select auth.uid())
 )
 WITH CHECK (
-    auth.uid() IS NOT NULL
-    AND split_part(name, '::', 1) = auth.uid()::text
+    (select auth.uid()) IS NOT NULL
+    AND owner_user_id = (select auth.uid())
 );
 
 CREATE POLICY accounts_delete_own
@@ -174,8 +187,8 @@ ON public.accounts
 FOR DELETE
 TO authenticated
 USING (
-    auth.uid() IS NOT NULL
-    AND split_part(name, '::', 1) = auth.uid()::text
+    (select auth.uid()) IS NOT NULL
+    AND owner_user_id = (select auth.uid())
 );
 
 DROP POLICY IF EXISTS holdings_select_own ON public.holdings;
@@ -188,12 +201,12 @@ ON public.holdings
 FOR SELECT
 TO authenticated
 USING (
-    auth.uid() IS NOT NULL
+    (select auth.uid()) IS NOT NULL
     AND EXISTS (
         SELECT 1
         FROM public.accounts
         WHERE accounts.id = holdings.account_id
-          AND split_part(accounts.name, '::', 1) = auth.uid()::text
+          AND accounts.owner_user_id = (select auth.uid())
     )
 );
 
@@ -202,12 +215,12 @@ ON public.holdings
 FOR INSERT
 TO authenticated
 WITH CHECK (
-    auth.uid() IS NOT NULL
+    (select auth.uid()) IS NOT NULL
     AND EXISTS (
         SELECT 1
         FROM public.accounts
         WHERE accounts.id = holdings.account_id
-          AND split_part(accounts.name, '::', 1) = auth.uid()::text
+          AND accounts.owner_user_id = (select auth.uid())
     )
 );
 
@@ -216,21 +229,21 @@ ON public.holdings
 FOR UPDATE
 TO authenticated
 USING (
-    auth.uid() IS NOT NULL
+    (select auth.uid()) IS NOT NULL
     AND EXISTS (
         SELECT 1
         FROM public.accounts
         WHERE accounts.id = holdings.account_id
-          AND split_part(accounts.name, '::', 1) = auth.uid()::text
+          AND accounts.owner_user_id = (select auth.uid())
     )
 )
 WITH CHECK (
-    auth.uid() IS NOT NULL
+    (select auth.uid()) IS NOT NULL
     AND EXISTS (
         SELECT 1
         FROM public.accounts
         WHERE accounts.id = holdings.account_id
-          AND split_part(accounts.name, '::', 1) = auth.uid()::text
+          AND accounts.owner_user_id = (select auth.uid())
     )
 );
 
@@ -239,12 +252,12 @@ ON public.holdings
 FOR DELETE
 TO authenticated
 USING (
-    auth.uid() IS NOT NULL
+    (select auth.uid()) IS NOT NULL
     AND EXISTS (
         SELECT 1
         FROM public.accounts
         WHERE accounts.id = holdings.account_id
-          AND split_part(accounts.name, '::', 1) = auth.uid()::text
+          AND accounts.owner_user_id = (select auth.uid())
     )
 );
 
@@ -258,12 +271,12 @@ ON public.trade_logs
 FOR SELECT
 TO authenticated
 USING (
-    auth.uid() IS NOT NULL
+    (select auth.uid()) IS NOT NULL
     AND EXISTS (
         SELECT 1
         FROM public.accounts
         WHERE accounts.id = trade_logs.account_id
-          AND split_part(accounts.name, '::', 1) = auth.uid()::text
+          AND accounts.owner_user_id = (select auth.uid())
     )
 );
 
@@ -272,12 +285,12 @@ ON public.trade_logs
 FOR INSERT
 TO authenticated
 WITH CHECK (
-    auth.uid() IS NOT NULL
+    (select auth.uid()) IS NOT NULL
     AND EXISTS (
         SELECT 1
         FROM public.accounts
         WHERE accounts.id = trade_logs.account_id
-          AND split_part(accounts.name, '::', 1) = auth.uid()::text
+          AND accounts.owner_user_id = (select auth.uid())
     )
 );
 
@@ -286,21 +299,21 @@ ON public.trade_logs
 FOR UPDATE
 TO authenticated
 USING (
-    auth.uid() IS NOT NULL
+    (select auth.uid()) IS NOT NULL
     AND EXISTS (
         SELECT 1
         FROM public.accounts
         WHERE accounts.id = trade_logs.account_id
-          AND split_part(accounts.name, '::', 1) = auth.uid()::text
+          AND accounts.owner_user_id = (select auth.uid())
     )
 )
 WITH CHECK (
-    auth.uid() IS NOT NULL
+    (select auth.uid()) IS NOT NULL
     AND EXISTS (
         SELECT 1
         FROM public.accounts
         WHERE accounts.id = trade_logs.account_id
-          AND split_part(accounts.name, '::', 1) = auth.uid()::text
+          AND accounts.owner_user_id = (select auth.uid())
     )
 );
 
@@ -309,12 +322,12 @@ ON public.trade_logs
 FOR DELETE
 TO authenticated
 USING (
-    auth.uid() IS NOT NULL
+    (select auth.uid()) IS NOT NULL
     AND EXISTS (
         SELECT 1
         FROM public.accounts
         WHERE accounts.id = trade_logs.account_id
-          AND split_part(accounts.name, '::', 1) = auth.uid()::text
+          AND accounts.owner_user_id = (select auth.uid())
     )
 );
 
@@ -328,12 +341,12 @@ ON public.daily_interest
 FOR SELECT
 TO authenticated
 USING (
-    auth.uid() IS NOT NULL
+    (select auth.uid()) IS NOT NULL
     AND EXISTS (
         SELECT 1
         FROM public.accounts
         WHERE accounts.id = daily_interest.account_id
-          AND split_part(accounts.name, '::', 1) = auth.uid()::text
+          AND accounts.owner_user_id = (select auth.uid())
     )
 );
 
@@ -342,12 +355,12 @@ ON public.daily_interest
 FOR INSERT
 TO authenticated
 WITH CHECK (
-    auth.uid() IS NOT NULL
+    (select auth.uid()) IS NOT NULL
     AND EXISTS (
         SELECT 1
         FROM public.accounts
         WHERE accounts.id = daily_interest.account_id
-          AND split_part(accounts.name, '::', 1) = auth.uid()::text
+          AND accounts.owner_user_id = (select auth.uid())
     )
 );
 
@@ -356,21 +369,21 @@ ON public.daily_interest
 FOR UPDATE
 TO authenticated
 USING (
-    auth.uid() IS NOT NULL
+    (select auth.uid()) IS NOT NULL
     AND EXISTS (
         SELECT 1
         FROM public.accounts
         WHERE accounts.id = daily_interest.account_id
-          AND split_part(accounts.name, '::', 1) = auth.uid()::text
+          AND accounts.owner_user_id = (select auth.uid())
     )
 )
 WITH CHECK (
-    auth.uid() IS NOT NULL
+    (select auth.uid()) IS NOT NULL
     AND EXISTS (
         SELECT 1
         FROM public.accounts
         WHERE accounts.id = daily_interest.account_id
-          AND split_part(accounts.name, '::', 1) = auth.uid()::text
+          AND accounts.owner_user_id = (select auth.uid())
     )
 );
 
@@ -379,12 +392,12 @@ ON public.daily_interest
 FOR DELETE
 TO authenticated
 USING (
-    auth.uid() IS NOT NULL
+    (select auth.uid()) IS NOT NULL
     AND EXISTS (
         SELECT 1
         FROM public.accounts
         WHERE accounts.id = daily_interest.account_id
-          AND split_part(accounts.name, '::', 1) = auth.uid()::text
+          AND accounts.owner_user_id = (select auth.uid())
     )
 );
 
@@ -398,12 +411,12 @@ ON public.daily_account_snapshot
 FOR SELECT
 TO authenticated
 USING (
-    auth.uid() IS NOT NULL
+    (select auth.uid()) IS NOT NULL
     AND EXISTS (
         SELECT 1
         FROM public.accounts
         WHERE accounts.id = daily_account_snapshot.account_id
-          AND split_part(accounts.name, '::', 1) = auth.uid()::text
+          AND accounts.owner_user_id = (select auth.uid())
     )
 );
 
@@ -412,12 +425,12 @@ ON public.daily_account_snapshot
 FOR INSERT
 TO authenticated
 WITH CHECK (
-    auth.uid() IS NOT NULL
+    (select auth.uid()) IS NOT NULL
     AND EXISTS (
         SELECT 1
         FROM public.accounts
         WHERE accounts.id = daily_account_snapshot.account_id
-          AND split_part(accounts.name, '::', 1) = auth.uid()::text
+          AND accounts.owner_user_id = (select auth.uid())
     )
 );
 
@@ -426,21 +439,21 @@ ON public.daily_account_snapshot
 FOR UPDATE
 TO authenticated
 USING (
-    auth.uid() IS NOT NULL
+    (select auth.uid()) IS NOT NULL
     AND EXISTS (
         SELECT 1
         FROM public.accounts
         WHERE accounts.id = daily_account_snapshot.account_id
-          AND split_part(accounts.name, '::', 1) = auth.uid()::text
+          AND accounts.owner_user_id = (select auth.uid())
     )
 )
 WITH CHECK (
-    auth.uid() IS NOT NULL
+    (select auth.uid()) IS NOT NULL
     AND EXISTS (
         SELECT 1
         FROM public.accounts
         WHERE accounts.id = daily_account_snapshot.account_id
-          AND split_part(accounts.name, '::', 1) = auth.uid()::text
+          AND accounts.owner_user_id = (select auth.uid())
     )
 );
 
@@ -449,12 +462,12 @@ ON public.daily_account_snapshot
 FOR DELETE
 TO authenticated
 USING (
-    auth.uid() IS NOT NULL
+    (select auth.uid()) IS NOT NULL
     AND EXISTS (
         SELECT 1
         FROM public.accounts
         WHERE accounts.id = daily_account_snapshot.account_id
-          AND split_part(accounts.name, '::', 1) = auth.uid()::text
+          AND accounts.owner_user_id = (select auth.uid())
     )
 );
 

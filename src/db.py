@@ -491,6 +491,17 @@ def _supabase_request(
         response.raise_for_status()
     except requests.HTTPError as exc:
         detail = response.text.strip().replace("\n", " ")
+        detail_lower = detail.lower()
+        if (
+            response.status_code == 403
+            and method == "POST"
+            and table == "accounts"
+            and "row-level security policy" in detail_lower
+        ):
+            detail = (
+                "운영 Supabase의 accounts INSERT RLS 정책이 오래된 상태입니다. "
+                "setup_supabase.sql의 owner_user_id 핫픽스를 적용한 뒤 다시 시도해 주세요."
+            )
         raise requests.HTTPError(
             f"Supabase {method} {table} 요청에 실패했습니다 ({response.status_code}): {detail}",
             response=response,

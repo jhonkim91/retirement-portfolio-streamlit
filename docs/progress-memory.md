@@ -143,3 +143,16 @@
 2. 쓰기 작업 승인 후 `migrate_sqlite_to_supabase.py --write` 또는 계좌 생성 진행
 3. 그다음 `verify_streamlit_deployment.py --page data --expect-backend supabase`와 롤업 화면 재검증
 4. 운영 전환이 끝나면 5단계 잔여 분석 계산 고도화 진행
+## 2026-05-08 RLS hotfix memo
+
+- Commit `70e281f`: reduced Supabase write response coupling by using `return=minimal` on writes and resolving account id with a follow-up read.
+- Deployment check after that change: demo button still fails with `Supabase POST accounts ... 403 ... row-level security policy for table "accounts"`.
+- Conclusion: the blocker is the production `accounts INSERT` RLS policy, not the write response format.
+- Prepared SQL hotfix in `setup_supabase.sql`:
+  - add `accounts.owner_user_id uuid references auth.users(id)`
+  - backfill `owner_user_id` from existing `name` prefixes where possible
+  - set `owner_user_id default auth.uid()`
+  - add index on `owner_user_id`
+  - switch all RLS policies from `split_part(name, '::', 1)` checks to `owner_user_id = auth.uid()`
+- App-side error handling now maps this specific 403 to an actionable message that points to the `owner_user_id` hotfix.
+- Next required action: apply the updated `setup_supabase.sql` in the production Supabase SQL editor, then rerun the demo/onboarding verification.
