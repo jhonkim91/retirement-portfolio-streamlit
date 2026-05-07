@@ -108,6 +108,7 @@
 - `83af6df`: 배포 웹 자동 점검 스크립트 추가 및 진행 메모 갱신
 - 작업 중: 운영 상태 진단 세분화와 auth/db 설정 읽기 동적화
 - 작업 중: Supabase 전환 후 온보딩 화면까지 인식하는 배포 검증 보강
+- 작업 중: 로컬 SQLite -> Supabase dry-run 마이그레이션 스크립트 정리와 기존 이관 스크립트 보안 정리
 
 ## 현재 운영 상태
 
@@ -119,6 +120,7 @@
 - 따라서 `Streamlit secrets/Supabase 연결` 자체는 반영된 것으로 보이며, 기존 `SQLite` 병목은 해소된 상태다
 - 현재 실제 상태는 `Supabase 연결 완료 + 아직 첫 계좌가 없는 신규 온보딩 화면`이다
 - 로컬 코드 기준 진단은 `SUPABASE_URL=default`, `SUPABASE_KEY=missing`일 때 이유를 별도 표기하도록 보강 완료
+- 로컬 SQLite dry-run 기준 이관 대상은 `계좌 4개 / 보유종목 6개 / 거래기록 58개 / 일별 이자 0개 / 스냅샷 0개`다
 - 따라서 다음 실제 운영 체크포인트는 `첫 계좌 생성 또는 초기 데이터 이관 여부 결정`과 `그 이후 데이터/롤업 재검증`이다
 
 ## 현재 작업 트리 메모
@@ -129,10 +131,11 @@
 - 용도:
   - `verify_streamlit_deployment.py`는 커밋 및 원격 반영 완료
   - 현재는 운영 secrets 정리 전까지 검증 기록과 보조 문서를 로컬에 유지하는 단계
+  - `migrate_sqlite_to_supabase.py`는 dry-run 검증까지 완료했고, 실제 쓰기는 아직 실행하지 않음
 
 ## 다음 권장 순서
 
 1. 운영 계정에 첫 계좌를 생성할지, 기존 데이터를 이관할지 결정
-2. 쓰기 작업 승인 후 계좌 생성 또는 데이터 이관 진행
+2. 쓰기 작업 승인 후 `migrate_sqlite_to_supabase.py --write` 또는 계좌 생성 진행
 3. 그다음 `verify_streamlit_deployment.py --page data --expect-backend supabase`와 롤업 화면 재검증
 4. 운영 전환이 끝나면 5단계 잔여 분석 계산 고도화 진행

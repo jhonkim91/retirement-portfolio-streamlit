@@ -13,7 +13,6 @@ from supabase import create_client
 
 DEFAULT_SOURCE_PATH = Path(r"C:\Users\JKKIM\retirement-portfolio\tmp_migration_source_data.json")
 DEFAULT_SUPABASE_URL = "https://iyszkybxostbjfzbbymq.supabase.co"
-DEFAULT_PASSWORD = "854854"
 
 
 def env_value(name: str, default: str = "") -> str:
@@ -31,8 +30,8 @@ EMAIL_MAP = {
 }
 
 PASSWORD_MAP = {
-    "jhonkim2025@gmail.com": env_value("JHONKIM_PASSWORD", DEFAULT_PASSWORD),
-    "sspd1013@naver.com": env_value("SSPD1013_PASSWORD", DEFAULT_PASSWORD),
+    "jhonkim2025@gmail.com": env_value("JHONKIM_PASSWORD"),
+    "sspd1013@naver.com": env_value("SSPD1013_PASSWORD"),
 }
 
 
@@ -278,7 +277,9 @@ def insert_trade_log(
 
 def import_user(legacy_name: str, user_data: dict[str, Any]) -> dict[str, Any]:
     email = resolve_email(legacy_name)
-    password = PASSWORD_MAP.get(email) or DEFAULT_PASSWORD
+    password = PASSWORD_MAP.get(email)
+    if not password:
+        raise RuntimeError(f"No migration password configured for {email}.")
     auth = sign_in(email, password)
     access_token = auth["access_token"]
     user_id = auth["user_id"]

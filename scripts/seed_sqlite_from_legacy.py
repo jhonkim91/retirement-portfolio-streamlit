@@ -13,7 +13,6 @@ from scripts.import_legacy_data import build_product_code_lookup, resolve_trade_
 
 DEFAULT_SOURCE_PATH = Path(r"C:\Users\JKKIM\retirement-portfolio\tmp_migration_source_data.json")
 DEFAULT_SUPABASE_URL = "https://iyszkybxostbjfzbbymq.supabase.co"
-DEFAULT_PASSWORD = "854854"
 
 
 def env_value(name: str, default: str = "") -> str:
@@ -25,8 +24,8 @@ SUPABASE_KEY = env_value("SUPABASE_KEY")
 SOURCE_PATH = Path(env_value("MIGRATION_SOURCE_PATH", str(DEFAULT_SOURCE_PATH)))
 
 PASSWORD_MAP = {
-    "jhonkim2025@gmail.com": env_value("JHONKIM_PASSWORD", DEFAULT_PASSWORD),
-    "sspd1013@naver.com": env_value("SSPD1013_PASSWORD", DEFAULT_PASSWORD),
+    "jhonkim2025@gmail.com": env_value("JHONKIM_PASSWORD"),
+    "sspd1013@naver.com": env_value("SSPD1013_PASSWORD"),
 }
 TARGET_EMAILS = {
     email.strip().lower()
