@@ -156,3 +156,18 @@
   - switch all RLS policies from `split_part(name, '::', 1)` checks to `owner_user_id = auth.uid()`
 - App-side error handling now maps this specific 403 to an actionable message that points to the `owner_user_id` hotfix.
 - Next required action: apply the updated `setup_supabase.sql` in the production Supabase SQL editor, then rerun the demo/onboarding verification.
+
+## 2026-05-08 verification tooling follow-up
+
+- Added [supabase-owner-user-id-hotfix.sql](/C:/Users/JKKIM/retirement-portfolio-streamlit/docs/supabase-owner-user-id-hotfix.sql) as a focused production SQL patch for the current RLS blocker.
+- Added [supabase-hotfix-runbook.md](/C:/Users/JKKIM/retirement-portfolio-streamlit/docs/supabase-hotfix-runbook.md) with the exact SQL Editor + redeploy verification sequence.
+- Extended [verify_streamlit_deployment.py](/C:/Users/JKKIM/retirement-portfolio-streamlit/scripts/verify_streamlit_deployment.py) with `--click-demo` and output fields:
+  - `onboarding_visible`
+  - `onboarding_error`
+  - `hotfix_required`
+  - `demo_button_clicked`
+  - `demo_seeded`
+- This lets the next verification run distinguish between:
+  - onboarding still blocked by RLS
+  - onboarding screen visible but demo click not triggered
+  - demo data seeded successfully and dashboard opened

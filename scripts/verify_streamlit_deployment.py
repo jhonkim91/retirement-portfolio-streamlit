@@ -56,6 +56,11 @@ class DeploymentSummary:
     backend_override: str
     reason: str
     status_message: str
+    onboarding_visible: bool
+    onboarding_error: str
+    hotfix_required: bool
+    demo_button_clicked: bool
+    demo_seeded: bool
     text_output: str | None = None
     screenshot_output: str | None = None
 
@@ -82,6 +87,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--screenshot", help="전체 페이지 스크린샷 저장 경로")
     parser.add_argument("--text-output", help="본문 텍스트 저장 경로")
     parser.add_argument("--wait-ms", type=int, default=DEFAULT_WAIT_MS, help="화면 전환 대기 시간(ms)")
+    parser.add_argument(
+        "--click-demo",
+        action="store_true",
+        help="?⑤낫???붾㈃???곕え ?곗씠??踰꾪듉???대┃?댁꽌 RLS ?⑥?吏? ?곗씠???앹꽦 ?щ?瑜?寃利앺븳??",
+    )
     return parser.parse_args()
 
 
@@ -240,6 +250,23 @@ def choose_page_label(frame: Frame, page_name: str) -> Locator:
     raise RuntimeError(f"페이지 레이블을 찾지 못했습니다: {target_text}")
 
 
+def click_demo_button(frame: Frame) -> bool:
+    """?⑤낫???붾㈃???곕え ?곗씠??踰꾪듉???대┃?섍퀬 ?깃났 ?щ?瑜?諛섑솚?쒕떎."""
+
+    buttons = frame.locator("button")
+    for index in range(buttons.count()):
+        button = buttons.nth(index)
+        try:
+            if not button.is_visible():
+                continue
+            if "데모 데이터 불러오기" in button.inner_text(timeout=1_500):
+                button.click()
+                return True
+        except Exception:
+            continue
+    return False
+
+
 def wait_for_authenticated_app(page: Page, timeout_ms: int) -> Frame:
     """로그인 후 앱 내부 화면이 나타날 때까지 기다린다."""
 
@@ -281,6 +308,16 @@ def open_target_page(page: Page, frame: Frame, page_name: str, timeout_ms: int) 
     return select_app_frame(page)
 
 
+def extract_onboarding_error(lines: list[str]) -> str:
+    """?⑤낫???붾㈃??蹂댁씠?붾뒗 ?ㅻ쪟 臾몄옄?댁쓣 寃異쒗븳??"""
+
+    for line in lines:
+        lowered = line.lower()
+        if "supabase post accounts" in lowered or "row-level security" in lowered or "owner_user_id" in lowered:
+            return line
+    return ""
+
+
 def build_summary(url: str, target_page: str, text: str) -> DeploymentSummary:
     """본문 텍스트에서 배포 상태 요약을 생성한다."""
 
@@ -290,6 +327,10 @@ def build_summary(url: str, target_page: str, text: str) -> DeploymentSummary:
         backend_storage = find_prefixed_value(lines, "현재 저장소:")
     interest_rollup, latest_interest_date = find_values_after_label(lines, "이자 롤업")
     snapshot_count, latest_snapshot_date = find_values_after_label(lines, "자산 스냅샷")
+    onboarding_visible = has_onboarding_context(text)
+    onboarding_error = extract_onboarding_error(lines)
+    hotfix_required = "owner_user_id" in onboarding_error.lower() or "row-level security" in onboarding_error.lower()
+    demo_seeded = has_workspace_context(text)
     status_message = ""
     for line in lines:
         if line.startswith("현재 배포본은 "):
@@ -317,6 +358,11 @@ def build_summary(url: str, target_page: str, text: str) -> DeploymentSummary:
         backend_override=find_prefixed_value(lines, "백엔드 강제 설정:"),
         reason=find_prefixed_value(lines, "감지 사유:"),
         status_message=status_message,
+        onboarding_visible=onboarding_visible,
+        onboarding_error=onboarding_error,
+        hotfix_required=hotfix_required,
+        demo_button_clicked=False,
+        demo_seeded=demo_seeded,
     )
 
 
@@ -357,10 +403,19 @@ def verify_deployment(args: argparse.Namespace) -> DeploymentSummary:
         page.wait_for_timeout(args.wait_ms)
         frame = login_if_needed(page, args.email, args.password, args.wait_ms)
         text = body_text(frame, 15_000)
+        demo_button_clicked = False
+        if args.click_demo and has_onboarding_context(text):
+            demo_button_clicked = click_demo_button(frame)
+            if demo_button_clicked:
+                page.wait_for_timeout(args.wait_ms)
+                frame = select_app_frame(page)
+                text = body_text(frame, 15_000)
         if has_workspace_context(text):
             frame = open_target_page(page, frame, args.page, max(4_000, args.wait_ms // 2))
             text = body_text(frame, 15_000)
         summary = build_summary(args.url, args.page, text)
+        summary.demo_button_clicked = demo_button_clicked
+        summary.demo_seeded = has_workspace_context(text)
         summary.text_output = maybe_write_output(args.text_output, text)
         summary.screenshot_output = maybe_capture_screenshot(page, args.screenshot)
         browser.close()
