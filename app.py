@@ -699,13 +699,13 @@ def trade_entry_page(account: dict[str, Any], holdings: list[dict[str, Any]]) ->
                     st.caption("자동완성 결과")
                     if suggestions:
                         for product in suggestions:
-                            if st.button(
+                            st.button(
                                 product_search_label(product),
                                 key=f"product-suggestion:{account['id']}:{product['code']}",
                                 use_container_width=True,
-                            ):
-                                apply_search_product(product)
-                                st.rerun()
+                                on_click=apply_search_product,
+                                args=(product,),
+                            )
                     else:
                         st.caption("검색 결과가 없습니다.")
 
