@@ -717,7 +717,7 @@ def empty_state() -> None:
     if submitted:
         try:
             account_id = create_account(name=name, account_type=account_type, opening_cash=opening_cash)
-        except ValueError as exc:
+        except Exception as exc:  # noqa: BLE001
             st.error(str(exc))
         else:
             st.session_state["selected_account_id"] = account_id
@@ -738,7 +738,7 @@ def empty_state() -> None:
         if demo_submitted:
             try:
                 result = seed_demo_workspace()
-            except ValueError as exc:
+            except Exception as exc:  # noqa: BLE001
                 st.error(str(exc))
             else:
                 st.session_state["selected_account_id"] = int(result["selected_account_id"])

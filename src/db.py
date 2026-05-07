@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import os
 from datetime import datetime
 from urllib.parse import urlparse
@@ -594,10 +595,33 @@ def _run_with_fallback(
 
 
 def _require_user_id() -> str:
+    token_user_id = _token_user_id()
+    if token_user_id:
+        return token_user_id
+
     user_id = app_auth.get_user_id()
     if not user_id:
         raise ValueError("포트폴리오를 관리하려면 로그인해 주세요.")
     return user_id
+
+
+def _token_user_id() -> str | None:
+    """액세스 토큰의 sub 클레임에서 사용자 ID를 추출한다."""
+
+    access_token = app_auth.get_access_token()
+    if not access_token or access_token.count(".") < 2:
+        return None
+
+    try:
+        payload_segment = access_token.split(".")[1]
+        padding = "=" * (-len(payload_segment) % 4)
+        decoded = base64.urlsafe_b64decode(f"{payload_segment}{padding}")
+        payload = json.loads(decoded.decode("utf-8"))
+    except Exception:
+        return None
+
+    subject = str(payload.get("sub") or "").strip()
+    return subject or None
 
 
 def _account_prefix() -> str:
