@@ -40,6 +40,8 @@ st.set_page_config(
 
 
 PAGES = ("Dashboard", "Trades", "Data")
+PENDING_CONFIRMATION_EMAIL_KEY = "pending_confirmation_email"
+AUTH_FEEDBACK_KEY = "auth_feedback"
 
 
 def format_won(value: Any) -> str:
@@ -58,6 +60,71 @@ def init_state() -> None:
     st.session_state.setdefault("selected_account_id", None)
     st.session_state.setdefault("active_page", PAGES[0])
     st.session_state.setdefault("auth_mode", "sign-in")
+    st.session_state.setdefault(PENDING_CONFIRMATION_EMAIL_KEY, "")
+    st.session_state.setdefault(AUTH_FEEDBACK_KEY, None)
+
+
+def set_auth_feedback(level: str, message: str) -> None:
+    st.session_state[AUTH_FEEDBACK_KEY] = {
+        "level": str(level or "info"),
+        "message": str(message or "").strip(),
+    }
+
+
+def render_auth_feedback() -> None:
+    feedback = st.session_state.pop(AUTH_FEEDBACK_KEY, None)
+    if not isinstance(feedback, dict):
+        return
+
+    message = str(feedback.get("message") or "").strip()
+    if not message:
+        return
+
+    level = str(feedback.get("level") or "info").strip().lower()
+    renderer = getattr(st, level, st.info)
+    renderer(message)
+
+
+def clear_query_params() -> None:
+    for key in list(st.query_params.keys()):
+        del st.query_params[key]
+
+
+def handle_auth_callback() -> bool:
+    error_description = str(st.query_params.get("error_description") or "").strip()
+    error_code = str(st.query_params.get("error_code") or "").strip()
+    if error_description:
+        suffix = f" ({error_code})" if error_code else ""
+        set_auth_feedback("error", f"Email confirmation failed{suffix}: {error_description}")
+        clear_query_params()
+        return True
+
+    auth_code = str(st.query_params.get("code") or "").strip()
+    if auth_code:
+        try:
+            app_auth.exchange_code_for_session(auth_code)
+        except Exception as exc:  # noqa: BLE001
+            set_auth_feedback("error", f"Email confirmation succeeded, but signing in failed: {exc}")
+        else:
+            set_auth_feedback("success", "Email confirmed and signed in successfully.")
+            st.session_state[PENDING_CONFIRMATION_EMAIL_KEY] = ""
+        clear_query_params()
+        return True
+
+    token_hash = str(st.query_params.get("token_hash") or "").strip()
+    if token_hash:
+        otp_type = str(st.query_params.get("type") or "email").strip()
+        try:
+            app_auth.verify_otp(token_hash=token_hash, otp_type=otp_type)
+        except Exception as exc:  # noqa: BLE001
+            set_auth_feedback("error", f"Email confirmation failed: {exc}")
+        else:
+            set_auth_feedback("success", "Email confirmed successfully. Sign in to continue.")
+            st.session_state[PENDING_CONFIRMATION_EMAIL_KEY] = ""
+        clear_query_params()
+        return True
+
+    return False
 
 
 def account_label(account: dict[str, Any]) -> str:
@@ -165,6 +232,20 @@ def show_holdings_table(frame: pd.DataFrame, *, height: int = 420) -> None:
 def auth_page() -> None:
     st.title("Retirement Portfolio Streamlit")
     st.caption("Sign in to keep each user's portfolio separate.")
+    render_auth_feedback()
+
+    pending_email = str(st.session_state.get(PENDING_CONFIRMATION_EMAIL_KEY) or "").strip()
+    if pending_email:
+        with st.container(border=True):
+            st.write(f"Pending confirmation: `{pending_email}`")
+            st.caption("If an older confirmation link opened a dead page, send a fresh email from here and open the newest message.")
+            if st.button("Resend confirmation email", key="resend-confirmation", use_container_width=True):
+                try:
+                    app_auth.resend_signup(pending_email)
+                except Exception as exc:  # noqa: BLE001
+                    st.error(str(exc))
+                else:
+                    st.success(f"A fresh confirmation email was sent to {pending_email}.")
 
     sign_in_tab, sign_up_tab = st.tabs(["Sign in", "Create account"])
 
@@ -177,8 +258,14 @@ def auth_page() -> None:
             try:
                 app_auth.sign_in(email=email, password=password)
             except Exception as exc:  # noqa: BLE001
-                st.error(str(exc))
+                message = str(exc)
+                if "Email not confirmed" in message:
+                    st.session_state[PENDING_CONFIRMATION_EMAIL_KEY] = str(email or "").strip()
+                    set_auth_feedback("warning", "This email is not confirmed yet. Use the resend button above and open the newest confirmation email.")
+                    st.rerun()
+                st.error(message)
             else:
+                st.session_state[PENDING_CONFIRMATION_EMAIL_KEY] = ""
                 st.success("Signed in successfully.")
                 st.rerun()
 
@@ -198,10 +285,16 @@ def auth_page() -> None:
                     st.error(str(exc))
                 else:
                     if getattr(response, "session", None):
+                        st.session_state[PENDING_CONFIRMATION_EMAIL_KEY] = ""
                         st.success("Account created and signed in.")
                         st.rerun()
                     else:
-                        st.info("Account created. If email confirmation is enabled, verify your email and then sign in.")
+                        st.session_state[PENDING_CONFIRMATION_EMAIL_KEY] = str(email or "").strip()
+                        set_auth_feedback(
+                            "info",
+                            "Account created. Open the confirmation email. If an older link fails, use the resend button above to send a fresh link to the live app.",
+                        )
+                        st.rerun()
 
 
 def empty_state() -> None:
@@ -537,6 +630,9 @@ def main() -> None:
     if not app_auth.is_enabled():
         st.error("Supabase Auth is not configured. Add SUPABASE_URL and SUPABASE_KEY to Streamlit secrets.")
         return
+
+    if handle_auth_callback():
+        st.rerun()
 
     app_auth.refresh_session_state()
     user = app_auth.get_user()

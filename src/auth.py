@@ -8,6 +8,7 @@ from supabase import Client, create_client
 
 
 DEFAULT_SUPABASE_URL = "https://iyszkybxostbjfzbbymq.supabase.co"
+DEFAULT_EMAIL_REDIRECT_TO = "https://retirement-portfolio-app-nh2vq9ferqnpehsslbykbe.streamlit.app/"
 SESSION_STATE_KEY = "auth_session"
 _FALLBACK_STATE: dict[str, Any] = {}
 
@@ -31,6 +32,7 @@ def _get_config_value(name: str, default: str = "") -> str:
 
 SUPABASE_URL = _get_config_value("SUPABASE_URL", DEFAULT_SUPABASE_URL)
 SUPABASE_KEY = _get_config_value("SUPABASE_KEY")
+EMAIL_REDIRECT_TO = _get_config_value("SUPABASE_EMAIL_REDIRECT_TO", DEFAULT_EMAIL_REDIRECT_TO)
 
 
 def is_enabled() -> bool:
@@ -111,10 +113,46 @@ def sign_in(email: str, password: str) -> Any:
 
 def sign_up(email: str, password: str) -> Any:
     client = get_client()
+    options: dict[str, Any] = {}
+    if EMAIL_REDIRECT_TO:
+        options["email_redirect_to"] = EMAIL_REDIRECT_TO
     response = client.auth.sign_up(
         {
             "email": str(email or "").strip(),
             "password": str(password or ""),
+            "options": options,
+        }
+    )
+    if response.session:
+        _save_session(response.session)
+    return response
+
+
+def resend_signup(email: str) -> Any:
+    client = get_client()
+    payload: dict[str, Any] = {
+        "type": "signup",
+        "email": str(email or "").strip(),
+    }
+    if EMAIL_REDIRECT_TO:
+        payload["options"] = {"email_redirect_to": EMAIL_REDIRECT_TO}
+    return client.auth.resend(payload)
+
+
+def exchange_code_for_session(auth_code: str) -> Any:
+    client = get_client()
+    response = client.auth.exchange_code_for_session({"auth_code": str(auth_code or "").strip()})
+    if response.session:
+        _save_session(response.session)
+    return response
+
+
+def verify_otp(token_hash: str, otp_type: str) -> Any:
+    client = get_client()
+    response = client.auth.verify_otp(
+        {
+            "token_hash": str(token_hash or "").strip(),
+            "type": str(otp_type or "email").strip(),
         }
     )
     if response.session:
