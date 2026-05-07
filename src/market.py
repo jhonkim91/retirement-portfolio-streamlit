@@ -8,7 +8,11 @@ from typing import Any
 import pandas as pd
 import requests
 import streamlit as st
-import yfinance as yf
+
+try:
+    import yfinance as yf
+except ImportError:
+    yf = None
 
 
 NAVER_HEADERS = {
@@ -112,7 +116,7 @@ def encode_naver_search_query(query: str) -> str:
 
 def search_products_from_yfinance(query: str, limit: int, *, include_global: bool = False) -> list[dict[str, Any]]:
     try:
-        if not hasattr(yf, "Search"):
+        if yf is None or not hasattr(yf, "Search"):
             return []
 
         search = yf.Search(query, max_results=max(limit * 2, 10))
@@ -480,6 +484,8 @@ def fetch_latest_price(symbol: str) -> dict[str, Any]:
     normalized = normalize_symbol(symbol)
     if not normalized:
         raise ValueError("종목 코드를 입력해 주세요.")
+    if yf is None:
+        raise ValueError("가격 조회 모듈을 불러오지 못했습니다.")
 
     history = yf.Ticker(normalized).history(period="5d", auto_adjust=False)
     closes = history.get("Close")
@@ -499,6 +505,8 @@ def fetch_latest_price(symbol: str) -> dict[str, Any]:
 def fetch_price_history(symbol: str, period: str = "6mo") -> pd.DataFrame:
     normalized = normalize_symbol(symbol)
     if not normalized:
+        return pd.DataFrame(columns=["date", "close", "symbol"])
+    if yf is None:
         return pd.DataFrame(columns=["date", "close", "symbol"])
 
     history = yf.Ticker(normalized).history(period=period, auto_adjust=False)
