@@ -74,6 +74,15 @@ def initialize_database() -> None:
             );
             """
         )
+        # Clear empty verification accounts created during automated deploy checks.
+        connection.execute(
+            """
+            DELETE FROM accounts
+            WHERE name LIKE 'Auto Test %'
+              AND id NOT IN (SELECT account_id FROM holdings)
+              AND id NOT IN (SELECT account_id FROM trade_logs)
+            """
+        )
         connection.commit()
 
 
