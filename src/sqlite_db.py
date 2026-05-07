@@ -113,7 +113,7 @@ def create_account(name: str, account_type: str = "retirement", opening_cash: fl
 
     cleaned_type = str(account_type or "retirement").strip().lower()
     if cleaned_type not in {"retirement", "brokerage"}:
-        raise ValueError("계좌 유형은 retirement 또는 brokerage만 지원합니다.")
+        raise ValueError("계좌 유형 값이 올바르지 않습니다.")
 
     timestamp = now_iso()
     with connect() as connection:
@@ -206,7 +206,7 @@ def record_trade(
     if cleaned_type not in {"buy", "sell"}:
         raise ValueError("매수/매도 거래만 기록할 수 있습니다.")
     if cleaned_asset_type not in {"risk", "safe"}:
-        raise ValueError("자산군은 risk 또는 safe만 지원합니다.")
+        raise ValueError("자산군 값이 올바르지 않습니다.")
     if not cleaned_symbol:
         raise ValueError("종목 코드를 입력해 주세요.")
     if not cleaned_name:
@@ -215,7 +215,7 @@ def record_trade(
     share_count = float(quantity or 0)
     trade_price = float(price or 0)
     if share_count <= 0 or trade_price <= 0:
-        raise ValueError("수량과 가격은 모두 0보다 커야 합니다.")
+        raise ValueError("수량과 단가는 모두 0보다 커야 합니다.")
 
     total_amount = share_count * trade_price
     timestamp = now_iso()
@@ -377,7 +377,7 @@ def record_cash_flow(
             """,
             (
                 account_id,
-                "Cash Deposit" if cleaned_type == "deposit" else "Cash Withdraw",
+                "현금 입금" if cleaned_type == "deposit" else "현금 출금",
                 cleaned_type,
                 cash_delta,
                 cash_delta,

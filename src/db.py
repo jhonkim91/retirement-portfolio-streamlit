@@ -97,7 +97,7 @@ def _current_backend() -> str:
     backend = _select_initial_backend()
     reason = ""
     if backend == BACKEND_SQLITE and not _has_supabase_config():
-        reason = "Supabase secrets are missing, so the app is using local SQLite storage."
+        reason = "Supabase 설정이 없어 로컬 SQLite 저장소를 사용 중입니다."
     _set_backend(backend, reason)
     return backend
 
@@ -117,7 +117,7 @@ def _activate_sqlite(reason: str) -> None:
 
 def _build_headers() -> dict[str, str]:
     if not _has_supabase_config():
-        raise RuntimeError("SUPABASE_URL or SUPABASE_KEY is missing.")
+        raise RuntimeError("SUPABASE_URL 또는 SUPABASE_KEY 설정이 없습니다.")
 
     access_token = app_auth.get_access_token() or SUPABASE_KEY
     return {
@@ -152,7 +152,7 @@ def _supabase_request(
     except requests.HTTPError as exc:
         detail = response.text.strip().replace("\n", " ")
         raise requests.HTTPError(
-            f"Supabase {method} {table} failed ({response.status_code}): {detail}",
+            f"Supabase {method} {table} 요청에 실패했습니다 ({response.status_code}): {detail}",
             response=response,
             request=response.request,
         ) from exc
@@ -170,8 +170,8 @@ def _fallback_reason(exc: Exception) -> str:
     if isinstance(exc, requests.HTTPError) and exc.response is not None:
         response = exc.response
         detail = response.text.strip().replace("\n", " ")
-        detail = detail[:180] if detail else "Supabase rejected the request."
-        return f"Supabase HTTP {response.status_code}: {detail}"
+        detail = detail[:180] if detail else "Supabase 요청이 거부되었습니다."
+        return f"Supabase 요청 오류({response.status_code}): {detail}"
 
     message = str(exc).strip() or exc.__class__.__name__
     return message[:180]
@@ -216,7 +216,7 @@ def _run_with_fallback(
 def _require_user_id() -> str:
     user_id = app_auth.get_user_id()
     if not user_id:
-        raise ValueError("Please sign in to manage your portfolio.")
+        raise ValueError("포트폴리오를 관리하려면 로그인해 주세요.")
     return user_id
 
 
@@ -241,7 +241,7 @@ def _visible_account_name(stored_name: Any) -> str:
 def _storage_account_name(display_name: str) -> str:
     cleaned_name = str(display_name or "").strip()
     if not cleaned_name:
-        raise ValueError("Please enter an account name.")
+        raise ValueError("계좌 이름을 입력해 주세요.")
     return f"{_account_prefix()}{cleaned_name}"
 
 
@@ -283,15 +283,15 @@ def _supabase_get_account(account_id: int) -> dict[str, Any] | None:
 def _supabase_create_account(name: str, account_type: str = "retirement", opening_cash: float = 0) -> int:
     cleaned_name = str(name or "").strip()
     if not cleaned_name:
-        raise ValueError("Please enter an account name.")
+        raise ValueError("계좌 이름을 입력해 주세요.")
 
     cleaned_type = str(account_type or "retirement").strip().lower()
     if cleaned_type not in {"retirement", "brokerage"}:
-        raise ValueError("Account type must be retirement or brokerage.")
+        raise ValueError("계좌 유형 값이 올바르지 않습니다.")
 
     existing_names = {str(account.get("name", "")).lower() for account in _supabase_list_accounts()}
     if cleaned_name.lower() in existing_names:
-        raise ValueError("You already have an account with that name.")
+        raise ValueError("같은 이름의 계좌가 이미 있습니다.")
 
     timestamp = now_iso()
     result = _supabase_request(
@@ -312,10 +312,10 @@ def _supabase_create_account(name: str, account_type: str = "retirement", openin
 
 def _supabase_update_cash_balance(account_id: int, amount: float) -> None:
     if float(amount) < 0:
-        raise ValueError("Cash must be zero or higher.")
+        raise ValueError("현금은 0 이상이어야 합니다.")
 
     if not _supabase_get_account(account_id):
-        raise ValueError("Account not found or not accessible.")
+        raise ValueError("계좌를 찾을 수 없습니다.")
 
     _supabase_request(
         "PATCH",
@@ -364,7 +364,7 @@ def _supabase_list_trade_logs(account_id: int) -> list[dict[str, Any]]:
 
 def _supabase_export_dataframe_rows(table_name: str) -> list[dict[str, Any]]:
     if table_name not in {"accounts", "holdings", "trade_logs"}:
-        raise ValueError("Unsupported table.")
+        raise ValueError("지원하지 않는 테이블입니다.")
 
     accounts = _supabase_list_accounts()
     account_ids = _owned_account_ids(accounts)
@@ -394,22 +394,22 @@ def _supabase_record_trade(
     cleaned_asset_type = str(asset_type or "risk").strip().lower()
 
     if cleaned_type not in {"buy", "sell"}:
-        raise ValueError("Only buy and sell trades are supported.")
+        raise ValueError("매수 또는 매도만 기록할 수 있습니다.")
     if cleaned_asset_type not in {"risk", "safe"}:
-        raise ValueError("Asset type must be risk or safe.")
+        raise ValueError("자산군 값이 올바르지 않습니다.")
     if not cleaned_symbol:
-        raise ValueError("Please enter a ticker symbol.")
+        raise ValueError("종목 코드 또는 심볼을 입력해 주세요.")
     if not cleaned_name:
-        raise ValueError("Please enter a product name.")
+        raise ValueError("종목명을 입력해 주세요.")
 
     share_count = float(quantity or 0)
     trade_price = float(price or 0)
     if share_count <= 0 or trade_price <= 0:
-        raise ValueError("Quantity and price must both be greater than zero.")
+        raise ValueError("수량과 단가는 모두 0보다 커야 합니다.")
 
     account = _supabase_get_account(account_id)
     if not account:
-        raise ValueError("Account not found or not accessible.")
+        raise ValueError("계좌를 찾을 수 없습니다.")
 
     total_amount = share_count * trade_price
     timestamp = now_iso()
@@ -420,7 +420,7 @@ def _supabase_record_trade(
 
     if cleaned_type == "buy":
         if cash_balance + 0.000001 < total_amount:
-            raise ValueError("Not enough cash for this buy trade.")
+            raise ValueError("매수하기에 현금이 부족합니다.")
 
         if holding_row:
             previous_quantity = float(holding_row.get("quantity", 0) or 0)
@@ -460,11 +460,11 @@ def _supabase_record_trade(
         _supabase_update_cash_balance(account_id, cash_balance - total_amount)
     else:
         if not holding_row:
-            raise ValueError("There is no matching holding to sell.")
+            raise ValueError("매도할 보유 종목이 없습니다.")
 
         previous_quantity = float(holding_row.get("quantity", 0) or 0)
         if previous_quantity + 0.000001 < share_count:
-            raise ValueError("You cannot sell more shares than you hold.")
+            raise ValueError("보유 수량보다 많은 수량을 매도할 수 없습니다.")
 
         next_quantity = previous_quantity - share_count
         avg_cost = float(holding_row.get("avg_cost", 0) or 0)
@@ -509,22 +509,22 @@ def _supabase_record_cash_flow(
 ) -> None:
     cleaned_type = str(flow_type or "").strip().lower()
     if cleaned_type not in {"deposit", "withdraw"}:
-        raise ValueError("Only deposits and withdrawals are supported.")
+        raise ValueError("입금 또는 출금만 기록할 수 있습니다.")
 
     flow_amount = float(amount or 0)
     if flow_amount <= 0:
-        raise ValueError("Amount must be greater than zero.")
+        raise ValueError("금액은 0보다 커야 합니다.")
 
     account = _supabase_get_account(account_id)
     if not account:
-        raise ValueError("Account not found or not accessible.")
+        raise ValueError("계좌를 찾을 수 없습니다.")
 
     cash_balance = float(account.get("cash_balance", 0) or 0)
     if cleaned_type == "deposit":
         new_balance = cash_balance + flow_amount
     else:
         if cash_balance + 0.000001 < flow_amount:
-            raise ValueError("Withdrawal amount exceeds the current cash balance.")
+            raise ValueError("출금 금액이 현재 현금 잔액을 초과합니다.")
         new_balance = cash_balance - flow_amount
 
     timestamp = now_iso()
@@ -535,7 +535,7 @@ def _supabase_record_cash_flow(
         data={
             "account_id": account_id,
             "symbol": "",
-            "product_name": "Cash Flow",
+            "product_name": "현금 흐름",
             "trade_type": cleaned_type,
             "asset_type": "cash",
             "quantity": flow_amount,
@@ -561,22 +561,22 @@ def _sqlite_get_account(account_id: int) -> dict[str, Any] | None:
 def _sqlite_create_account(name: str, account_type: str = "retirement", opening_cash: float = 0) -> int:
     cleaned_name = str(name or "").strip()
     if not cleaned_name:
-        raise ValueError("Please enter an account name.")
+        raise ValueError("계좌 이름을 입력해 주세요.")
 
     cleaned_type = str(account_type or "retirement").strip().lower()
     if cleaned_type not in {"retirement", "brokerage"}:
-        raise ValueError("Account type must be retirement or brokerage.")
+        raise ValueError("계좌 유형 값이 올바르지 않습니다.")
 
     existing_names = {str(account.get("name", "")).lower() for account in _sqlite_list_accounts()}
     if cleaned_name.lower() in existing_names:
-        raise ValueError("You already have an account with that name.")
+        raise ValueError("같은 이름의 계좌가 이미 있습니다.")
 
     return sqlite_db.create_account(_storage_account_name(cleaned_name), cleaned_type, opening_cash)
 
 
 def _sqlite_update_cash_balance(account_id: int, amount: float) -> None:
     if not _sqlite_get_account(account_id):
-        raise ValueError("Account not found or not accessible.")
+        raise ValueError("계좌를 찾을 수 없습니다.")
     sqlite_db.update_cash_balance(account_id, amount)
 
 
@@ -621,7 +621,7 @@ def _sqlite_record_trade(
     notes: str = "",
 ) -> None:
     if not _sqlite_get_account(account_id):
-        raise ValueError("Account not found or not accessible.")
+        raise ValueError("계좌를 찾을 수 없습니다.")
     sqlite_db.record_trade(
         account_id,
         symbol=symbol,
@@ -644,7 +644,7 @@ def _sqlite_record_cash_flow(
     notes: str = "",
 ) -> None:
     if not _sqlite_get_account(account_id):
-        raise ValueError("Account not found or not accessible.")
+        raise ValueError("계좌를 찾을 수 없습니다.")
     sqlite_db.record_cash_flow(
         account_id,
         flow_type=flow_type,

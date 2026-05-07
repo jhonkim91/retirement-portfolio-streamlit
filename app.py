@@ -16,7 +16,7 @@ from src.analytics import (
 
 import src.auth as app_auth
 import src.db as _db
-from src.market import fetch_latest_price
+from src.market import fetch_latest_price, search_products
 
 create_account = _db.create_account
 export_dataframe_rows = _db.export_dataframe_rows
@@ -33,7 +33,7 @@ backend_status = _db.backend_status
 
 
 st.set_page_config(
-    page_title="Retirement Portfolio Streamlit",
+    page_title="은퇴 포트폴리오",
     page_icon=":material/account_balance_wallet:",
     layout="wide",
 )
@@ -42,6 +42,77 @@ st.set_page_config(
 PAGES = ("Dashboard", "Trades", "Data")
 PENDING_CONFIRMATION_EMAIL_KEY = "pending_confirmation_email"
 AUTH_FEEDBACK_KEY = "auth_feedback"
+TRADE_SEARCH_QUERY_KEY = "trade_search_query"
+TRADE_SYMBOL_KEY = "trade_symbol"
+TRADE_PRODUCT_NAME_KEY = "trade_product_name"
+TRADE_ASSET_TYPE_KEY = "trade_asset_type"
+TRADE_TYPE_KEY = "trade_type"
+TRADE_QUANTITY_KEY = "trade_quantity"
+TRADE_PRICE_KEY = "trade_price"
+TRADE_DATE_KEY = "trade_date"
+TRADE_NOTES_KEY = "trade_notes"
+TRADE_PREFILL_MARKER_KEY = "trade_prefill_marker"
+CASH_FLOW_TYPE_KEY = "cash_flow_type"
+CASH_FLOW_AMOUNT_KEY = "cash_flow_amount"
+CASH_FLOW_DATE_KEY = "cash_flow_date"
+CASH_FLOW_NOTES_KEY = "cash_flow_notes"
+PAGE_LABELS = {
+    "Dashboard": "대시보드",
+    "Trades": "거래",
+    "Data": "데이터",
+}
+ACCOUNT_TYPE_LABELS = {
+    "retirement": "연금",
+    "brokerage": "일반",
+}
+TRADE_TYPE_LABELS = {
+    "buy": "매수",
+    "sell": "매도",
+}
+ASSET_TYPE_LABELS = {
+    "risk": "위험자산",
+    "safe": "안전자산",
+    "cash": "현금",
+}
+CASH_FLOW_TYPE_LABELS = {
+    "deposit": "입금",
+    "withdraw": "출금",
+}
+TABLE_LABELS = {
+    "accounts": "계좌",
+    "holdings": "보유 종목",
+    "trade_logs": "거래 기록",
+}
+DETAIL_MEASURE_LABELS = {
+    "market_value": "평가금액",
+    "profit_rate": "수익률",
+    "close": "종가",
+}
+PERIOD_LABELS = {
+    "1mo": "1개월",
+    "3mo": "3개월",
+    "6mo": "6개월",
+    "1y": "1년",
+}
+PRODUCT_TYPE_LABELS = {
+    "stock": "주식",
+    "stock/ETF": "주식/ETF",
+    "etf": "ETF",
+    "ETF": "ETF",
+    "equity": "주식",
+    "EQUITY": "주식",
+    "etn": "ETN",
+    "ETN": "ETN",
+    "fund": "펀드",
+    "mutualfund": "펀드",
+    "MUTUALFUND": "펀드",
+}
+EXCHANGE_LABELS = {
+    "KRX": "국내",
+    "Korea": "국내",
+    "Fund": "펀드",
+    "US": "미국",
+}
 
 
 def format_won(value: Any) -> str:
@@ -56,12 +127,104 @@ def metric_delta(value: Any) -> str:
     return f"{float(value or 0):+,.0f}"
 
 
+def label_page(value: Any) -> str:
+    return PAGE_LABELS.get(str(value), str(value))
+
+
+def label_account_type(value: Any) -> str:
+    return ACCOUNT_TYPE_LABELS.get(str(value), str(value))
+
+
+def label_trade_type(value: Any) -> str:
+    return TRADE_TYPE_LABELS.get(str(value), str(value))
+
+
+def label_asset_type(value: Any) -> str:
+    return ASSET_TYPE_LABELS.get(str(value), str(value))
+
+
+def label_cash_flow_type(value: Any) -> str:
+    return CASH_FLOW_TYPE_LABELS.get(str(value), str(value))
+
+
+def label_transaction_type(value: Any) -> str:
+    text = str(value)
+    return TRADE_TYPE_LABELS.get(text, CASH_FLOW_TYPE_LABELS.get(text, text))
+
+
+def label_table_name(value: Any) -> str:
+    return TABLE_LABELS.get(str(value), str(value))
+
+
+def label_detail_measure(value: Any) -> str:
+    return DETAIL_MEASURE_LABELS.get(str(value), str(value))
+
+
+def label_period(value: Any) -> str:
+    return PERIOD_LABELS.get(str(value), str(value))
+
+
+def label_product_type(value: Any) -> str:
+    return PRODUCT_TYPE_LABELS.get(str(value), str(value))
+
+
+def label_exchange(value: Any) -> str:
+    return EXCHANGE_LABELS.get(str(value), str(value))
+
+
+def product_search_label(product: dict[str, Any]) -> str:
+    name = str(product.get("name") or "").strip()
+    code = str(product.get("code") or "").strip()
+    product_type = label_product_type(product.get("type"))
+    exchange = label_exchange(product.get("exchange"))
+    parts: list[str] = []
+    for part in (code, product_type, exchange):
+        if part and part not in parts:
+            parts.append(part)
+    return f"{name} | {' | '.join(parts)}" if parts else name
+
+
+def apply_search_product(product: dict[str, Any]) -> None:
+    st.session_state[TRADE_SEARCH_QUERY_KEY] = str(product.get("name") or "").strip()
+    st.session_state[TRADE_PRODUCT_NAME_KEY] = str(product.get("name") or "").strip()
+    st.session_state[TRADE_SYMBOL_KEY] = str(product.get("symbol") or product.get("code") or "").strip()
+    selected_type = str(product.get("type") or "").strip().lower()
+    selected_exchange = str(product.get("exchange") or "").strip()
+    if selected_type in {"fund", "mutualfund"} or selected_exchange == "Fund":
+        st.session_state[TRADE_ASSET_TYPE_KEY] = "safe"
+
+
+def prefill_trade_from_holding(holding: dict[str, Any], marker: str) -> None:
+    if st.session_state.get(TRADE_PREFILL_MARKER_KEY) == marker:
+        return
+
+    st.session_state[TRADE_SEARCH_QUERY_KEY] = str(holding.get("product_name") or "").strip()
+    st.session_state[TRADE_PRODUCT_NAME_KEY] = str(holding.get("product_name") or "").strip()
+    st.session_state[TRADE_SYMBOL_KEY] = str(holding.get("symbol") or "").strip()
+    st.session_state[TRADE_ASSET_TYPE_KEY] = str(holding.get("asset_type") or "risk")
+    st.session_state[TRADE_PREFILL_MARKER_KEY] = marker
+
+
 def init_state() -> None:
     st.session_state.setdefault("selected_account_id", None)
     st.session_state.setdefault("active_page", PAGES[0])
     st.session_state.setdefault("auth_mode", "sign-in")
     st.session_state.setdefault(PENDING_CONFIRMATION_EMAIL_KEY, "")
     st.session_state.setdefault(AUTH_FEEDBACK_KEY, None)
+    st.session_state.setdefault(TRADE_SEARCH_QUERY_KEY, "")
+    st.session_state.setdefault(TRADE_SYMBOL_KEY, "")
+    st.session_state.setdefault(TRADE_PRODUCT_NAME_KEY, "")
+    st.session_state.setdefault(TRADE_ASSET_TYPE_KEY, "risk")
+    st.session_state.setdefault(TRADE_TYPE_KEY, "buy")
+    st.session_state.setdefault(TRADE_QUANTITY_KEY, 1.0)
+    st.session_state.setdefault(TRADE_PRICE_KEY, 0.0)
+    st.session_state.setdefault(TRADE_DATE_KEY, date.today())
+    st.session_state.setdefault(TRADE_NOTES_KEY, "")
+    st.session_state.setdefault(TRADE_PREFILL_MARKER_KEY, "")
+    st.session_state.setdefault(CASH_FLOW_TYPE_KEY, "deposit")
+    st.session_state.setdefault(CASH_FLOW_AMOUNT_KEY, 0.0)
+    st.session_state.setdefault(CASH_FLOW_DATE_KEY, date.today())
+    st.session_state.setdefault(CASH_FLOW_NOTES_KEY, "")
 
 
 def set_auth_feedback(level: str, message: str) -> None:
@@ -95,7 +258,7 @@ def handle_auth_callback() -> bool:
     error_code = str(st.query_params.get("error_code") or "").strip()
     if error_description:
         suffix = f" ({error_code})" if error_code else ""
-        set_auth_feedback("error", f"Email confirmation failed{suffix}: {error_description}")
+        set_auth_feedback("error", f"이메일 확인에 실패했습니다{suffix}: {error_description}")
         clear_query_params()
         return True
 
@@ -104,9 +267,9 @@ def handle_auth_callback() -> bool:
         try:
             app_auth.exchange_code_for_session(auth_code)
         except Exception as exc:  # noqa: BLE001
-            set_auth_feedback("error", f"Email confirmation succeeded, but signing in failed: {exc}")
+            set_auth_feedback("error", f"이메일 확인은 되었지만 로그인 처리에 실패했습니다: {exc}")
         else:
-            set_auth_feedback("success", "Email confirmed and signed in successfully.")
+            set_auth_feedback("success", "이메일 확인이 완료되어 바로 로그인했습니다.")
             st.session_state[PENDING_CONFIRMATION_EMAIL_KEY] = ""
         clear_query_params()
         return True
@@ -117,9 +280,9 @@ def handle_auth_callback() -> bool:
         try:
             app_auth.verify_otp(token_hash=token_hash, otp_type=otp_type)
         except Exception as exc:  # noqa: BLE001
-            set_auth_feedback("error", f"Email confirmation failed: {exc}")
+            set_auth_feedback("error", f"이메일 확인에 실패했습니다: {exc}")
         else:
-            set_auth_feedback("success", "Email confirmed successfully. Sign in to continue.")
+            set_auth_feedback("success", "이메일 확인이 완료되었습니다. 이제 로그인해 주세요.")
             st.session_state[PENDING_CONFIRMATION_EMAIL_KEY] = ""
         clear_query_params()
         return True
@@ -128,7 +291,7 @@ def handle_auth_callback() -> bool:
 
 
 def account_label(account: dict[str, Any]) -> str:
-    account_type = str(account.get("account_type") or "retirement").title()
+    account_type = label_account_type(account.get("account_type") or "retirement")
     return f"{account['name']} | {account_type}"
 
 
@@ -149,9 +312,9 @@ def allocation_chart(summary: dict[str, Any]) -> alt.Chart | None:
     allocation = summary.get("allocation") or {}
     frame = pd.DataFrame(
         [
-            {"bucket": "Risk", "value": float(allocation.get("risk") or 0)},
-            {"bucket": "Safe", "value": float(allocation.get("safe") or 0)},
-            {"bucket": "Cash", "value": float(allocation.get("cash") or 0)},
+            {"bucket": "위험자산", "value": float(allocation.get("risk") or 0)},
+            {"bucket": "안전자산", "value": float(allocation.get("safe") or 0)},
+            {"bucket": "현금", "value": float(allocation.get("cash") or 0)},
         ]
     )
     frame = frame[frame["value"] > 0]
@@ -172,18 +335,18 @@ def holdings_bar_chart(frame: pd.DataFrame) -> alt.Chart | None:
     if frame.empty:
         return None
     chart_frame = frame.sort_values("current_value", ascending=False).head(10).copy()
-    chart_frame["tone"] = chart_frame["profit_rate"].apply(lambda value: "Gain" if float(value or 0) >= 0 else "Loss")
+    chart_frame["tone"] = chart_frame["profit_rate"].apply(lambda value: "수익" if float(value or 0) >= 0 else "손실")
     return (
         alt.Chart(chart_frame)
         .mark_bar(cornerRadiusTopLeft=6, cornerRadiusTopRight=6)
         .encode(
-            x=alt.X("product_name:N", sort="-y", title="Holding"),
-            y=alt.Y("profit_rate:Q", title="Return (%)"),
-            color=alt.Color("tone:N", scale=alt.Scale(domain=["Gain", "Loss"], range=["#0F766E", "#B91C1C"])),
+            x=alt.X("product_name:N", sort="-y", title="종목"),
+            y=alt.Y("profit_rate:Q", title="수익률 (%)"),
+            color=alt.Color("tone:N", scale=alt.Scale(domain=["수익", "손실"], range=["#0F766E", "#B91C1C"])),
             tooltip=[
-                alt.Tooltip("product_name:N", title="Holding"),
-                alt.Tooltip("current_value:Q", title="Current value", format=",.0f"),
-                alt.Tooltip("profit_rate:Q", title="Return (%)", format=".2f"),
+                alt.Tooltip("product_name:N", title="종목"),
+                alt.Tooltip("current_value:Q", title="평가금액", format=",.0f"),
+                alt.Tooltip("profit_rate:Q", title="수익률 (%)", format=".2f"),
             ],
         )
     )
@@ -222,6 +385,7 @@ def show_holdings_table(frame: pd.DataFrame, *, height: int = 420) -> None:
         "수익률(%)",
         "가격갱신",
     ]
+    display["자산군"] = display["자산군"].map(label_asset_type)
     display["수량"] = display["수량"].map(lambda value: f"{float(value or 0):,.4f}".rstrip("0").rstrip("."))
     for column in ("평단가", "현재가", "원금", "평가금액", "손익"):
         display[column] = display[column].map(lambda value: f"{float(value or 0):,.0f}")
@@ -230,30 +394,30 @@ def show_holdings_table(frame: pd.DataFrame, *, height: int = 420) -> None:
 
 
 def auth_page() -> None:
-    st.title("Retirement Portfolio Streamlit")
-    st.caption("Sign in to keep each user's portfolio separate.")
+    st.title("은퇴 포트폴리오")
+    st.caption("사용자별로 분리된 포트폴리오를 관리하려면 로그인해 주세요.")
     render_auth_feedback()
 
     pending_email = str(st.session_state.get(PENDING_CONFIRMATION_EMAIL_KEY) or "").strip()
     if pending_email:
         with st.container(border=True):
-            st.write(f"Pending confirmation: `{pending_email}`")
-            st.caption("If an older confirmation link opened a dead page, send a fresh email from here and open the newest message.")
-            if st.button("Resend confirmation email", key="resend-confirmation", use_container_width=True):
+            st.write(f"이메일 확인 대기: `{pending_email}`")
+            st.caption("예전 확인 링크가 열리지 않았다면 여기서 새 메일을 다시 보내고, 가장 최근 메일의 링크를 열어 주세요.")
+            if st.button("확인 메일 다시 보내기", key="resend-confirmation", use_container_width=True):
                 try:
                     app_auth.resend_signup(pending_email)
                 except Exception as exc:  # noqa: BLE001
                     st.error(str(exc))
                 else:
-                    st.success(f"A fresh confirmation email was sent to {pending_email}.")
+                    st.success(f"{pending_email} 주소로 새 확인 메일을 보냈습니다.")
 
-    sign_in_tab, sign_up_tab = st.tabs(["Sign in", "Create account"])
+    sign_in_tab, sign_up_tab = st.tabs(["로그인", "계정 만들기"])
 
     with sign_in_tab:
         with st.form("sign-in-form", clear_on_submit=False):
-            email = st.text_input("Email", key="sign-in-email")
-            password = st.text_input("Password", type="password", key="sign-in-password")
-            submitted = st.form_submit_button("Sign in", use_container_width=True)
+            email = st.text_input("이메일", key="sign-in-email")
+            password = st.text_input("비밀번호", type="password", key="sign-in-password")
+            submitted = st.form_submit_button("로그인", use_container_width=True)
         if submitted:
             try:
                 app_auth.sign_in(email=email, password=password)
@@ -261,23 +425,23 @@ def auth_page() -> None:
                 message = str(exc)
                 if "Email not confirmed" in message:
                     st.session_state[PENDING_CONFIRMATION_EMAIL_KEY] = str(email or "").strip()
-                    set_auth_feedback("warning", "This email is not confirmed yet. Use the resend button above and open the newest confirmation email.")
+                    set_auth_feedback("warning", "이 이메일은 아직 확인되지 않았습니다. 위의 버튼으로 확인 메일을 다시 보내고, 가장 최근 메일의 링크를 열어 주세요.")
                     st.rerun()
                 st.error(message)
             else:
                 st.session_state[PENDING_CONFIRMATION_EMAIL_KEY] = ""
-                st.success("Signed in successfully.")
+                st.success("로그인되었습니다.")
                 st.rerun()
 
     with sign_up_tab:
         with st.form("sign-up-form", clear_on_submit=False):
-            email = st.text_input("Email", key="sign-up-email")
-            password = st.text_input("Password", type="password", key="sign-up-password")
-            confirm_password = st.text_input("Confirm password", type="password", key="sign-up-password-confirm")
-            submitted = st.form_submit_button("Create account", use_container_width=True)
+            email = st.text_input("이메일", key="sign-up-email")
+            password = st.text_input("비밀번호", type="password", key="sign-up-password")
+            confirm_password = st.text_input("비밀번호 확인", type="password", key="sign-up-password-confirm")
+            submitted = st.form_submit_button("계정 만들기", use_container_width=True)
         if submitted:
             if password != confirm_password:
-                st.error("Passwords do not match.")
+                st.error("비밀번호가 서로 다릅니다.")
             else:
                 try:
                     response = app_auth.sign_up(email=email, password=password)
@@ -286,23 +450,23 @@ def auth_page() -> None:
                 else:
                     if getattr(response, "session", None):
                         st.session_state[PENDING_CONFIRMATION_EMAIL_KEY] = ""
-                        st.success("Account created and signed in.")
+                        st.success("계정을 만들고 바로 로그인했습니다.")
                         st.rerun()
                     else:
                         st.session_state[PENDING_CONFIRMATION_EMAIL_KEY] = str(email or "").strip()
                         set_auth_feedback(
                             "info",
-                            "Account created. Open the confirmation email. If an older link fails, use the resend button above to send a fresh link to the live app.",
+                            "계정을 만들었습니다. 확인 메일을 열어 주세요. 예전 링크가 안 되면 위의 버튼으로 새 메일을 다시 보내면 됩니다.",
                         )
                         st.rerun()
 
 
 def empty_state() -> None:
-    st.title("Retirement Portfolio Streamlit")
+    st.title("은퇴 포트폴리오")
     st.caption("완전히 분리된 별도 Streamlit 앱입니다. 먼저 계좌를 하나 만들면 시작할 수 있습니다.")
     with st.form("create-first-account", clear_on_submit=True):
         name = st.text_input("계좌 이름", placeholder="예: IRP, ISA, 미국주식")
-        account_type = st.selectbox("계좌 유형", ["retirement", "brokerage"])
+        account_type = st.selectbox("계좌 유형", ["retirement", "brokerage"], format_func=label_account_type)
         opening_cash = st.number_input("시작 현금", min_value=0.0, value=0.0, step=100000.0)
         submitted = st.form_submit_button("첫 계좌 만들기", use_container_width=True)
     if submitted:
@@ -323,10 +487,10 @@ def sidebar(accounts: list[dict[str, Any]], selected_account_id: int | None, use
         st.session_state["selected_account_id"] = selected_account_id
 
     with st.sidebar:
-        st.title("Workspace")
-        user_label = user.get("email") or user.get("id") or "Signed in"
-        st.caption(f"Signed in as `{user_label}`")
-        if st.button("Sign out", use_container_width=True):
+        st.title("내 작업공간")
+        user_label = user.get("email") or user.get("id") or "로그인 사용자"
+        st.caption(f"로그인 계정: `{user_label}`")
+        if st.button("로그아웃", use_container_width=True):
             app_auth.sign_out()
             st.session_state["selected_account_id"] = None
             st.rerun()
@@ -340,14 +504,19 @@ def sidebar(accounts: list[dict[str, Any]], selected_account_id: int | None, use
         )
         st.session_state["selected_account_id"] = selected_account_id
 
-        active_page = st.radio("페이지", PAGES, index=PAGES.index(st.session_state.get("active_page", PAGES[0])))
+        active_page = st.radio(
+            "페이지",
+            PAGES,
+            index=PAGES.index(st.session_state.get("active_page", PAGES[0])),
+            format_func=label_page,
+        )
         st.session_state["active_page"] = active_page
 
         st.divider()
         with st.expander("새 계좌 만들기", expanded=False):
             with st.form("new-account-form", clear_on_submit=True):
                 name = st.text_input("계좌 이름")
-                account_type = st.selectbox("유형", ["retirement", "brokerage"], key="new-account-type")
+                account_type = st.selectbox("유형", ["retirement", "brokerage"], format_func=label_account_type, key="new-account-type")
                 opening_cash = st.number_input("시작 현금", min_value=0.0, value=0.0, step=100000.0, key="new-account-cash")
                 submitted = st.form_submit_button("계좌 추가", use_container_width=True)
             if submitted:
@@ -367,24 +536,24 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]]) -> N
     summary = account_summary(account, holdings)
 
     st.title(account["name"])
-    st.caption(f"Account type: `{account['account_type']}`")
+    st.caption(f"계좌 유형: `{label_account_type(account['account_type'])}`")
 
     metric_1, metric_2, metric_3, metric_4 = st.columns(4)
-    metric_1.metric("Portfolio Value", format_won(summary["total_value"]))
-    metric_2.metric("Invested Capital", format_won(summary["total_cost"]))
-    metric_3.metric("Unrealized P/L", format_won(summary["profit_loss"]), metric_delta(summary["profit_loss"]))
-    metric_4.metric("Cash", format_won(summary["cash"]))
+    metric_1.metric("포트폴리오 평가액", format_won(summary["total_value"]))
+    metric_2.metric("투입 원금", format_won(summary["total_cost"]))
+    metric_3.metric("평가 손익", format_won(summary["profit_loss"]), metric_delta(summary["profit_loss"]))
+    metric_4.metric("현금", format_won(summary["cash"]))
 
     top_left, top_right = st.columns((1, 1), gap="large")
     with top_left:
-        st.subheader("Allocation")
+        st.subheader("자산 배분")
         chart = allocation_chart(summary)
         if chart is None:
             st.info("배분을 그릴 데이터가 아직 없습니다.")
         else:
             st.altair_chart(chart, use_container_width=True)
 
-        st.subheader("Cash")
+        st.subheader("현금")
         with st.form("cash-balance-form"):
             amount = st.number_input("현금 잔액 직접 수정", min_value=0.0, value=float(account["cash_balance"] or 0), step=100000.0)
             submitted = st.form_submit_button("현금 저장", use_container_width=True)
@@ -398,7 +567,7 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]]) -> N
                 st.rerun()
 
     with top_right:
-        st.subheader("Holdings Return")
+        st.subheader("보유 종목 수익률")
         chart = holdings_bar_chart(frame)
         if chart is None:
             st.info("보유 종목이 없어 수익률 차트를 그릴 수 없습니다.")
@@ -416,28 +585,34 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]]) -> N
             st.rerun()
 
     with action_col_2:
-        st.caption("숫자만 입력한 6자리 한국 종목 코드는 자동으로 `.KS`를 붙여 조회합니다. 코스닥/ETF 등은 필요하면 직접 Yahoo Finance 심볼을 넣어 주세요.")
+        st.caption("숫자만 입력한 6자리 한국 종목 코드는 자동으로 `.KS`를 붙여 조회합니다. 코스닥/ETF 등은 필요하면 직접 야후 파이낸스 심볼을 넣어 주세요.")
 
-    st.subheader("Current Holdings")
+    st.subheader("현재 보유 종목")
     show_holdings_table(frame, height=360)
 
-    st.subheader("Trend")
-    period = st.segmented_control("기간", options=["1mo", "3mo", "6mo", "1y"], default="6mo", key=f"trend-period:{account['id']}")
+    st.subheader("추이")
+    period = st.segmented_control(
+        "기간",
+        options=["1mo", "3mo", "6mo", "1y"],
+        format_func=label_period,
+        default="6mo",
+        key=f"trend-period:{account['id']}",
+    )
     portfolio_trend, holding_trend = build_portfolio_trend(holdings, period=period)
     if portfolio_trend.empty:
-        st.info("Trend data is temporarily unavailable. Yahoo Finance may be rate-limiting requests, or the selected holdings may not have enough history yet.")
+        st.info("추이 데이터가 잠시 준비되지 않았습니다. 야후 파이낸스 조회 제한이 걸렸거나, 아직 이력이 충분하지 않을 수 있습니다.")
         return
 
     trend_chart = (
         alt.Chart(portfolio_trend)
         .mark_line(point=True, strokeWidth=3)
         .encode(
-            x=alt.X("date:T", title="Date"),
-            y=alt.Y("market_value:Q", title="Portfolio market value"),
+            x=alt.X("date:T", title="날짜"),
+            y=alt.Y("market_value:Q", title="포트폴리오 평가액"),
             tooltip=[
-                alt.Tooltip("date:T", title="Date"),
-                alt.Tooltip("market_value:Q", title="Market value", format=",.0f"),
-                alt.Tooltip("profit_rate:Q", title="Return (%)", format=".2f"),
+                alt.Tooltip("date:T", title="날짜"),
+                alt.Tooltip("market_value:Q", title="평가금액", format=",.0f"),
+                alt.Tooltip("profit_rate:Q", title="수익률 (%)", format=".2f"),
             ],
         )
     )
@@ -459,6 +634,7 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]]) -> N
         detail_measure = st.segmented_control(
             "비교 지표",
             options=["market_value", "profit_rate", "close"],
+            format_func=label_detail_measure,
             default="market_value",
             key=f"detail-measure:{account['id']}",
         )
@@ -467,13 +643,13 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]]) -> N
             alt.Chart(detail_frame)
             .mark_line(strokeWidth=2.5)
             .encode(
-                x=alt.X("date:T", title="Date"),
-                y=alt.Y(f"{detail_measure}:Q", title=detail_measure.replace("_", " ").title()),
-                color=alt.Color("product_name:N", title="Holding"),
+                x=alt.X("date:T", title="날짜"),
+                y=alt.Y(f"{detail_measure}:Q", title=label_detail_measure(detail_measure)),
+                color=alt.Color("product_name:N", title="종목"),
                 tooltip=[
-                    alt.Tooltip("product_name:N", title="Holding"),
-                    alt.Tooltip("date:T", title="Date"),
-                    alt.Tooltip(f"{detail_measure}:Q", title=detail_measure.replace("_", " ").title(), format=",.2f"),
+                    alt.Tooltip("product_name:N", title="종목"),
+                    alt.Tooltip("date:T", title="날짜"),
+                    alt.Tooltip(f"{detail_measure}:Q", title=label_detail_measure(detail_measure), format=",.2f"),
                 ],
             )
         )
@@ -481,33 +657,70 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]]) -> N
 
 
 def trade_entry_page(account: dict[str, Any], holdings: list[dict[str, Any]]) -> None:
-    st.title("Trades")
+    st.title("거래")
     left, right = st.columns((1, 1), gap="large")
 
     with left:
         st.subheader("매수 / 매도")
         holding_options = {holding["product_name"]: holding for holding in holdings}
-        with st.form("trade-form", clear_on_submit=True):
-            trade_type = st.selectbox("거래 유형", ["buy", "sell"])
-            if holding_options and trade_type == "sell":
-                selected_holding_name = st.selectbox("보유 종목", options=list(holding_options))
-                selected_holding = holding_options[selected_holding_name]
-                default_symbol = str(selected_holding["symbol"])
-                default_name = str(selected_holding["product_name"])
-                default_asset_type = str(selected_holding["asset_type"])
-            else:
-                default_symbol = ""
-                default_name = ""
-                default_asset_type = "risk"
+        trade_type = st.selectbox(
+            "거래 유형",
+            ["buy", "sell"],
+            format_func=label_trade_type,
+            key=TRADE_TYPE_KEY,
+        )
 
-            symbol = st.text_input("심볼", value=default_symbol, help="예: AAPL, MSFT, 005930, 005930.KS")
-            product_name = st.text_input("종목명", value=default_name)
-            asset_type = st.selectbox("자산군", ["risk", "safe"], index=0 if default_asset_type == "risk" else 1)
-            quantity = st.number_input("수량", min_value=0.0, value=1.0, step=1.0)
-            price = st.number_input("단가", min_value=0.0, value=0.0, step=100.0)
-            trade_date = st.date_input("거래일", value=date.today())
-            notes = st.text_area("메모", height=90)
-            submitted = st.form_submit_button("거래 저장", use_container_width=True)
+        if holding_options and trade_type == "sell":
+            selected_holding_name = st.selectbox(
+                "보유 종목",
+                options=list(holding_options),
+                key=f"sell-holding:{account['id']}",
+            )
+            prefill_trade_from_holding(
+                holding_options[selected_holding_name],
+                marker=f"sell:{account['id']}:{selected_holding_name}",
+            )
+        else:
+            st.session_state[TRADE_PREFILL_MARKER_KEY] = "buy"
+            search_query = st.text_input(
+                "종목 검색",
+                key=TRADE_SEARCH_QUERY_KEY,
+                placeholder="예: 삼성전자, 005930, PLUS 고배당주채권혼합",
+            )
+            st.caption("검색 결과를 누르면 종목명과 코드가 자동으로 채워집니다.")
+            if len(str(search_query or "").strip()) >= 2:
+                suggestions = search_products(search_query, limit=8)
+                with st.container(border=True):
+                    st.caption("자동완성 결과")
+                    if suggestions:
+                        for product in suggestions:
+                            if st.button(
+                                product_search_label(product),
+                                key=f"product-suggestion:{account['id']}:{product['code']}",
+                                use_container_width=True,
+                            ):
+                                apply_search_product(product)
+                                st.rerun()
+                    else:
+                        st.caption("검색 결과가 없습니다.")
+
+        symbol = st.text_input(
+            "종목 코드 / 심볼",
+            key=TRADE_SYMBOL_KEY,
+            help="예: 005930, 005930.KS, AAPL, K55207BU0715",
+        )
+        product_name = st.text_input("종목명", key=TRADE_PRODUCT_NAME_KEY)
+        asset_type = st.selectbox(
+            "자산군",
+            ["risk", "safe"],
+            format_func=label_asset_type,
+            key=TRADE_ASSET_TYPE_KEY,
+        )
+        quantity = st.number_input("수량", min_value=0.0, step=1.0, key=TRADE_QUANTITY_KEY)
+        price = st.number_input("단가", min_value=0.0, step=100.0, key=TRADE_PRICE_KEY)
+        trade_date = st.date_input("거래일", key=TRADE_DATE_KEY)
+        notes = st.text_area("메모", height=90, key=TRADE_NOTES_KEY)
+        submitted = st.button("거래 저장", use_container_width=True, key=f"trade-save:{account['id']}")
         if submitted:
             try:
                 record_trade(
@@ -525,16 +738,26 @@ def trade_entry_page(account: dict[str, Any], holdings: list[dict[str, Any]]) ->
                 st.error(str(exc))
             else:
                 st.success("거래를 저장했습니다.")
+                st.session_state[TRADE_SYMBOL_KEY] = ""
+                st.session_state[TRADE_PRODUCT_NAME_KEY] = ""
+                st.session_state[TRADE_SEARCH_QUERY_KEY] = ""
+                st.session_state[TRADE_QUANTITY_KEY] = 1.0
+                st.session_state[TRADE_PRICE_KEY] = 0.0
+                st.session_state[TRADE_NOTES_KEY] = ""
                 st.rerun()
 
     with right:
         st.subheader("현금 입출금")
-        with st.form("cash-flow-form", clear_on_submit=True):
-            flow_type = st.selectbox("현금 흐름", ["deposit", "withdraw"])
-            amount = st.number_input("금액", min_value=0.0, value=0.0, step=100000.0)
-            trade_date = st.date_input("처리일", value=date.today(), key="cash-flow-date")
-            notes = st.text_area("사유", height=90, key="cash-flow-notes")
-            submitted = st.form_submit_button("현금 기록", use_container_width=True)
+        flow_type = st.selectbox(
+            "현금 흐름",
+            ["deposit", "withdraw"],
+            format_func=label_cash_flow_type,
+            key=CASH_FLOW_TYPE_KEY,
+        )
+        amount = st.number_input("금액", min_value=0.0, step=100000.0, key=CASH_FLOW_AMOUNT_KEY)
+        trade_date = st.date_input("처리일", key=CASH_FLOW_DATE_KEY)
+        notes = st.text_area("사유", height=90, key=CASH_FLOW_NOTES_KEY)
+        submitted = st.button("현금 기록", use_container_width=True, key=f"cash-flow-save:{account['id']}")
         if submitted:
             try:
                 record_cash_flow(
@@ -548,32 +771,34 @@ def trade_entry_page(account: dict[str, Any], holdings: list[dict[str, Any]]) ->
                 st.error(str(exc))
             else:
                 st.success("현금 흐름을 기록했습니다.")
+                st.session_state[CASH_FLOW_AMOUNT_KEY] = 0.0
+                st.session_state[CASH_FLOW_NOTES_KEY] = ""
                 st.rerun()
 
     logs = list_trade_logs(int(account["id"]))
     realized = realized_summary(logs)
 
     metric_1, metric_2, metric_3, metric_4 = st.columns(4)
-    metric_1.metric("Closed Positions", f"{int(realized['sold_count']):,}")
-    metric_2.metric("Total Buy", format_won(realized["total_buy_amount"]))
-    metric_3.metric("Total Sell", format_won(realized["total_sell_amount"]))
-    metric_4.metric("Realized Return", format_pct(realized["total_profit_rate"]))
+    metric_1.metric("실현 포지션 수", f"{int(realized['sold_count']):,}")
+    metric_2.metric("총 매수금액", format_won(realized["total_buy_amount"]))
+    metric_3.metric("총 매도금액", format_won(realized["total_sell_amount"]))
+    metric_4.metric("실현 수익률", format_pct(realized["total_profit_rate"]))
 
     realized_positions = realized.get("positions") or []
     if realized_positions:
         chart_frame = pd.DataFrame(realized_positions).sort_values("profit_loss", ascending=False).head(10).copy()
-        chart_frame["tone"] = chart_frame["profit_loss"].apply(lambda value: "Gain" if float(value or 0) >= 0 else "Loss")
+        chart_frame["tone"] = chart_frame["profit_loss"].apply(lambda value: "수익" if float(value or 0) >= 0 else "손실")
         chart = (
             alt.Chart(chart_frame)
             .mark_bar(cornerRadiusTopLeft=6, cornerRadiusTopRight=6)
             .encode(
-                x=alt.X("product_name:N", sort="-y", title="Closed position"),
-                y=alt.Y("profit_loss:Q", title="Profit / Loss"),
-                color=alt.Color("tone:N", scale=alt.Scale(domain=["Gain", "Loss"], range=["#0F766E", "#B91C1C"])),
+                x=alt.X("product_name:N", sort="-y", title="실현 종목"),
+                y=alt.Y("profit_loss:Q", title="실현 손익"),
+                color=alt.Color("tone:N", scale=alt.Scale(domain=["수익", "손실"], range=["#0F766E", "#B91C1C"])),
                 tooltip=[
-                    alt.Tooltip("product_name:N", title="Holding"),
-                    alt.Tooltip("profit_loss:Q", title="P/L", format=",.0f"),
-                    alt.Tooltip("profit_rate:Q", title="Return (%)", format=".2f"),
+                    alt.Tooltip("product_name:N", title="종목"),
+                    alt.Tooltip("profit_loss:Q", title="손익", format=",.0f"),
+                    alt.Tooltip("profit_rate:Q", title="수익률 (%)", format=".2f"),
                 ],
             )
         )
@@ -582,42 +807,46 @@ def trade_entry_page(account: dict[str, Any], holdings: list[dict[str, Any]]) ->
         position_frame = pd.DataFrame(realized_positions)
         position_frame = position_frame[["product_name", "symbol", "asset_type", "buy_amount", "sell_amount", "profit_loss", "profit_rate", "sell_date"]].copy()
         position_frame.columns = ["상품명", "코드", "자산군", "매수금액", "매도금액", "실현손익", "실현수익률(%)", "매도일"]
+        position_frame["자산군"] = position_frame["자산군"].map(label_asset_type)
         for column in ("매수금액", "매도금액", "실현손익"):
             position_frame[column] = position_frame[column].map(lambda value: f"{float(value or 0):,.0f}")
         position_frame["실현수익률(%)"] = position_frame["실현수익률(%)"].map(lambda value: f"{float(value or 0):+.2f}")
-        st.subheader("Realized Summary")
+        st.subheader("실현 손익 요약")
         st.dataframe(position_frame, use_container_width=True, hide_index=True, height=280)
 
     if logs:
         log_frame = pd.DataFrame(logs)
         log_frame = log_frame[["trade_date", "product_name", "symbol", "trade_type", "asset_type", "quantity", "price", "total_amount", "notes"]].copy()
         log_frame.columns = ["거래일", "종목명", "코드", "유형", "자산군", "수량", "단가", "총액", "메모"]
+        log_frame["유형"] = log_frame["유형"].map(label_transaction_type).fillna(log_frame["유형"])
+        log_frame["자산군"] = log_frame["자산군"].map(label_asset_type).fillna(log_frame["자산군"])
         log_frame["수량"] = log_frame["수량"].map(lambda value: f"{float(value or 0):,.4f}".rstrip("0").rstrip("."))
         for column in ("단가", "총액"):
             log_frame[column] = log_frame[column].map(lambda value: f"{float(value or 0):,.0f}")
-        st.subheader("Trade Log")
+        st.subheader("거래 기록")
         st.dataframe(log_frame, use_container_width=True, hide_index=True, height=420)
     else:
         st.info("아직 기록된 거래가 없습니다.")
 
 
 def data_page() -> None:
-    st.title("Data")
-    st.caption("현재 앱에서 사용하는 로컬 SQLite 데이터를 CSV로 내려받을 수 있습니다.")
+    st.title("데이터")
+    st.caption("현재 앱에서 사용하는 데이터를 CSV로 내려받을 수 있습니다.")
 
     for table_name in ("accounts", "holdings", "trade_logs"):
         rows = export_dataframe_rows(table_name)
         frame = pd.DataFrame(rows)
         csv_bytes = frame.to_csv(index=False).encode("utf-8-sig") if not frame.empty else b""
         with st.container(border=True):
-            st.subheader(table_name)
-            st.write(f"Rows: `{len(frame):,}`")
+            table_label = label_table_name(table_name)
+            st.subheader(table_label)
+            st.write(f"행 수: `{len(frame):,}`")
             if not frame.empty:
                 st.dataframe(frame, use_container_width=True, hide_index=True, height=220)
             else:
                 st.info("데이터가 없습니다.")
             st.download_button(
-                label=f"{table_name}.csv 다운로드",
+                label=f"{table_label} CSV 다운로드",
                 data=csv_bytes,
                 file_name=f"{table_name}.csv",
                 mime="text/csv",
@@ -628,7 +857,7 @@ def data_page() -> None:
 def main() -> None:
     init_state()
     if not app_auth.is_enabled():
-        st.error("Supabase Auth is not configured. Add SUPABASE_URL and SUPABASE_KEY to Streamlit secrets.")
+        st.error("Supabase 인증이 설정되지 않았습니다. Streamlit secrets에 SUPABASE_URL 과 SUPABASE_KEY 를 넣어 주세요.")
         return
 
     if handle_auth_callback():
@@ -643,12 +872,12 @@ def main() -> None:
     initialize_database()
     status = backend_status()
     if status["name"] == "sqlite":
-        message = "Storage backend: local SQLite fallback. This fallback is temporary and can be reset by redeploys."
+        message = "현재 저장소는 로컬 SQLite 임시 저장소입니다. 재배포 시 초기화될 수 있습니다."
         if status["reason"]:
             message = f"{message} {status['reason']}"
         st.warning(message)
     else:
-        st.caption("Storage backend: Supabase")
+        st.caption("현재 저장소: Supabase")
     accounts = list_accounts()
     if not accounts:
         empty_state()

@@ -67,7 +67,7 @@ def _raw_session() -> dict[str, Any] | None:
 
 def get_client() -> Client:
     if not is_enabled():
-        raise RuntimeError("Supabase Auth is not configured.")
+        raise RuntimeError("Supabase 인증이 설정되지 않았습니다.")
 
     client = create_client(SUPABASE_URL, SUPABASE_KEY)
     session = _raw_session()
