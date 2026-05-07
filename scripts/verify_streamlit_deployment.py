@@ -182,6 +182,20 @@ def has_workspace_context(text: str) -> bool:
     return any(marker in normalized for marker in markers) and "로그아웃" in normalized
 
 
+def has_onboarding_context(text: str) -> bool:
+    """로그인 후 첫 계좌 생성 전 온보딩 화면인지 판별한다."""
+
+    normalized = " ".join(extract_lines(text))
+    required_markers = ("현재 저장소:", "첫 계좌 만들기", "계좌 이름", "시작 현금")
+    return all(marker in normalized for marker in required_markers)
+
+
+def has_authenticated_context(text: str) -> bool:
+    """로그인 이후 앱 내부 화면인지 판별한다."""
+
+    return has_workspace_context(text) or has_onboarding_context(text)
+
+
 def choose_button(
     frame: Frame,
     text: str,
@@ -226,18 +240,18 @@ def choose_page_label(frame: Frame, page_name: str) -> Locator:
     raise RuntimeError(f"페이지 레이블을 찾지 못했습니다: {target_text}")
 
 
-def wait_for_workspace(page: Page, timeout_ms: int) -> Frame:
-    """로그인 후 작업공간이 나타날 때까지 기다린다."""
+def wait_for_authenticated_app(page: Page, timeout_ms: int) -> Frame:
+    """로그인 후 앱 내부 화면이 나타날 때까지 기다린다."""
 
     deadline = time.monotonic() + (timeout_ms / 1000)
     last_text = ""
     while time.monotonic() < deadline:
         frame = select_app_frame(page)
         last_text = body_text(frame, min(5_000, timeout_ms))
-        if has_workspace_context(last_text):
+        if has_authenticated_context(last_text):
             return frame
         page.wait_for_timeout(1_000)
-    raise RuntimeError(f"로그인 후 작업공간을 찾지 못했습니다. 마지막 화면: {last_text[:600]}")
+    raise RuntimeError(f"로그인 후 앱 내부 화면을 찾지 못했습니다. 마지막 화면: {last_text[:600]}")
 
 
 def login_if_needed(page: Page, email: str, password: str, timeout_ms: int) -> Frame:
@@ -245,7 +259,7 @@ def login_if_needed(page: Page, email: str, password: str, timeout_ms: int) -> F
 
     frame = select_app_frame(page)
     current_text = body_text(frame, timeout_ms)
-    if has_workspace_context(current_text):
+    if has_authenticated_context(current_text):
         return frame
 
     inputs = frame.locator("input")
@@ -256,7 +270,7 @@ def login_if_needed(page: Page, email: str, password: str, timeout_ms: int) -> F
     inputs.nth(1).fill(password)
     choose_button(frame, "로그인", fallback_index=6, prefer_last=True).click()
     page.wait_for_timeout(timeout_ms)
-    return wait_for_workspace(page, timeout_ms)
+    return wait_for_authenticated_app(page, timeout_ms)
 
 
 def open_target_page(page: Page, frame: Frame, page_name: str, timeout_ms: int) -> Frame:
@@ -272,6 +286,8 @@ def build_summary(url: str, target_page: str, text: str) -> DeploymentSummary:
 
     lines = extract_lines(text)
     backend_storage = find_value_after_label(lines, "데이터 저장소")
+    if not backend_storage:
+        backend_storage = find_prefixed_value(lines, "현재 저장소:")
     interest_rollup, latest_interest_date = find_values_after_label(lines, "이자 롤업")
     snapshot_count, latest_snapshot_date = find_values_after_label(lines, "자산 스냅샷")
     status_message = ""
@@ -283,7 +299,7 @@ def build_summary(url: str, target_page: str, text: str) -> DeploymentSummary:
     return DeploymentSummary(
         url=url,
         target_page=target_page,
-        logged_in="로그인 계정" in text and "로그아웃" in text,
+        logged_in=has_authenticated_context(text),
         workspace_visible=has_workspace_context(text),
         status_panel_visible="운영 상태" in text,
         backend_storage=backend_storage,
@@ -340,8 +356,10 @@ def verify_deployment(args: argparse.Namespace) -> DeploymentSummary:
         page.goto(args.url, wait_until="domcontentloaded", timeout=120_000)
         page.wait_for_timeout(args.wait_ms)
         frame = login_if_needed(page, args.email, args.password, args.wait_ms)
-        frame = open_target_page(page, frame, args.page, max(4_000, args.wait_ms // 2))
         text = body_text(frame, 15_000)
+        if has_workspace_context(text):
+            frame = open_target_page(page, frame, args.page, max(4_000, args.wait_ms // 2))
+            text = body_text(frame, 15_000)
         summary = build_summary(args.url, args.page, text)
         summary.text_output = maybe_write_output(args.text_output, text)
         summary.screenshot_output = maybe_capture_screenshot(page, args.screenshot)
