@@ -186,6 +186,13 @@ def label_period(value: Any) -> str:
     return PERIOD_LABELS.get(str(value), str(value))
 
 
+def latest_date_text(rows: list[dict[str, Any]], field_name: str) -> str:
+    """주어진 일자 필드에서 가장 최근 날짜 문자열을 반환한다."""
+
+    dates = [str(row.get(field_name) or "").strip() for row in rows if str(row.get(field_name) or "").strip()]
+    return max(dates) if dates else "-"
+
+
 def period_start_date(period: str) -> date:
     """선택한 기간에 해당하는 시작 날짜를 반환한다."""
 
@@ -979,9 +986,35 @@ def trade_entry_page(account: dict[str, Any], holdings: list[dict[str, Any]], ac
         st.info("아직 기록된 거래가 없습니다.")
 
 
-def data_page() -> None:
+def data_page(account: dict[str, Any]) -> None:
     st.title("데이터")
     st.caption("현재 앱에서 사용하는 데이터를 CSV로 내려받을 수 있습니다.")
+
+    account_id = int(account["id"])
+    status = backend_status()
+    interest_rows = list_daily_interest(account_id)
+    snapshot_rows = list_account_snapshots(account_id)
+    total_interest = sum(float(row.get("interest_amount") or 0) for row in interest_rows)
+
+    with st.container(border=True):
+        st.subheader("운영 상태")
+        st.caption(f"기준 계좌: `{account['name']}`")
+        status_col_1, status_col_2, status_col_3, status_col_4 = st.columns(4)
+        status_col_1.metric("데이터 저장소", "Supabase" if status["name"] == "supabase" else "로컬 SQLite")
+        status_col_2.metric("누적 이자", format_won(total_interest))
+        status_col_3.metric("이자 롤업", f"{len(interest_rows):,}건", latest_date_text(interest_rows, "date"))
+        status_col_4.metric("자산 스냅샷", f"{len(snapshot_rows):,}건", latest_date_text(snapshot_rows, "snapshot_date"))
+
+        if status["name"] == "sqlite":
+            st.warning("현재 배포본은 로컬 SQLite 저장소를 사용 중입니다. 재배포 환경에서는 초기화될 수 있습니다.")
+            if status["reason"]:
+                st.caption(f"감지 사유: {status['reason']}")
+            st.info(
+                "운영 상태가 전환되려면 `setup_supabase.sql` 적용, Streamlit secrets의 `SUPABASE_URL`/`SUPABASE_KEY` 확인, "
+                "`Daily Rollup` 실행 상태 확인 순서로 점검하는 것이 좋습니다."
+            )
+        else:
+            st.success("현재 배포본은 Supabase를 사용 중입니다.")
 
     for table_name in ("accounts", "holdings", "trade_logs", "daily_interest", "daily_account_snapshot"):
         rows = export_dataframe_rows(table_name)
@@ -1045,7 +1078,7 @@ def main() -> None:
     elif active_page == "Trades":
         trade_entry_page(account, holdings, accounts)
     else:
-        data_page()
+        data_page(account)
 
 
 if __name__ == "__main__":
