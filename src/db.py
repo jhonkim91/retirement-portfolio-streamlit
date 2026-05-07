@@ -328,7 +328,7 @@ def _activate_sqlite(reason: str) -> None:
     _set_backend(BACKEND_SQLITE, reason)
 
 
-def _build_headers() -> dict[str, str]:
+def _build_headers(prefer_return: str | None = None) -> dict[str, str]:
     if not _has_supabase_config():
         raise RuntimeError("SUPABASE_URL 또는 SUPABASE_KEY 설정이 없습니다.")
 
@@ -341,12 +341,14 @@ def _build_headers() -> dict[str, str]:
             raise RuntimeError("로그인 세션 토큰을 확인하지 못했습니다. 다시 로그인한 뒤 시도해 주세요.")
     else:
         access_token = supabase_key
-    return {
+    headers = {
         "apikey": supabase_key,
         "Authorization": f"Bearer {access_token}",
         "Content-Type": "application/json",
-        "Prefer": "return=representation",
     }
+    if prefer_return:
+        headers["Prefer"] = f"return={prefer_return}"
+    return headers
 
 
 def now_iso() -> str:
@@ -473,13 +475,15 @@ def _supabase_request(
     table: str,
     data: dict[str, Any] | None = None,
     filters: dict[str, str | int] | None = None,
+    prefer_return: str | None = None,
 ) -> list[dict[str, Any]] | dict[str, Any] | None:
+    request_headers = _build_headers(prefer_return=prefer_return)
     response = requests.request(
         method=method,
         url=f"{_supabase_url()}/rest/v1/{table}",
         json=data,
         params={key: str(value) for key, value in (filters or {}).items()},
-        headers=_build_headers(),
+        headers=request_headers,
         timeout=10,
     )
 
@@ -496,6 +500,9 @@ def _supabase_request(
     if method == "DELETE":
         return None
 
+    if method in {"POST", "PATCH"}:
+        if response.status_code == 204 or not response.content:
+            return None
     payload = response.json()
     if method in {"POST", "PATCH"}:
         return payload[0] if isinstance(payload, list) and payload else payload
@@ -540,6 +547,7 @@ def _supabase_insert_trade_log(
             "notes": str(notes or "").strip(),
             "created_at": created_at,
         },
+        prefer_return="minimal",
     )
 
 
@@ -698,20 +706,29 @@ def _supabase_create_account(name: str, account_type: str = "retirement", openin
         raise ValueError("같은 이름의 계좌가 이미 있습니다.")
 
     timestamp = now_iso()
+    stored_name = _storage_account_name(cleaned_name)
     result = _supabase_request(
         "POST",
         "accounts",
         data={
-            "name": _storage_account_name(cleaned_name),
+            "name": stored_name,
             "account_type": cleaned_type,
             "cash_balance": float(opening_cash or 0),
             "created_at": timestamp,
             "updated_at": timestamp,
         },
+        prefer_return="minimal",
     )
-    if isinstance(result, dict):
+    if isinstance(result, dict) and result.get("id") is not None:
         return int(result["id"])
-    return int(result[0]["id"])
+    if isinstance(result, list) and result and result[0].get("id") is not None:
+        return int(result[0]["id"])
+
+    created_account = _supabase_request("GET", "accounts", filters={"name": f"eq.{stored_name}"})
+    created_row = created_account[0] if isinstance(created_account, list) and created_account else created_account
+    if isinstance(created_row, dict) and created_row.get("id") is not None:
+        return int(created_row["id"])
+    raise RuntimeError("Supabase account insert succeeded but the new account id could not be resolved.")
 
 
 def _supabase_update_cash_balance(account_id: int, amount: float) -> None:
@@ -726,6 +743,7 @@ def _supabase_update_cash_balance(account_id: int, amount: float) -> None:
         "accounts",
         data={"cash_balance": float(amount), "updated_at": now_iso()},
         filters={"id": f"eq.{account_id}"},
+        prefer_return="minimal",
     )
 
 
@@ -755,6 +773,7 @@ def _supabase_set_holding_price(holding_id: int, current_price: float, as_of: st
             "updated_at": now_iso(),
         },
         filters={"id": f"eq.{holding_id}"},
+        prefer_return="minimal",
     )
 
 
@@ -863,6 +882,7 @@ def _supabase_record_trade(
                     "updated_at": timestamp,
                 },
                 filters={"id": f"eq.{holding_row['id']}"},
+                prefer_return="minimal",
             )
         else:
             _supabase_request(
@@ -880,6 +900,7 @@ def _supabase_record_trade(
                     "created_at": timestamp,
                     "updated_at": timestamp,
                 },
+                prefer_return="minimal",
             )
     else:
         if not holding_row:
@@ -900,6 +921,7 @@ def _supabase_record_trade(
                 "updated_at": timestamp,
             },
             filters={"id": f"eq.{holding_row['id']}"},
+            prefer_return="minimal",
         )
 
     _supabase_update_cash_balance(account_id, next_cash)
@@ -1040,6 +1062,7 @@ def _supabase_record_daily_interest(account_id: int, *, interest_date: str, amou
             "interest_amount": interest_amount,
             "created_at": timestamp,
         },
+        prefer_return="minimal",
     )
     _supabase_update_cash_balance(account_id, next_cash)
     _supabase_insert_trade_log(
@@ -1163,11 +1186,12 @@ def _supabase_record_account_snapshot(
             "daily_account_snapshot",
             data=payload,
             filters={"id": f"eq.{snapshot_id}"},
+            prefer_return="minimal",
         )
         return
 
     payload["created_at"] = timestamp
-    _supabase_request("POST", "daily_account_snapshot", data=payload)
+    _supabase_request("POST", "daily_account_snapshot", data=payload, prefer_return="minimal")
 
 
 def _sqlite_list_accounts() -> list[dict[str, Any]]:
