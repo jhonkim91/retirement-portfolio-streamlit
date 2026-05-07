@@ -92,6 +92,7 @@
   - 로컬 SQLite 마이그레이션/이체/롤업 수동 검증
   - 웹 로그인 검증
   - 데이터 화면의 실제 렌더링 확인
+  - `scripts/verify_streamlit_deployment.py`로 로그인 후 `데이터 > 운영 상태` 자동 점검 가능 상태까지 안정화
 - 남은 내용:
   - 자동 회귀 테스트 추가
   - Streamlit Cloud 최신 커밋 재배포 확인
@@ -108,6 +109,7 @@
 
 - 원격 `main`에는 `4cb0a9a`까지 반영됨
 - 웹 앱 로그인은 검증됨
+- 2026-05-08 자동 검증 결과 `데이터 저장소=로컬 SQLite`, `Supabase 설정 감지=아니오`, `이자 롤업=0건`, `자산 스냅샷=0건`
 - 다만 2026-05-08 기준 배포 웹은 아직 이전 빌드를 보고 있어 `로컬 SQLite`로 표시되며, 새 대시보드 UI도 아직 반영되지 않음
 - 따라서 다음 실제 운영 체크포인트는 `Streamlit Cloud 재배포 반영 여부` 확인이다
 
@@ -117,12 +119,12 @@
   - [scripts/verify_streamlit_deployment.py](/C:/Users/JKKIM/retirement-portfolio-streamlit/scripts/verify_streamlit_deployment.py)
   - [README.md](/C:/Users/JKKIM/retirement-portfolio-streamlit/README.md)
 - 용도:
-  - 배포된 웹 앱에 로그인해서 `데이터 > 운영 상태`를 자동 점검하는 스크립트 추가 중
-  - 앞으로 배포 후 검증을 반복 가능하게 만들기 위한 작업
+  - 배포된 웹 앱에 로그인해서 `데이터 > 운영 상태`를 자동 점검하는 스크립트는 동작 확인 완료
+  - 현재는 스크립트 커밋/푸시와 Streamlit Cloud 재배포 반영 재확인 단계
 
 ## 다음 권장 순서
 
-1. `verify_streamlit_deployment.py` 마무리 및 커밋
+1. `verify_streamlit_deployment.py` 커밋 및 원격 반영
 2. Streamlit Cloud 최신 커밋 반영 여부 재확인
 3. 반영 후에도 `SQLite`면 Streamlit secrets와 Supabase 스키마/RLS/Data API 노출 상태 점검
 4. 운영 전환이 끝나면 5단계 잔여 분석 계산 고도화 진행
