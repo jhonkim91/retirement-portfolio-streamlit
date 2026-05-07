@@ -425,7 +425,7 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]]) -> N
     period = st.segmented_control("기간", options=["1mo", "3mo", "6mo", "1y"], default="6mo", key=f"trend-period:{account['id']}")
     portfolio_trend, holding_trend = build_portfolio_trend(holdings, period=period)
     if portfolio_trend.empty:
-        st.info("추이 차트를 그릴 데이터가 없습니다. 현재가를 먼저 새로고침해 보세요.")
+        st.info("Trend data is temporarily unavailable. Yahoo Finance may be rate-limiting requests, or the selected holdings may not have enough history yet.")
         return
 
     trend_chart = (

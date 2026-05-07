@@ -154,7 +154,10 @@ def build_portfolio_trend(holdings: list[dict[str, Any]], period: str = "6mo") -
     merged_values: list[pd.DataFrame] = []
 
     for row in frame.to_dict(orient="records"):
-        history = fetch_price_history(str(row["symbol"]), period=period)
+        try:
+            history = fetch_price_history(str(row["symbol"]), period=period)
+        except Exception:  # noqa: BLE001
+            continue
         if history.empty:
             continue
 
