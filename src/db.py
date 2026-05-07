@@ -14,7 +14,8 @@ from . import sqlite_db
 T = TypeVar("T")
 
 DEFAULT_SUPABASE_URL = "https://iyszkybxostbjfzbbymq.supabase.co"
-DEFAULT_BACKEND = "sqlite"
+BACKEND_AUTO = "auto"
+DEFAULT_BACKEND = BACKEND_AUTO
 BACKEND_SQLITE = "sqlite"
 BACKEND_SUPABASE = "supabase"
 BACKEND_STATE_KEY = "db_backend_state"
@@ -79,6 +80,15 @@ def _has_supabase_config() -> bool:
     return bool(SUPABASE_URL and SUPABASE_KEY)
 
 
+def _normalized_backend_override() -> str:
+    """지원하는 백엔드 강제 설정값만 반환한다."""
+
+    normalized = str(BACKEND_OVERRIDE or "").strip().lower()
+    if normalized in {BACKEND_AUTO, BACKEND_SQLITE, BACKEND_SUPABASE}:
+        return normalized
+    return BACKEND_AUTO
+
+
 def _sqlite_has_user_data() -> bool:
     try:
         user_id = app_auth.get_user_id()
@@ -95,12 +105,19 @@ def _sqlite_has_user_data() -> bool:
         return False
 
 
-def _select_initial_backend() -> str:
+def _select_initial_backend() -> tuple[str, str]:
+    """현재 환경에서 우선 사용할 저장소와 선택 사유를 반환한다."""
+
+    override = _normalized_backend_override()
+    if override == BACKEND_SUPABASE:
+        return BACKEND_SUPABASE, "PORTFOLIO_BACKEND=supabase 설정으로 Supabase 저장소를 강제 사용 중입니다."
+    if override == BACKEND_SQLITE:
+        return BACKEND_SQLITE, "PORTFOLIO_BACKEND=sqlite 설정으로 로컬 SQLite 저장소를 강제 사용 중입니다."
+    if _has_supabase_config():
+        return BACKEND_SUPABASE, "Supabase 설정을 감지해 Supabase 저장소를 우선 사용합니다."
     if _sqlite_has_user_data():
-        return BACKEND_SQLITE
-    if BACKEND_OVERRIDE in {BACKEND_SQLITE, BACKEND_SUPABASE}:
-        return BACKEND_OVERRIDE
-    return BACKEND_SUPABASE if _has_supabase_config() else BACKEND_SQLITE
+        return BACKEND_SQLITE, "Supabase 설정이 없어 기존 로컬 SQLite 데이터를 사용 중입니다."
+    return BACKEND_SQLITE, "Supabase 설정이 없어 로컬 SQLite 저장소를 사용 중입니다."
 
 
 def _current_backend() -> str:
@@ -109,19 +126,18 @@ def _current_backend() -> str:
     if backend:
         return backend
 
-    backend = _select_initial_backend()
-    reason = ""
-    if backend == BACKEND_SQLITE and not _has_supabase_config():
-        reason = "Supabase 설정이 없어 로컬 SQLite 저장소를 사용 중입니다."
+    backend, reason = _select_initial_backend()
     _set_backend(backend, reason)
     return backend
 
 
-def backend_status() -> dict[str, str]:
+def backend_status() -> dict[str, Any]:
     state = _backend_state()
     return {
         "name": _current_backend(),
         "reason": state["reason"],
+        "override": _normalized_backend_override(),
+        "has_supabase_config": _has_supabase_config(),
     }
 
 

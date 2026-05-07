@@ -1004,6 +1004,9 @@ def data_page(account: dict[str, Any]) -> None:
         status_col_2.metric("누적 이자", format_won(total_interest))
         status_col_3.metric("이자 롤업", f"{len(interest_rows):,}건", latest_date_text(interest_rows, "date"))
         status_col_4.metric("자산 스냅샷", f"{len(snapshot_rows):,}건", latest_date_text(snapshot_rows, "snapshot_date"))
+        if status.get("override", "auto") != "auto":
+            st.caption(f"백엔드 강제 설정: `{status['override']}`")
+        st.caption(f"Supabase 설정 감지: `{'예' if status.get('has_supabase_config') else '아니오'}`")
 
         if status["name"] == "sqlite":
             st.warning("현재 배포본은 로컬 SQLite 저장소를 사용 중입니다. 재배포 환경에서는 초기화될 수 있습니다.")

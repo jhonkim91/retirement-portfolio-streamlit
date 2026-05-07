@@ -125,3 +125,10 @@ python scripts/run_daily_rollup.py --backend supabase --date 2026-05-10 --annual
 - 한국 6자리 숫자 코드는 자동으로 `.KS`를 붙여 조회합니다.
 - 코스닥/ETF/해외 종목은 Yahoo Finance 심볼을 직접 입력하는 편이 더 정확할 수 있습니다.
 - `data/portfolio.db`는 `.gitignore`에 포함되어 있습니다.
+
+## 배포 백엔드 참고
+
+- 기본 백엔드 선택값은 `PORTFOLIO_BACKEND=auto`입니다.
+- `SUPABASE_URL`과 `SUPABASE_KEY`가 있으면 앱은 기본적으로 `Supabase`를 우선 사용합니다.
+- `PORTFOLIO_BACKEND=sqlite`가 설정되어 있으면 배포 환경에서도 로컬 SQLite를 강제로 사용하므로 운영 배포에서는 권장하지 않습니다.
+- 웹 앱의 `데이터 > 운영 상태` 패널에서 현재 저장소, Supabase 설정 감지 여부, 강제 백엔드 설정 여부를 바로 확인할 수 있습니다.

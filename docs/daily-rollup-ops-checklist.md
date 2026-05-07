@@ -72,6 +72,8 @@ GitHub Actions의 `Daily Rollup` 워크플로를 수동 실행한다.
 ## 6. 장애 시 우선 점검
 
 - GitHub Actions 로그에서 `SUPABASE_SERVICE_ROLE_KEY` 누락 여부 확인
+- Streamlit 배포 환경에 `PORTFOLIO_BACKEND=sqlite`가 들어가 있지 않은지 확인
 - Supabase에서 새 테이블이 Data API에 노출되는지 확인
 - `daily_interest`, `daily_account_snapshot` RLS 정책 적용 여부 확인
 - 같은 날짜에 이미 적립된 데이터가 있는지 확인
+- 웹 앱의 `데이터 > 운영 상태` 패널에서 `Supabase 설정 감지`와 `감지 사유` 문구 확인
