@@ -30,13 +30,28 @@ def _get_config_value(name: str, default: str = "") -> str:
     return str(os.getenv(name, default)).strip()
 
 
-SUPABASE_URL = _get_config_value("SUPABASE_URL", DEFAULT_SUPABASE_URL)
-SUPABASE_KEY = _get_config_value("SUPABASE_KEY")
-EMAIL_REDIRECT_TO = _get_config_value("SUPABASE_EMAIL_REDIRECT_TO", DEFAULT_EMAIL_REDIRECT_TO)
+def _supabase_url() -> str:
+    """현재 세션에서 사용할 Supabase URL을 반환한다."""
+
+    return _get_config_value("SUPABASE_URL", DEFAULT_SUPABASE_URL)
+
+
+def _supabase_key() -> str:
+    """현재 세션에서 사용할 Supabase 키를 반환한다."""
+
+    return _get_config_value("SUPABASE_KEY")
+
+
+def _email_redirect_to() -> str:
+    """회원가입 메일 링크에 사용할 리다이렉트 URL을 반환한다."""
+
+    return _get_config_value("SUPABASE_EMAIL_REDIRECT_TO", DEFAULT_EMAIL_REDIRECT_TO)
 
 
 def is_enabled() -> bool:
-    return bool(SUPABASE_URL and SUPABASE_KEY)
+    """현재 실행 환경에 Supabase 인증 설정이 있는지 확인한다."""
+
+    return bool(_supabase_url() and _supabase_key())
 
 
 def _serialize_session(session: Any) -> dict[str, Any]:
@@ -66,10 +81,12 @@ def _raw_session() -> dict[str, Any] | None:
 
 
 def get_client() -> Client:
+    """현재 세션 기준 Supabase 클라이언트를 반환한다."""
+
     if not is_enabled():
         raise RuntimeError("Supabase 인증이 설정되지 않았습니다.")
 
-    client = create_client(SUPABASE_URL, SUPABASE_KEY)
+    client = create_client(_supabase_url(), _supabase_key())
     session = _raw_session()
     if not session:
         return client
@@ -112,10 +129,13 @@ def sign_in(email: str, password: str) -> Any:
 
 
 def sign_up(email: str, password: str) -> Any:
+    """이메일과 비밀번호로 회원가입을 시도한다."""
+
     client = get_client()
     options: dict[str, Any] = {}
-    if EMAIL_REDIRECT_TO:
-        options["email_redirect_to"] = EMAIL_REDIRECT_TO
+    redirect_url = _email_redirect_to()
+    if redirect_url:
+        options["email_redirect_to"] = redirect_url
     response = client.auth.sign_up(
         {
             "email": str(email or "").strip(),
@@ -129,13 +149,16 @@ def sign_up(email: str, password: str) -> Any:
 
 
 def resend_signup(email: str) -> Any:
+    """가입 확인 메일을 다시 발송한다."""
+
     client = get_client()
     payload: dict[str, Any] = {
         "type": "signup",
         "email": str(email or "").strip(),
     }
-    if EMAIL_REDIRECT_TO:
-        payload["options"] = {"email_redirect_to": EMAIL_REDIRECT_TO}
+    redirect_url = _email_redirect_to()
+    if redirect_url:
+        payload["options"] = {"email_redirect_to": redirect_url}
     return client.auth.resend(payload)
 
 

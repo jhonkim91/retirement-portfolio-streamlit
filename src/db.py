@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from datetime import datetime
+from urllib.parse import urlparse
 from typing import Any, Callable, TypeVar
 
 import requests
@@ -55,9 +56,62 @@ def _get_config_value(name: str, default: str = "") -> str:
     return str(os.getenv(name, default)).strip()
 
 
-SUPABASE_URL = _get_config_value("SUPABASE_URL", DEFAULT_SUPABASE_URL)
-SUPABASE_KEY = _get_config_value("SUPABASE_KEY")
-BACKEND_OVERRIDE = _get_config_value("PORTFOLIO_BACKEND", DEFAULT_BACKEND).lower()
+def _read_config_value(name: str, default: str = "") -> tuple[str, str]:
+    """설정값과 값의 출처를 함께 반환한다."""
+
+    try:
+        secret_value = st.secrets.get(name)
+    except Exception:
+        secret_value = None
+    if secret_value not in (None, ""):
+        return str(secret_value).strip(), "secret"
+
+    env_value = os.getenv(name)
+    if env_value not in (None, ""):
+        return str(env_value).strip(), "env"
+
+    default_value = str(default).strip()
+    if default_value:
+        return default_value, "default"
+    return "", "missing"
+
+
+def _supabase_url() -> str:
+    """현재 세션에서 사용할 Supabase URL을 반환한다."""
+
+    return _read_config_value("SUPABASE_URL", DEFAULT_SUPABASE_URL)[0]
+
+
+def _supabase_key() -> str:
+    """현재 세션에서 사용할 Supabase 키를 반환한다."""
+
+    return _read_config_value("SUPABASE_KEY")[0]
+
+
+def _backend_override_value() -> str:
+    """현재 세션의 백엔드 강제 설정값을 반환한다."""
+
+    return _read_config_value("PORTFOLIO_BACKEND", DEFAULT_BACKEND)[0].lower()
+
+
+def _config_source_label(source: str) -> str:
+    """설정값 출처를 사용자 친화적인 한글 라벨로 바꾼다."""
+
+    return {
+        "secret": "streamlit_secret",
+        "env": "environment",
+        "default": "default",
+        "missing": "missing",
+    }.get(source, source or "unknown")
+
+
+def _masked_supabase_project() -> str:
+    """운영 상태 패널에 보여줄 Supabase 프로젝트 호스트를 반환한다."""
+
+    url = _supabase_url()
+    if not url:
+        return ""
+    return urlparse(url).netloc or url
 
 
 def _backend_state() -> dict[str, str]:
@@ -77,13 +131,13 @@ def _set_backend(name: str, reason: str = "") -> None:
 
 
 def _has_supabase_config() -> bool:
-    return bool(SUPABASE_URL and SUPABASE_KEY)
+    return bool(_supabase_url() and _supabase_key())
 
 
 def _normalized_backend_override() -> str:
     """지원하는 백엔드 강제 설정값만 반환한다."""
 
-    normalized = str(BACKEND_OVERRIDE or "").strip().lower()
+    normalized = str(_backend_override_value() or "").strip().lower()
     if normalized in {BACKEND_AUTO, BACKEND_SQLITE, BACKEND_SUPABASE}:
         return normalized
     return BACKEND_AUTO
@@ -132,12 +186,35 @@ def _current_backend() -> str:
 
 
 def backend_status() -> dict[str, Any]:
+    """현재 세션의 저장소 선택 상태와 설정 진단 정보를 반환한다."""
+
     state = _backend_state()
+    supabase_url, supabase_url_source = _read_config_value("SUPABASE_URL", DEFAULT_SUPABASE_URL)
+    supabase_key, supabase_key_source = _read_config_value("SUPABASE_KEY")
+    missing_items: list[str] = []
+    notices: list[str] = []
+
+    if not supabase_url:
+        missing_items.append("SUPABASE_URL")
+    if not supabase_key:
+        missing_items.append("SUPABASE_KEY")
+    if supabase_url_source == "default":
+        notices.append("SUPABASE_URL이 Streamlit secrets나 환경변수에 없어 코드 기본값을 사용 중입니다.")
+    if supabase_key_source == "missing":
+        notices.append("SUPABASE_KEY가 없어 Supabase 저장소를 활성화할 수 없습니다.")
+
     return {
         "name": _current_backend(),
         "reason": state["reason"],
         "override": _normalized_backend_override(),
         "has_supabase_config": _has_supabase_config(),
+        "supabase_url_present": bool(supabase_url),
+        "supabase_key_present": bool(supabase_key),
+        "supabase_url_source": _config_source_label(supabase_url_source),
+        "supabase_key_source": _config_source_label(supabase_key_source),
+        "supabase_project_host": _masked_supabase_project(),
+        "missing_config": missing_items,
+        "notices": notices,
     }
 
 
@@ -150,9 +227,10 @@ def _build_headers() -> dict[str, str]:
     if not _has_supabase_config():
         raise RuntimeError("SUPABASE_URL 또는 SUPABASE_KEY 설정이 없습니다.")
 
-    access_token = app_auth.get_access_token() or SUPABASE_KEY
+    supabase_key = _supabase_key()
+    access_token = app_auth.get_access_token() or supabase_key
     return {
-        "apikey": SUPABASE_KEY,
+        "apikey": supabase_key,
         "Authorization": f"Bearer {access_token}",
         "Content-Type": "application/json",
         "Prefer": "return=representation",
@@ -185,7 +263,7 @@ def _supabase_request(
 ) -> list[dict[str, Any]] | dict[str, Any] | None:
     response = requests.request(
         method=method,
-        url=f"{SUPABASE_URL}/rest/v1/{table}",
+        url=f"{_supabase_url()}/rest/v1/{table}",
         json=data,
         params={key: str(value) for key, value in (filters or {}).items()},
         headers=_build_headers(),

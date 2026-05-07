@@ -1264,6 +1264,22 @@ def data_page(account: dict[str, Any]) -> None:
         if status.get("override", "auto") != "auto":
             st.caption(f"백엔드 강제 설정: `{status['override']}`")
         st.caption(f"Supabase 설정 감지: `{'예' if status.get('has_supabase_config') else '아니오'}`")
+        config_col_1, config_col_2 = st.columns(2)
+        config_col_1.caption(
+            f"SUPABASE_URL 설정: `{'예' if status.get('supabase_url_present') else '아니오'}` "
+            f"(`{status.get('supabase_url_source', 'unknown')}`)"
+        )
+        config_col_2.caption(
+            f"SUPABASE_KEY 설정: `{'예' if status.get('supabase_key_present') else '아니오'}` "
+            f"(`{status.get('supabase_key_source', 'unknown')}`)"
+        )
+        if status.get("supabase_project_host"):
+            st.caption(f"Supabase 프로젝트: `{status['supabase_project_host']}`")
+        if status.get("missing_config"):
+            missing_text = ", ".join(f"`{item}`" for item in status["missing_config"])
+            st.caption(f"누락 설정: {missing_text}")
+        for notice in status.get("notices", []):
+            st.caption(f"참고: {notice}")
 
         if status["name"] == "sqlite":
             st.warning("현재 배포본은 로컬 SQLite 저장소를 사용 중입니다. 재배포 환경에서는 초기화될 수 있습니다.")

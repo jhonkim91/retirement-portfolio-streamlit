@@ -49,6 +49,10 @@ class DeploymentSummary:
     snapshot_count: str
     latest_snapshot_date: str
     supabase_config_status: str
+    supabase_url_status: str
+    supabase_key_status: str
+    supabase_project: str
+    missing_config: str
     backend_override: str
     reason: str
     status_message: str
@@ -290,6 +294,10 @@ def build_summary(url: str, target_page: str, text: str) -> DeploymentSummary:
         snapshot_count=snapshot_count,
         latest_snapshot_date=latest_snapshot_date,
         supabase_config_status=find_prefixed_value(lines, "Supabase 설정 감지:"),
+        supabase_url_status=find_prefixed_value(lines, "SUPABASE_URL 설정:"),
+        supabase_key_status=find_prefixed_value(lines, "SUPABASE_KEY 설정:"),
+        supabase_project=find_prefixed_value(lines, "Supabase 프로젝트:"),
+        missing_config=find_prefixed_value(lines, "누락 설정:"),
         backend_override=find_prefixed_value(lines, "백엔드 강제 설정:"),
         reason=find_prefixed_value(lines, "감지 사유:"),
         status_message=status_message,
