@@ -83,7 +83,6 @@
 - 남은 내용:
   - 거래 화면 카드화 여부와 밀도 재조정
   - 데이터 화면 운영자 액션 링크 보강
-  - 상태 패널의 운영자 액션 링크 보강
 
 ### 7단계. 테스트/운영 검증
 
@@ -103,23 +102,21 @@
 - `e4cdfd9`: 원장/롤업/이체/운영 자동화 1차 반영
 - `2b839b7`: 데이터 화면 `운영 상태` 패널 추가
 - `09814cc`: 배포 환경에서 `Supabase`를 우선 사용하도록 백엔드 선택 로직 수정
+- `4cb0a9a`: 사이드바와 대시보드 레이아웃 정리, 컨텍스트 배너 추가
 
 ## 현재 운영 상태
 
-- 원격 `main`에는 `09814cc`까지 반영됨
+- 원격 `main`에는 `4cb0a9a`까지 반영됨
 - 웹 앱 로그인은 검증됨
-- 다만 2026-05-08 기준 배포 웹은 아직 이전 빌드를 보고 있어 `로컬 SQLite`로 표시됨
+- 다만 2026-05-08 기준 배포 웹은 아직 이전 빌드를 보고 있어 `로컬 SQLite`로 표시되며, 새 대시보드 UI도 아직 반영되지 않음
 - 따라서 다음 실제 운영 체크포인트는 `Streamlit Cloud 재배포 반영 여부` 확인이다
 
 ## 현재 작업 트리 메모
 
 - 커밋되지 않은 진행 중 작업:
-  - [app.py](/C:/Users/JKKIM/retirement-portfolio-streamlit/app.py)
-  - [docs/progress-memory.md](/C:/Users/JKKIM/retirement-portfolio-streamlit/docs/progress-memory.md)
   - [scripts/verify_streamlit_deployment.py](/C:/Users/JKKIM/retirement-portfolio-streamlit/scripts/verify_streamlit_deployment.py)
   - [README.md](/C:/Users/JKKIM/retirement-portfolio-streamlit/README.md)
 - 용도:
-  - 대시보드 우선 UI 정리와 진행 메모 업데이트 반영
   - 배포된 웹 앱에 로그인해서 `데이터 > 운영 상태`를 자동 점검하는 스크립트 추가 중
   - 앞으로 배포 후 검증을 반복 가능하게 만들기 위한 작업
 
