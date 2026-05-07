@@ -28,6 +28,7 @@ record_cash_flow = _db.record_cash_flow
 record_trade = _db.record_trade
 set_holding_price = _db.set_holding_price
 update_cash_balance = _db.update_cash_balance
+backend_status = _db.backend_status
 
 
 st.set_page_config(
@@ -482,6 +483,14 @@ def data_page() -> None:
 def main() -> None:
     initialize_database()
     init_state()
+    status = backend_status()
+    if status["name"] == "sqlite":
+        message = "Storage backend: local SQLite fallback."
+        if status["reason"]:
+            message = f"{message} {status['reason']}"
+        st.warning(message)
+    else:
+        st.caption("Storage backend: Supabase")
     accounts = list_accounts()
     if not accounts:
         empty_state()
