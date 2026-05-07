@@ -45,6 +45,7 @@ def _build_headers() -> dict[str, str]:
         "apikey": SUPABASE_KEY,
         "Authorization": f"Bearer {SUPABASE_KEY}",
         "Content-Type": "application/json",
+        "Prefer": "return=representation",
     }
 
 
@@ -79,7 +80,14 @@ def _supabase_request(
 
     elif method == "POST":
         response = requests.post(url, json=data, headers=headers, timeout=10)
-        response.raise_for_status()
+        try:
+            response.raise_for_status()
+        except requests.HTTPError as exc:
+            raise requests.HTTPError(
+                f"Supabase POST {table} failed ({response.status_code}): {response.text}",
+                response=response,
+                request=response.request,
+            ) from exc
         result = response.json()
         return result[0] if isinstance(result, list) and result else result
 
@@ -94,7 +102,14 @@ def _supabase_request(
                 url += f"?{params}"
 
         response = requests.patch(url, json=data, headers=headers, timeout=10)
-        response.raise_for_status()
+        try:
+            response.raise_for_status()
+        except requests.HTTPError as exc:
+            raise requests.HTTPError(
+                f"Supabase PATCH {table} failed ({response.status_code}): {response.text}",
+                response=response,
+                request=response.request,
+            ) from exc
         result = response.json()
         return result[0] if isinstance(result, list) and result else result
 
@@ -109,7 +124,14 @@ def _supabase_request(
                 url += f"?{params}"
 
         response = requests.delete(url, headers=headers, timeout=10)
-        response.raise_for_status()
+        try:
+            response.raise_for_status()
+        except requests.HTTPError as exc:
+            raise requests.HTTPError(
+                f"Supabase DELETE {table} failed ({response.status_code}): {response.text}",
+                response=response,
+                request=response.request,
+            ) from exc
         return None
 
 

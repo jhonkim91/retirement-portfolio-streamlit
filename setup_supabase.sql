@@ -49,3 +49,21 @@ CREATE TABLE IF NOT EXISTS trade_logs (
 ALTER TABLE accounts DISABLE ROW LEVEL SECURITY;
 ALTER TABLE holdings DISABLE ROW LEVEL SECURITY;
 ALTER TABLE trade_logs DISABLE ROW LEVEL SECURITY;
+
+-- Data API grants for publishable / anon access
+GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.accounts TO anon, authenticated, service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.holdings TO anon, authenticated, service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.trade_logs TO anon, authenticated, service_role;
+
+-- BIGSERIAL uses sequences; inserts fail without sequence permissions.
+GRANT USAGE, SELECT ON SEQUENCE public.accounts_id_seq TO anon, authenticated, service_role;
+GRANT USAGE, SELECT ON SEQUENCE public.holdings_id_seq TO anon, authenticated, service_role;
+GRANT USAGE, SELECT ON SEQUENCE public.trade_logs_id_seq TO anon, authenticated, service_role;
+
+-- Keep future tables/sequences usable through the Data API as well.
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO anon, authenticated, service_role;
+
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
+GRANT USAGE, SELECT ON SEQUENCES TO anon, authenticated, service_role;
