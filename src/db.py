@@ -218,6 +218,110 @@ def backend_status() -> dict[str, Any]:
     }
 
 
+def _demo_account_totals(account_id: int) -> tuple[float, float, float]:
+    """데모 계좌의 현재 현금, 평가금액, 총원가를 계산한다."""
+
+    holdings = list_holdings(account_id)
+    total_cost = sum(float(item.get("avg_cost") or 0) * float(item.get("quantity") or 0) for item in holdings)
+    market_value = sum(float(item.get("current_price") or 0) * float(item.get("quantity") or 0) for item in holdings)
+    account = get_account(account_id) or {}
+    cash_balance = float(account.get("cash_balance") or 0)
+    return cash_balance, market_value, total_cost
+
+
+def seed_demo_workspace() -> dict[str, Any]:
+    """현재 로그인 사용자 계정에 데모용 샘플 계좌와 거래 데이터를 생성한다."""
+
+    blueprint = _demo_workspace_blueprint()
+    existing_accounts = list_accounts()
+    existing_by_name = {str(account.get("name") or ""): account for account in existing_accounts}
+    demo_names = [str(item["name"]) for item in blueprint["accounts"]]
+    existing_demo_accounts = [existing_by_name[name] for name in demo_names if name in existing_by_name]
+
+    if existing_demo_accounts:
+        return {
+            "created": False,
+            "selected_account_id": int(existing_demo_accounts[0]["id"]),
+            "account_ids": [int(account["id"]) for account in existing_demo_accounts],
+            "message": "이미 데모 계좌가 있어 기존 데이터를 그대로 사용합니다.",
+        }
+
+    created_account_ids: dict[str, int] = {}
+    for account_spec in blueprint["accounts"]:
+        account_id = create_account(
+            name=str(account_spec["name"]),
+            account_type=str(account_spec["account_type"]),
+            opening_cash=float(account_spec.get("opening_cash") or 0),
+        )
+        created_account_ids[str(account_spec["name"])] = account_id
+
+        for cash_flow in account_spec["cash_flows"]:
+            record_cash_flow(
+                account_id,
+                flow_type=str(cash_flow["flow_type"]),
+                amount=float(cash_flow["amount"]),
+                trade_date=str(cash_flow["trade_date"]),
+                notes=str(cash_flow.get("notes") or ""),
+            )
+
+        for trade in account_spec["trades"]:
+            record_trade(
+                account_id,
+                symbol=str(trade["symbol"]),
+                product_name=str(trade["product_name"]),
+                trade_type=str(trade["trade_type"]),
+                asset_type=str(trade["asset_type"]),
+                quantity=float(trade["quantity"]),
+                price=float(trade["price"]),
+                trade_date=str(trade["trade_date"]),
+                notes=str(trade.get("notes") or ""),
+            )
+
+    for transfer in blueprint["transfers"]:
+        record_account_transfer(
+            created_account_ids[str(transfer["from_account"])],
+            to_account_id=created_account_ids[str(transfer["to_account"])],
+            amount=float(transfer["amount"]),
+            trade_date=str(transfer["trade_date"]),
+            notes=str(transfer.get("notes") or ""),
+        )
+
+    for account_spec in blueprint["accounts"]:
+        account_id = created_account_ids[str(account_spec["name"])]
+        for entry in account_spec["interest"]:
+            record_daily_interest(
+                account_id,
+                interest_date=str(entry["interest_date"]),
+                amount=float(entry["amount"]),
+            )
+
+        holdings = list_holdings(account_id, include_closed=True)
+        holdings_by_symbol = {str(item.get("symbol") or "").upper(): item for item in holdings}
+        for symbol, current_price in account_spec["price_updates"].items():
+            holding = holdings_by_symbol.get(str(symbol).upper())
+            if not holding:
+                continue
+            set_holding_price(int(holding["id"]), float(current_price), str(account_spec["snapshot_date"]))
+
+        cash_balance, market_value, total_cost = _demo_account_totals(account_id)
+        record_account_snapshot(
+            account_id,
+            snapshot_date=str(account_spec["snapshot_date"]),
+            cash_balance=cash_balance,
+            market_value=market_value,
+            total_value=cash_balance + market_value,
+            total_cost=total_cost,
+        )
+
+    selected_account_id = created_account_ids[demo_names[0]]
+    return {
+        "created": True,
+        "selected_account_id": selected_account_id,
+        "account_ids": list(created_account_ids.values()),
+        "message": "데모 계좌와 샘플 거래 데이터를 만들었습니다.",
+    }
+
+
 def _activate_sqlite(reason: str) -> None:
     sqlite_db.initialize_database()
     _set_backend(BACKEND_SQLITE, reason)
@@ -239,6 +343,107 @@ def _build_headers() -> dict[str, str]:
 
 def now_iso() -> str:
     return datetime.utcnow().replace(microsecond=0).isoformat()
+
+
+def _today_iso_date() -> str:
+    """오늘 날짜를 ISO 형식으로 반환한다."""
+
+    return datetime.utcnow().date().isoformat()
+
+
+def _demo_workspace_blueprint() -> dict[str, Any]:
+    """데모 모드에서 생성할 샘플 계좌와 거래 구성을 반환한다."""
+
+    snapshot_date = _today_iso_date()
+    return {
+        "accounts": (
+            {
+                "name": "데모 IRP",
+                "account_type": "retirement",
+                "opening_cash": 0.0,
+                "cash_flows": (
+                    {"flow_type": "personal_deposit", "amount": 6_000_000, "trade_date": "2026-01-10", "notes": "데모 개인 납입"},
+                    {"flow_type": "employer_deposit", "amount": 3_000_000, "trade_date": "2026-01-25", "notes": "데모 회사 납입"},
+                ),
+                "trades": (
+                    {
+                        "symbol": "360750",
+                        "product_name": "TIGER 미국S&P500",
+                        "trade_type": "buy",
+                        "asset_type": "risk",
+                        "quantity": 15,
+                        "price": 130_000,
+                        "trade_date": "2026-02-03",
+                        "notes": "데모 장기 적립",
+                    },
+                    {
+                        "symbol": "148070",
+                        "product_name": "KOSEF 국고채10년",
+                        "trade_type": "buy",
+                        "asset_type": "safe",
+                        "quantity": 25,
+                        "price": 110_000,
+                        "trade_date": "2026-02-14",
+                        "notes": "데모 채권 비중",
+                    },
+                ),
+                "interest": (
+                    {"interest_date": "2026-03-31", "amount": 18_500},
+                ),
+                "price_updates": {
+                    "360750": 142_000,
+                    "148070": 108_000,
+                },
+                "snapshot_date": snapshot_date,
+            },
+            {
+                "name": "데모 일반계좌",
+                "account_type": "brokerage",
+                "opening_cash": 0.0,
+                "cash_flows": (
+                    {"flow_type": "personal_deposit", "amount": 7_000_000, "trade_date": "2026-02-03", "notes": "데모 투자금 입금"},
+                    {"flow_type": "withdraw", "amount": 250_000, "trade_date": "2026-03-04", "notes": "데모 생활비 출금"},
+                ),
+                "trades": (
+                    {
+                        "symbol": "005930",
+                        "product_name": "삼성전자",
+                        "trade_type": "buy",
+                        "asset_type": "risk",
+                        "quantity": 20,
+                        "price": 82_000,
+                        "trade_date": "2026-02-11",
+                        "notes": "데모 국내 대형주",
+                    },
+                    {
+                        "symbol": "000660",
+                        "product_name": "SK하이닉스",
+                        "trade_type": "buy",
+                        "asset_type": "risk",
+                        "quantity": 10,
+                        "price": 210_000,
+                        "trade_date": "2026-02-18",
+                        "notes": "데모 반도체 비중",
+                    },
+                ),
+                "interest": (),
+                "price_updates": {
+                    "005930": 86_000,
+                    "000660": 198_000,
+                },
+                "snapshot_date": snapshot_date,
+            },
+        ),
+        "transfers": (
+            {
+                "from_account": "데모 일반계좌",
+                "to_account": "데모 IRP",
+                "amount": 400_000,
+                "trade_date": "2026-03-15",
+                "notes": "데모 자금 재배치",
+            },
+        ),
+    }
 
 
 def _normalize_cash_flow_type(flow_type: str) -> str:

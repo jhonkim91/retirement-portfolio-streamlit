@@ -39,6 +39,7 @@ list_trade_logs = _db.list_trade_logs
 record_account_transfer = _db.record_account_transfer
 record_cash_flow = _db.record_cash_flow
 record_trade = _db.record_trade
+seed_demo_workspace = _db.seed_demo_workspace
 set_holding_price = _db.set_holding_price
 backend_status = _db.backend_status
 
@@ -705,11 +706,14 @@ def auth_page() -> None:
 def empty_state() -> None:
     st.title("은퇴 포트폴리오")
     st.caption("완전히 분리된 별도 Streamlit 앱입니다. 먼저 계좌를 하나 만들면 시작할 수 있습니다.")
-    with st.form("create-first-account", clear_on_submit=True):
-        name = st.text_input("계좌 이름", placeholder="예: IRP, ISA, 미국주식")
-        account_type = st.selectbox("계좌 유형", ["retirement", "brokerage"], format_func=label_account_type)
-        opening_cash = st.number_input("시작 현금", min_value=0.0, value=0.0, step=100000.0)
-        submitted = st.form_submit_button("첫 계좌 만들기", use_container_width=True)
+    create_col, demo_col = st.columns((1.35, 1), gap="large")
+
+    with create_col:
+        with st.form("create-first-account", clear_on_submit=True):
+            name = st.text_input("계좌 이름", placeholder="예: IRP, ISA, 미국주식")
+            account_type = st.selectbox("계좌 유형", ["retirement", "brokerage"], format_func=label_account_type)
+            opening_cash = st.number_input("시작 현금", min_value=0.0, value=0.0, step=100000.0)
+            submitted = st.form_submit_button("첫 계좌 만들기", use_container_width=True)
     if submitted:
         try:
             account_id = create_account(name=name, account_type=account_type, opening_cash=opening_cash)
@@ -719,6 +723,28 @@ def empty_state() -> None:
             st.session_state["selected_account_id"] = account_id
             st.success("계좌를 만들었습니다.")
             st.rerun()
+
+    with demo_col:
+        with st.container(border=True):
+            st.subheader("데모 모드")
+            st.caption("실제 계좌 없이 화면 흐름을 빠르게 확인할 수 있도록 샘플 데이터를 불러옵니다.")
+            st.write("연금 계좌, 일반 계좌, 입금, 매수, 이자, 계좌 이동, 스냅샷 예시가 함께 생성됩니다.")
+            demo_submitted = st.button(
+                "데모 데이터 불러오기",
+                icon=":material/rocket_launch:",
+                use_container_width=True,
+                type="secondary",
+            )
+        if demo_submitted:
+            try:
+                result = seed_demo_workspace()
+            except ValueError as exc:
+                st.error(str(exc))
+            else:
+                st.session_state["selected_account_id"] = int(result["selected_account_id"])
+                st.session_state["active_page"] = PAGES[0]
+                st.success(str(result.get("message") or "데모 데이터를 준비했습니다."))
+                st.rerun()
 
 
 def sidebar(accounts: list[dict[str, Any]], selected_account_id: int | None, user: dict[str, Any]) -> tuple[int, str]:
