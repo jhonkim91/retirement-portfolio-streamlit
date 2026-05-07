@@ -332,7 +332,14 @@ def _build_headers() -> dict[str, str]:
         raise RuntimeError("SUPABASE_URL 또는 SUPABASE_KEY 설정이 없습니다.")
 
     supabase_key = _supabase_key()
-    access_token = app_auth.get_access_token() or supabase_key
+    access_token = None
+    if app_auth.is_authenticated():
+        app_auth.refresh_session_state()
+        access_token = app_auth.get_access_token()
+        if not access_token:
+            raise RuntimeError("로그인 세션 토큰을 확인하지 못했습니다. 다시 로그인한 뒤 시도해 주세요.")
+    else:
+        access_token = supabase_key
     return {
         "apikey": supabase_key,
         "Authorization": f"Bearer {access_token}",
@@ -547,6 +554,10 @@ def _fallback_reason(exc: Exception) -> str:
 
 
 def _should_fallback(exc: Exception) -> bool:
+    if isinstance(exc, requests.HTTPError) and exc.response is not None:
+        if exc.response.status_code in {401, 403}:
+            return False
+
     if isinstance(exc, (RuntimeError, requests.RequestException)):
         return True
 
