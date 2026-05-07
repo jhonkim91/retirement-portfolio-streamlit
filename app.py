@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 from datetime import date
 from typing import Any
 
@@ -16,7 +17,11 @@ from src.analytics import (
 
 import src.auth as app_auth
 import src.db as _db
-from src.market import fetch_latest_price, search_products
+import src.market as market_module
+
+market_module = importlib.reload(market_module)
+fetch_latest_price = market_module.fetch_latest_price
+search_products = getattr(market_module, "search_products", lambda query, limit=8: [])
 
 create_account = _db.create_account
 export_dataframe_rows = _db.export_dataframe_rows
