@@ -14,6 +14,7 @@ from src.analytics import (
     realized_summary,
 )
 
+import src.auth as app_auth
 import src.db as _db
 from src.market import fetch_latest_price
 
@@ -56,6 +57,7 @@ def metric_delta(value: Any) -> str:
 def init_state() -> None:
     st.session_state.setdefault("selected_account_id", None)
     st.session_state.setdefault("active_page", PAGES[0])
+    st.session_state.setdefault("auth_mode", "sign-in")
 
 
 def account_label(account: dict[str, Any]) -> str:
@@ -160,6 +162,48 @@ def show_holdings_table(frame: pd.DataFrame, *, height: int = 420) -> None:
     st.dataframe(display, use_container_width=True, hide_index=True, height=height)
 
 
+def auth_page() -> None:
+    st.title("Retirement Portfolio Streamlit")
+    st.caption("Sign in to keep each user's portfolio separate.")
+
+    sign_in_tab, sign_up_tab = st.tabs(["Sign in", "Create account"])
+
+    with sign_in_tab:
+        with st.form("sign-in-form", clear_on_submit=False):
+            email = st.text_input("Email", key="sign-in-email")
+            password = st.text_input("Password", type="password", key="sign-in-password")
+            submitted = st.form_submit_button("Sign in", use_container_width=True)
+        if submitted:
+            try:
+                app_auth.sign_in(email=email, password=password)
+            except Exception as exc:  # noqa: BLE001
+                st.error(str(exc))
+            else:
+                st.success("Signed in successfully.")
+                st.rerun()
+
+    with sign_up_tab:
+        with st.form("sign-up-form", clear_on_submit=False):
+            email = st.text_input("Email", key="sign-up-email")
+            password = st.text_input("Password", type="password", key="sign-up-password")
+            confirm_password = st.text_input("Confirm password", type="password", key="sign-up-password-confirm")
+            submitted = st.form_submit_button("Create account", use_container_width=True)
+        if submitted:
+            if password != confirm_password:
+                st.error("Passwords do not match.")
+            else:
+                try:
+                    response = app_auth.sign_up(email=email, password=password)
+                except Exception as exc:  # noqa: BLE001
+                    st.error(str(exc))
+                else:
+                    if getattr(response, "session", None):
+                        st.success("Account created and signed in.")
+                        st.rerun()
+                    else:
+                        st.info("Account created. If email confirmation is enabled, verify your email and then sign in.")
+
+
 def empty_state() -> None:
     st.title("Retirement Portfolio Streamlit")
     st.caption("완전히 분리된 별도 Streamlit 앱입니다. 먼저 계좌를 하나 만들면 시작할 수 있습니다.")
@@ -179,7 +223,7 @@ def empty_state() -> None:
             st.rerun()
 
 
-def sidebar(accounts: list[dict[str, Any]], selected_account_id: int | None) -> tuple[int, str]:
+def sidebar(accounts: list[dict[str, Any]], selected_account_id: int | None, user: dict[str, Any]) -> tuple[int, str]:
     account_ids = [int(account["id"]) for account in accounts]
     if selected_account_id not in account_ids:
         selected_account_id = account_ids[0]
@@ -187,6 +231,14 @@ def sidebar(accounts: list[dict[str, Any]], selected_account_id: int | None) -> 
 
     with st.sidebar:
         st.title("Workspace")
+        user_label = user.get("email") or user.get("id") or "Signed in"
+        st.caption(f"Signed in as `{user_label}`")
+        if st.button("Sign out", use_container_width=True):
+            app_auth.sign_out()
+            st.session_state["selected_account_id"] = None
+            st.rerun()
+        st.divider()
+
         selected_account_id = st.selectbox(
             "계좌",
             options=account_ids,
@@ -481,11 +533,21 @@ def data_page() -> None:
 
 
 def main() -> None:
-    initialize_database()
     init_state()
+    if not app_auth.is_enabled():
+        st.error("Supabase Auth is not configured. Add SUPABASE_URL and SUPABASE_KEY to Streamlit secrets.")
+        return
+
+    app_auth.refresh_session_state()
+    user = app_auth.get_user()
+    if not user:
+        auth_page()
+        return
+
+    initialize_database()
     status = backend_status()
     if status["name"] == "sqlite":
-        message = "Storage backend: local SQLite fallback."
+        message = "Storage backend: local SQLite fallback. This fallback is temporary and can be reset by redeploys."
         if status["reason"]:
             message = f"{message} {status['reason']}"
         st.warning(message)
@@ -496,7 +558,7 @@ def main() -> None:
         empty_state()
         return
 
-    selected_account_id, active_page = sidebar(accounts, st.session_state.get("selected_account_id"))
+    selected_account_id, active_page = sidebar(accounts, st.session_state.get("selected_account_id"), user)
     account = get_account(int(selected_account_id))
     if not account:
         st.session_state["selected_account_id"] = None
