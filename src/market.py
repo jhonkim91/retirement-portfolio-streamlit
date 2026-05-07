@@ -390,7 +390,6 @@ def get_funetf_product_by_code(code: str) -> dict[str, Any] | None:
         return None
 
 
-@st.cache_data(ttl=600, show_spinner=False)
 def search_products(query: str, limit: int = 8) -> list[dict[str, Any]]:
     cleaned_query = clean_code(query)
     if len(cleaned_query) < 2:
