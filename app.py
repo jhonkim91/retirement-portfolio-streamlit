@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import html
 import importlib
 from datetime import date
 from typing import Any
@@ -274,6 +275,167 @@ def init_state() -> None:
     st.session_state.setdefault(TRANSFER_NOTES_KEY, "")
 
 
+def inject_app_styles() -> None:
+    """대시보드 중심 UI 정리를 위한 앱 전역 스타일을 주입한다."""
+
+    st.markdown(
+        """
+        <style>
+        :root {
+            --surface: rgba(255, 255, 255, 0.88);
+            --surface-strong: rgba(255, 255, 255, 0.96);
+            --line-soft: rgba(15, 23, 42, 0.08);
+            --text-muted: #526072;
+            --ink-strong: #0f172a;
+            --brand-deep: #103b42;
+            --brand-accent: #d97706;
+            --status-good: #0f766e;
+            --status-warn: #b45309;
+        }
+
+        .stApp {
+            background:
+                radial-gradient(circle at top left, rgba(214, 232, 231, 0.65), transparent 24rem),
+                linear-gradient(180deg, #f4f7f6 0%, #eef3f2 45%, #f7f8f7 100%);
+        }
+
+        .block-container {
+            padding-top: 1.6rem;
+            padding-bottom: 3rem;
+        }
+
+        [data-testid="stSidebar"] {
+            background: linear-gradient(180deg, #ecf5f2 0%, #e4eeea 100%);
+            border-right: 1px solid rgba(15, 23, 42, 0.08);
+        }
+
+        [data-testid="stSidebar"] [data-testid="stVerticalBlock"] > div:has(> [data-testid="stMarkdownContainer"]) {
+            gap: 0.35rem;
+        }
+
+        [data-testid="stMetric"] {
+            background: var(--surface-strong);
+            border: 1px solid var(--line-soft);
+            border-radius: 18px;
+            padding: 0.95rem 1rem;
+            box-shadow: 0 12px 30px rgba(15, 23, 42, 0.04);
+        }
+
+        [data-testid="stMetricLabel"] {
+            color: var(--text-muted);
+            font-weight: 600;
+        }
+
+        [data-testid="stMetricValue"] {
+            color: var(--ink-strong);
+        }
+
+        [data-testid="stButton"] > button,
+        [data-testid="stDownloadButton"] > button {
+            border-radius: 999px;
+            border: 1px solid rgba(16, 59, 66, 0.18);
+        }
+
+        [data-testid="stForm"] {
+            background: transparent;
+        }
+
+        .page-context {
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.92), rgba(242, 247, 246, 0.98));
+            border: 1px solid var(--line-soft);
+            border-radius: 22px;
+            padding: 1rem 1.1rem;
+            margin-bottom: 1rem;
+            box-shadow: 0 12px 30px rgba(15, 23, 42, 0.04);
+        }
+
+        .page-context__eyebrow {
+            font-size: 0.76rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            margin-bottom: 0.7rem;
+            font-weight: 700;
+        }
+
+        .page-context__grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 0.75rem;
+        }
+
+        .page-context__pill {
+            background: rgba(247, 249, 248, 0.95);
+            border: 1px solid rgba(15, 23, 42, 0.07);
+            border-radius: 16px;
+            padding: 0.85rem 0.95rem;
+        }
+
+        .page-context__label {
+            font-size: 0.78rem;
+            color: var(--text-muted);
+            margin-bottom: 0.3rem;
+        }
+
+        .page-context__value {
+            font-size: 1rem;
+            font-weight: 700;
+            color: var(--ink-strong);
+        }
+
+        .page-context__value--good {
+            color: var(--status-good);
+        }
+
+        .page-context__value--warn {
+            color: var(--status-warn);
+        }
+
+        .dashboard-hero {
+            background: linear-gradient(145deg, rgba(255, 255, 255, 0.96), rgba(241, 246, 245, 0.98));
+            border: 1px solid var(--line-soft);
+            border-radius: 24px;
+            padding: 1.35rem 1.4rem;
+            box-shadow: 0 14px 34px rgba(15, 23, 42, 0.04);
+        }
+
+        .dashboard-hero__eyebrow {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-bottom: 0.45rem;
+            font-weight: 700;
+        }
+
+        .dashboard-hero__title {
+            font-size: clamp(1.8rem, 2.6vw, 2.6rem);
+            line-height: 1.1;
+            font-weight: 800;
+            color: var(--brand-deep);
+            margin: 0;
+        }
+
+        .dashboard-hero__subtitle {
+            margin-top: 0.5rem;
+            color: var(--text-muted);
+            font-size: 0.98rem;
+        }
+
+        .dashboard-note {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+
+        @media (max-width: 860px) {
+            .page-context__grid {
+                grid-template-columns: 1fr;
+            }
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def set_auth_feedback(level: str, message: str) -> None:
     st.session_state[AUTH_FEEDBACK_KEY] = {
         "level": str(level or "info"),
@@ -340,6 +502,38 @@ def handle_auth_callback() -> bool:
 def account_label(account: dict[str, Any]) -> str:
     account_type = label_account_type(account.get("account_type") or "retirement")
     return f"{account['name']} | {account_type}"
+
+
+def render_page_context(account: dict[str, Any], active_page: str, status: dict[str, Any]) -> None:
+    """본문 상단에 현재 계좌와 페이지 맥락을 요약해서 보여준다."""
+
+    storage_name = "Supabase" if status["name"] == "supabase" else "로컬 SQLite"
+    storage_class = "page-context__value--good" if status["name"] == "supabase" else "page-context__value--warn"
+    account_value = html.escape(account_label(account))
+    page_value = html.escape(label_page(active_page))
+    storage_value = html.escape(storage_name)
+    st.markdown(
+        f"""
+        <div class="page-context">
+            <div class="page-context__eyebrow">Workspace Context</div>
+            <div class="page-context__grid">
+                <div class="page-context__pill">
+                    <div class="page-context__label">현재 계좌</div>
+                    <div class="page-context__value">{account_value}</div>
+                </div>
+                <div class="page-context__pill">
+                    <div class="page-context__label">현재 페이지</div>
+                    <div class="page-context__value">{page_value}</div>
+                </div>
+                <div class="page-context__pill">
+                    <div class="page-context__label">저장소 상태</div>
+                    <div class="page-context__value {storage_class}">{storage_value}</div>
+                </div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def refresh_prices(holdings: list[dict[str, Any]]) -> tuple[int, list[str]]:
@@ -536,44 +730,57 @@ def sidebar(accounts: list[dict[str, Any]], selected_account_id: int | None, use
     with st.sidebar:
         st.title("내 작업공간")
         user_label = user.get("email") or user.get("id") or "로그인 사용자"
-        st.caption(f"로그인 계정: `{user_label}`")
-        if st.button("로그아웃", use_container_width=True):
-            app_auth.sign_out()
-            st.session_state["selected_account_id"] = None
-            st.rerun()
-        st.divider()
+        st.caption("계좌 맥락과 이동 흐름을 한 곳에서 관리합니다.")
 
-        selected_account_id = st.selectbox(
-            "계좌",
-            options=account_ids,
-            index=account_ids.index(selected_account_id),
-            format_func=lambda account_id: account_label(next(account for account in accounts if int(account["id"]) == account_id)),
-        )
-        st.session_state["selected_account_id"] = selected_account_id
+        with st.container(border=True):
+            st.caption("로그인 계정")
+            st.write(f"`{user_label}`")
+            st.caption(f"열려 있는 페이지: `{label_page(st.session_state.get('active_page', PAGES[0]))}`")
+            if st.button("로그아웃", use_container_width=True):
+                app_auth.sign_out()
+                st.session_state["selected_account_id"] = None
+                st.rerun()
 
-        active_page = st.radio(
-            "페이지",
-            PAGES,
-            index=PAGES.index(st.session_state.get("active_page", PAGES[0])),
-            format_func=label_page,
-        )
-        st.session_state["active_page"] = active_page
+        with st.container(border=True):
+            st.caption("보고 있는 계좌")
+            selected_account_id = st.selectbox(
+                "계좌",
+                options=account_ids,
+                index=account_ids.index(selected_account_id),
+                format_func=lambda account_id: account_label(next(account for account in accounts if int(account["id"]) == account_id)),
+            )
+            st.session_state["selected_account_id"] = selected_account_id
+            selected_account = next(account for account in accounts if int(account["id"]) == int(selected_account_id))
+            st.caption(f"선택 계좌: `{selected_account['name']}`")
+            st.caption(f"계좌 유형: `{label_account_type(selected_account['account_type'])}`")
 
-        st.divider()
-        with st.expander("새 계좌 만들기", expanded=False):
-            with st.form("new-account-form", clear_on_submit=True):
-                name = st.text_input("계좌 이름")
-                account_type = st.selectbox("유형", ["retirement", "brokerage"], format_func=label_account_type, key="new-account-type")
-                opening_cash = st.number_input("시작 현금", min_value=0.0, value=0.0, step=100000.0, key="new-account-cash")
-                submitted = st.form_submit_button("계좌 추가", use_container_width=True)
-            if submitted:
-                try:
-                    create_account(name=name, account_type=account_type, opening_cash=opening_cash)
-                except ValueError as exc:
-                    st.error(str(exc))
-                else:
-                    st.success("계좌를 추가했습니다.")
-                    st.rerun()
+        with st.container(border=True):
+            st.caption("페이지 이동")
+            active_page = st.radio(
+                "페이지",
+                PAGES,
+                index=PAGES.index(st.session_state.get("active_page", PAGES[0])),
+                format_func=label_page,
+            )
+            st.session_state["active_page"] = active_page
+            st.caption(f"현재 보기: `{label_page(active_page)}`")
+
+        with st.container(border=True):
+            st.caption("새 계좌 만들기")
+            with st.expander("입력 열기", expanded=False):
+                with st.form("new-account-form", clear_on_submit=True):
+                    name = st.text_input("계좌 이름")
+                    account_type = st.selectbox("유형", ["retirement", "brokerage"], format_func=label_account_type, key="new-account-type")
+                    opening_cash = st.number_input("시작 현금", min_value=0.0, value=0.0, step=100000.0, key="new-account-cash")
+                    submitted = st.form_submit_button("계좌 추가", use_container_width=True)
+                if submitted:
+                    try:
+                        create_account(name=name, account_type=account_type, opening_cash=opening_cash)
+                    except ValueError as exc:
+                        st.error(str(exc))
+                    else:
+                        st.success("계좌를 추가했습니다.")
+                        st.rerun()
 
     return selected_account_id, st.session_state["active_page"]
 
@@ -583,38 +790,97 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]]) -> N
     summary = account_summary(account, holdings)
     interest_rows = list_daily_interest(int(account["id"]))
     total_interest = sum(float(row.get("interest_amount") or 0) for row in interest_rows)
+    latest_interest_date = latest_date_text(interest_rows, "date")
+    holdings_count = int(len(frame.index)) if not frame.empty else 0
+    account_name = html.escape(str(account["name"]))
+    account_type = html.escape(label_account_type(account["account_type"]))
 
-    st.title(account["name"])
-    st.caption(f"계좌 유형: `{label_account_type(account['account_type'])}`")
+    hero_col, status_col = st.columns((1.45, 1), gap="large")
+    with hero_col:
+        st.markdown(
+            f"""
+            <div class="dashboard-hero">
+                <div class="dashboard-hero__eyebrow">Dashboard</div>
+                <h1 class="dashboard-hero__title">{account_name}</h1>
+                <div class="dashboard-hero__subtitle">
+                    계좌 유형 <strong>{account_type}</strong> ·
+                    오늘 기준 핵심 자산 상태를 빠르게 훑어볼 수 있습니다.
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    with status_col:
+        with st.container(border=True):
+            st.subheader("핵심 상태")
+            status_metric_left, status_metric_right = st.columns(2)
+            status_metric_left.metric("보유 종목", f"{holdings_count:,}개")
+            status_metric_right.metric("최근 이자 적립", latest_interest_date if latest_interest_date != "-" else "미적립")
+            st.caption("핵심 카드와 아래 분석 섹션은 같은 계좌 기준으로 동기화됩니다.")
 
-    metric_1, metric_2, metric_3, metric_4, metric_5 = st.columns(5)
-    metric_1.metric("포트폴리오 평가액", format_won(summary["total_value"]))
-    metric_2.metric("투입 원금", format_won(summary["total_cost"]))
-    metric_3.metric("평가 손익", format_won(summary["profit_loss"]), metric_delta(summary["profit_loss"]))
-    metric_4.metric("현금", format_won(summary["cash"]))
-    metric_5.metric("누적 이자", format_won(total_interest))
+    st.caption("핵심 지표")
+    primary_metric_left, primary_metric_right = st.columns(2, gap="large")
+    primary_metric_left.metric("포트폴리오 평가액", format_won(summary["total_value"]))
+    primary_metric_right.metric("평가 손익", format_won(summary["profit_loss"]), metric_delta(summary["profit_loss"]))
 
-    top_left, top_right = st.columns((1, 1), gap="large")
-    with top_left:
-        st.subheader("자산 배분")
-        chart = allocation_chart(summary)
-        if chart is None:
-            st.info("배분을 그릴 데이터가 아직 없습니다.")
-        else:
-            st.altair_chart(chart, use_container_width=True)
+    secondary_metric_1, secondary_metric_2, secondary_metric_3 = st.columns(3, gap="large")
+    secondary_metric_1.metric("투입 원금", format_won(summary["total_cost"]))
+    secondary_metric_2.metric("현금", format_won(summary["cash"]))
+    secondary_metric_3.metric("누적 이자", format_won(total_interest))
 
-        st.subheader("현금 조정")
-        with st.form("cash-adjustment-form"):
-            amount = st.number_input("목표 현금 잔액", min_value=0.0, value=float(account["cash_balance"] or 0), step=100000.0)
-            adjustment_date = st.date_input("조정 기준일", value=date.today(), key=f"cash-adjustment-date:{account['id']}")
-            adjustment_notes = st.text_area(
-                "조정 사유",
-                height=80,
-                key=f"cash-adjustment-notes:{account['id']}",
-                placeholder="예: 외부 계좌에서 별도 입금했던 현금 맞춤",
-            )
-            submitted = st.form_submit_button("현금 조정 기록", use_container_width=True)
-        if submitted:
+    overview_left, overview_right = st.columns((1, 1), gap="large")
+    with overview_left:
+        with st.container(border=True):
+            st.subheader("자산 배분")
+            st.caption("위험자산, 안전자산, 현금 비중을 빠르게 확인합니다.")
+            chart = allocation_chart(summary)
+            if chart is None:
+                st.info("배분을 그릴 데이터가 아직 없습니다.")
+            else:
+                st.altair_chart(chart, use_container_width=True)
+
+    with overview_right:
+        with st.container(border=True):
+            st.subheader("보유 종목 수익률")
+            st.caption("현재 보유 상위 종목의 수익률 흐름을 우선 확인합니다.")
+            chart = holdings_bar_chart(frame)
+            if chart is None:
+                st.info("보유 종목이 없어 수익률 차트를 그릴 수 없습니다.")
+            else:
+                st.altair_chart(chart, use_container_width=True)
+
+    action_col, cash_col = st.columns((1.15, 0.95), gap="large")
+    with action_col:
+        with st.container(border=True):
+            st.subheader("시장 업데이트")
+            st.caption("가격 갱신과 코드 입력 규칙을 한 영역에서 정리했습니다.")
+            if holdings:
+                if st.button("현재가 새로고침", use_container_width=True):
+                    updated, errors = refresh_prices(holdings)
+                    if updated:
+                        st.success(f"{updated}개 종목 가격을 갱신했습니다.")
+                    if errors:
+                        st.warning("\n".join(errors))
+                    st.rerun()
+            else:
+                st.info("보유 종목이 생기면 여기서 현재가를 한 번에 갱신할 수 있습니다.")
+            st.caption("숫자만 입력한 6자리 한국 종목 코드는 자동으로 `.KS`를 붙여 조회합니다. 코스닥/ETF 등은 필요하면 직접 야후 파이낸스 심볼을 넣어 주세요.")
+
+    with cash_col:
+        with st.container(border=True):
+            st.subheader("현금 조정")
+            st.caption("관리성 작업이므로 차트 영역과 분리해 조용한 톤으로 유지합니다.")
+            with st.form("cash-adjustment-form"):
+                amount = st.number_input("목표 현금 잔액", min_value=0.0, value=float(account["cash_balance"] or 0), step=100000.0)
+                adjustment_date = st.date_input("조정 기준일", value=date.today(), key=f"cash-adjustment-date:{account['id']}")
+                adjustment_notes = st.text_area(
+                    "조정 사유",
+                    height=80,
+                    key=f"cash-adjustment-notes:{account['id']}",
+                    placeholder="예: 외부 계좌에서 별도 입금했던 현금 맞춤",
+                )
+                adjustment_submitted = st.form_submit_button("현금 조정 기록", use_container_width=True)
+        if adjustment_submitted:
             try:
                 adjust_cash_balance(
                     int(account["id"]),
@@ -628,128 +894,119 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]]) -> N
                 st.success("현금 조정을 기록했습니다.")
                 st.rerun()
 
-    with top_right:
-        st.subheader("보유 종목 수익률")
-        chart = holdings_bar_chart(frame)
-        if chart is None:
-            st.info("보유 종목이 없어 수익률 차트를 그릴 수 없습니다.")
+    with st.container(border=True):
+        st.subheader("현재 보유 종목")
+        st.caption("계좌 전체 포지션을 표로 읽고, 이후 아래 추이 차트와 이어서 확인합니다.")
+        show_holdings_table(frame, height=360)
+
+    with st.container(border=True):
+        trend_title_col, period_col = st.columns((1.2, 1), gap="large")
+        with trend_title_col:
+            st.subheader("추이")
+            st.caption("총자산 흐름을 먼저 보고, 이어서 종목별 비교를 같은 섹션에서 확인합니다.")
+        with period_col:
+            period = st.segmented_control(
+                "기간",
+                options=["1mo", "3mo", "6mo", "1y"],
+                format_func=label_period,
+                default="6mo",
+                key=f"trend-period:{account['id']}",
+            )
+        snapshot_rows = list_account_snapshots(int(account["id"]), start_date=period_start_date(period).isoformat())
+        snapshot_frame = snapshot_trend_frame(snapshot_rows)
+        portfolio_trend, holding_trend = build_portfolio_trend(holdings, period=period)
+        trend_source = snapshot_frame if not snapshot_frame.empty else portfolio_trend
+        if trend_source.empty:
+            st.info("추이 데이터가 아직 없습니다. 일별 스냅샷이 쌓이기 전에는 보유 종목 시세 이력도 함께 필요합니다.")
+            return
+
+        if not snapshot_frame.empty:
+            trend_chart = (
+                alt.Chart(trend_source)
+                .mark_line(point=True, strokeWidth=3)
+                .encode(
+                    x=alt.X("date:T", title="날짜"),
+                    y=alt.Y("total_value:Q", title="포트폴리오 총자산"),
+                    tooltip=[
+                        alt.Tooltip("date:T", title="날짜"),
+                        alt.Tooltip("total_value:Q", title="총자산", format=",.0f"),
+                        alt.Tooltip("market_value:Q", title="평가금액", format=",.0f"),
+                        alt.Tooltip("cash_balance:Q", title="현금", format=",.0f"),
+                    ],
+                )
+            )
         else:
-            st.altair_chart(chart, use_container_width=True)
-
-    action_col_1, action_col_2 = st.columns((1, 2), gap="large")
-    with action_col_1:
-        if st.button("현재가 새로고침", use_container_width=True):
-            updated, errors = refresh_prices(holdings)
-            if updated:
-                st.success(f"{updated}개 종목 가격을 갱신했습니다.")
-            if errors:
-                st.warning("\n".join(errors))
-            st.rerun()
-
-    with action_col_2:
-        st.caption("숫자만 입력한 6자리 한국 종목 코드는 자동으로 `.KS`를 붙여 조회합니다. 코스닥/ETF 등은 필요하면 직접 야후 파이낸스 심볼을 넣어 주세요.")
-
-    st.subheader("현재 보유 종목")
-    show_holdings_table(frame, height=360)
-
-    st.subheader("추이")
-    period = st.segmented_control(
-        "기간",
-        options=["1mo", "3mo", "6mo", "1y"],
-        format_func=label_period,
-        default="6mo",
-        key=f"trend-period:{account['id']}",
-    )
-    snapshot_rows = list_account_snapshots(int(account["id"]), start_date=period_start_date(period).isoformat())
-    snapshot_frame = snapshot_trend_frame(snapshot_rows)
-    portfolio_trend, holding_trend = build_portfolio_trend(holdings, period=period)
-    trend_source = snapshot_frame if not snapshot_frame.empty else portfolio_trend
-    if trend_source.empty:
-        st.info("추이 데이터가 아직 없습니다. 일별 스냅샷이 쌓이기 전에는 보유 종목 시세 이력도 함께 필요합니다.")
-        return
-
-    if not snapshot_frame.empty:
-        trend_chart = (
-            alt.Chart(trend_source)
-            .mark_line(point=True, strokeWidth=3)
-            .encode(
-                x=alt.X("date:T", title="날짜"),
-                y=alt.Y("total_value:Q", title="포트폴리오 총자산"),
-                tooltip=[
-                    alt.Tooltip("date:T", title="날짜"),
-                    alt.Tooltip("total_value:Q", title="총자산", format=",.0f"),
-                    alt.Tooltip("market_value:Q", title="평가금액", format=",.0f"),
-                    alt.Tooltip("cash_balance:Q", title="현금", format=",.0f"),
-                ],
+            trend_chart = (
+                alt.Chart(trend_source)
+                .mark_line(point=True, strokeWidth=3)
+                .encode(
+                    x=alt.X("date:T", title="날짜"),
+                    y=alt.Y("market_value:Q", title="포트폴리오 평가액"),
+                    tooltip=[
+                        alt.Tooltip("date:T", title="날짜"),
+                        alt.Tooltip("market_value:Q", title="평가금액", format=",.0f"),
+                        alt.Tooltip("profit_rate:Q", title="수익률 (%)", format=".2f"),
+                    ],
+                )
             )
+        st.altair_chart(trend_chart, use_container_width=True)
+
+        if not snapshot_frame.empty:
+            st.caption("일별 스냅샷 기준 추이를 보여주고 있습니다.")
+
+        if holding_trend.empty:
+            st.info("종목별 비교 추이는 아직 준비되지 않았습니다.")
+            return
+
+        latest_names = (
+            holding_trend.sort_values(["date", "market_value"], ascending=[True, False])
+            .groupby("product_name", as_index=False)
+            .tail(1)["product_name"]
+            .tolist()
         )
-    else:
-        trend_chart = (
-            alt.Chart(trend_source)
-            .mark_line(point=True, strokeWidth=3)
-            .encode(
-                x=alt.X("date:T", title="날짜"),
-                y=alt.Y("market_value:Q", title="포트폴리오 평가액"),
-                tooltip=[
-                    alt.Tooltip("date:T", title="날짜"),
-                    alt.Tooltip("market_value:Q", title="평가금액", format=",.0f"),
-                    alt.Tooltip("profit_rate:Q", title="수익률 (%)", format=".2f"),
-                ],
+        if not latest_names:
+            st.info("종목별 비교 추이는 아직 준비되지 않았습니다.")
+            return
+
+        st.divider()
+        selection_col, measure_col = st.columns((1.45, 1), gap="large")
+        with selection_col:
+            selected_names = st.multiselect(
+                "비교할 종목",
+                options=latest_names,
+                default=latest_names[:3],
+                key=f"trend-selection:{account['id']}",
             )
-        )
-    st.altair_chart(trend_chart, use_container_width=True)
-
-    if not snapshot_frame.empty:
-        st.caption("일별 자산 스냅샷 기준 추이를 표시하고 있습니다.")
-
-    if holding_trend.empty:
-        st.info("종목별 비교 추이는 아직 준비되지 않았습니다.")
-        return
-
-    latest_names = (
-        holding_trend.sort_values(["date", "market_value"], ascending=[True, False])
-        .groupby("product_name", as_index=False)
-        .tail(1)["product_name"]
-        .tolist()
-    )
-    if not latest_names:
-        st.info("종목별 비교 추이는 아직 준비되지 않았습니다.")
-        return
-
-    selected_names = st.multiselect(
-        "비교할 종목",
-        options=latest_names,
-        default=latest_names[:3],
-        key=f"trend-selection:{account['id']}",
-    )
-    if selected_names:
-        detail_measure = st.segmented_control(
-            "비교 지표",
-            options=["market_value", "profit_rate", "close"],
-            format_func=label_detail_measure,
-            default="market_value",
-            key=f"detail-measure:{account['id']}",
-        )
-        detail_frame = holding_trend[holding_trend["product_name"].isin(selected_names)].copy()
-        detail_chart = (
-            alt.Chart(detail_frame)
-            .mark_line(strokeWidth=2.5)
-            .encode(
-                x=alt.X("date:T", title="날짜"),
-                y=alt.Y(f"{detail_measure}:Q", title=label_detail_measure(detail_measure)),
-                color=alt.Color("product_name:N", title="종목"),
-                tooltip=[
-                    alt.Tooltip("product_name:N", title="종목"),
-                    alt.Tooltip("date:T", title="날짜"),
-                    alt.Tooltip(f"{detail_measure}:Q", title=label_detail_measure(detail_measure), format=",.2f"),
-                ],
+        with measure_col:
+            detail_measure = st.segmented_control(
+                "비교 지표",
+                options=["market_value", "profit_rate", "close"],
+                format_func=label_detail_measure,
+                default="market_value",
+                key=f"detail-measure:{account['id']}",
             )
-        )
-        st.altair_chart(detail_chart, use_container_width=True)
+        if selected_names:
+            detail_frame = holding_trend[holding_trend["product_name"].isin(selected_names)].copy()
+            detail_chart = (
+                alt.Chart(detail_frame)
+                .mark_line(strokeWidth=2.5)
+                .encode(
+                    x=alt.X("date:T", title="날짜"),
+                    y=alt.Y(f"{detail_measure}:Q", title=label_detail_measure(detail_measure)),
+                    color=alt.Color("product_name:N", title="종목"),
+                    tooltip=[
+                        alt.Tooltip("product_name:N", title="종목"),
+                        alt.Tooltip("date:T", title="날짜"),
+                        alt.Tooltip(f"{detail_measure}:Q", title=label_detail_measure(detail_measure), format=",.2f"),
+                    ],
+                )
+            )
+            st.altair_chart(detail_chart, use_container_width=True)
 
 
 def trade_entry_page(account: dict[str, Any], holdings: list[dict[str, Any]], accounts: list[dict[str, Any]]) -> None:
     st.title("거래")
+    st.caption("매수/매도, 현금 흐름, 계좌 간 이체를 한 화면에서 이어서 기록합니다.")
     left, right = st.columns((1, 1), gap="large")
 
     with left:
@@ -988,7 +1245,7 @@ def trade_entry_page(account: dict[str, Any], holdings: list[dict[str, Any]], ac
 
 def data_page(account: dict[str, Any]) -> None:
     st.title("데이터")
-    st.caption("현재 앱에서 사용하는 데이터를 CSV로 내려받을 수 있습니다.")
+    st.caption("운영 상태 확인과 원본 데이터 CSV 내보내기를 한 곳에서 처리합니다.")
 
     account_id = int(account["id"])
     status = backend_status()
@@ -1042,6 +1299,7 @@ def data_page(account: dict[str, Any]) -> None:
 
 def main() -> None:
     init_state()
+    inject_app_styles()
     if not app_auth.is_enabled():
         st.error("Supabase 인증이 설정되지 않았습니다. Streamlit secrets에 SUPABASE_URL 과 SUPABASE_KEY 를 넣어 주세요.")
         return
@@ -1075,6 +1333,7 @@ def main() -> None:
         st.session_state["selected_account_id"] = None
         st.rerun()
     holdings = list_holdings(int(account["id"]))
+    render_page_context(account, active_page, status)
 
     if active_page == "Dashboard":
         dashboard_page(account, holdings)
