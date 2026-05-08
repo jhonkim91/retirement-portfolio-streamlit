@@ -535,3 +535,22 @@ python -m unittest discover -s tests -p "test_*.py"
   - 결과: 테스트 30건 통과
 - 비고:
   - 이 수정은 카드 스타일/라벨은 유지하면서 렌더 방식만 안전하게 바꾸는 최소 패치다
+
+## 2026-05-08 커밋 푸시 및 배포 확인
+- 변경 파일:
+  - `Memory.md`
+- 변경 내용:
+  - `6d34396` `Refine Supabase rollup metrics and dashboard cards` 커밋을 `origin/main`에 푸시
+  - 첫 배포 반영 후 대시보드 카드 라벨(`입금 원금`, `보유 현금`, `현재 평가액`, `원금 대비 평가손익`, `원금 대비 수익률`)은 웹에 나타났지만 일부 카드 HTML이 그대로 노출되는 현상 확인
+  - `92a86d3` `Fix dashboard metric card rendering` 커밋으로 카드 렌더 방식을 개별 `st.markdown` 호출로 보정 후 다시 푸시
+- 검증:
+  - `git push origin main`
+  - `python scripts/verify_streamlit_deployment.py --page dashboard --expect-backend supabase --text-output artifacts\\web-dashboard-current.txt`
+  - `python scripts/verify_streamlit_deployment.py --page dashboard --expect-backend supabase --screenshot artifacts\\deploy-dashboard-current.png`
+  - `python scripts/verify_streamlit_deployment.py --page dashboard --expect-backend supabase --text-output artifacts\\deploy-final-check.txt --screenshot artifacts\\deploy-final-check.png`
+- 결과:
+  - 배포 텍스트 기준 새 카드 라벨은 웹에 반영됨
+  - `dashboard-metric-card__label`, `</div>` 같은 raw HTML 텍스트 노출은 보정 후 재현되지 않음
+  - 다만 배포 검증 스크린샷은 시점에 따라 대시보드 대신 로그인 폼이 본문에 잠시 보이는 등 세션/재렌더 타이밍 편차가 있어, 브라우저 수동 확인까지 하면 더 안전함
+- 비고:
+  - 현재 원격 최신 커밋은 `92a86d3`
