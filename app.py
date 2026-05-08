@@ -22,13 +22,13 @@ from src.analytics import (
     build_portfolio_trend,
     cumulative_contribution_frame,
     holdings_frame,
-    holdings_overview_frame,
     projected_today_interest,
     realized_summary,
     snapshot_trend_frame,
 )
 
 import src.auth as app_auth
+import src.analytics as analytics_module
 import src.db as _db
 import src.market as market_module
 
@@ -54,6 +54,38 @@ set_holding_price = _db.set_holding_price
 backend_status = _db.backend_status
 is_accounts_hotfix_error = _db.is_accounts_hotfix_error
 sync_account_rollup = _db.sync_account_rollup
+
+
+def holdings_overview_frame(
+    holdings: list[dict[str, Any]],
+    *,
+    selected_symbol: str | None = None,
+    limit: int = 10,
+) -> pd.DataFrame:
+    """개요 차트용 보유 종목 프레임을 호환성 있게 반환한다."""
+
+    helper = getattr(analytics_module, "holdings_overview_frame", None)
+    if callable(helper):
+        return helper(holdings, selected_symbol=selected_symbol, limit=limit)
+
+    frame = holdings_frame(holdings)
+    if frame.empty:
+        return frame
+
+    selected_key = str(selected_symbol or "").strip().upper()
+    working = frame.copy()
+    working["selection_symbol"] = working["symbol"].astype(str).str.strip().str.upper()
+    working = working.sort_values("current_value", ascending=False)
+
+    if selected_key and selected_key in set(working["selection_symbol"]):
+        selected_rows = working.loc[working["selection_symbol"] == selected_key].head(1)
+        other_rows = working.loc[working["selection_symbol"] != selected_key]
+        working = pd.concat([other_rows.head(max(limit - 1, 0)), selected_rows], ignore_index=True)
+    else:
+        working = working.head(limit).copy()
+
+    working["is_selected"] = working["selection_symbol"] == selected_key
+    return working
 
 
 st.set_page_config(

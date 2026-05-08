@@ -28,6 +28,7 @@
 - [x] 초기 화면 데모 접속 및 테스트 데이터 자동 준비
 - [x] 초기 화면 데모 버튼 무자격 증명 즉시 진입
 - [x] 자산 배분 수익률 하이라이트 연동
+- [x] 배포 ImportError 호환성 완화
 
 ## 프로젝트 유형
 - Python 프로젝트
@@ -757,3 +758,20 @@ python -m unittest discover -s tests -p "test_*.py"
   - headless Playwright 기준 Streamlit 재렌더 타이밍과 canvas click 재현성이 낮아 `트리맵 클릭 -> 선택 종목 캡션 변경` E2E는 부분 확인으로 남김
 - 참고:
   - 구현 방식은 `streamlit-echarts` 이벤트 반환 예시와 Apache ECharts 이벤트/visual mapping 개념을 참고해, 이벤트는 심볼 문자열만 반환하는 단순 패턴으로 맞춤
+
+## 2026-05-09 배포 ImportError 호환성 완화
+- 변경 파일:
+  - `app.py`
+  - `Memory.md`
+- 변경 내용:
+  - 배포 화면에서 `app.py`의 `from src.analytics import ... holdings_overview_frame ...` 구문이 ImportError로 중단되는 상황을 기준으로 import 경로를 완화
+  - `holdings_overview_frame`를 `src.analytics`에서 직접 이름 import하지 않고, `analytics_module`에서 `getattr()`로 조회한 뒤 없으면 `app.py` 내부 fallback 구현을 사용하도록 변경
+  - 이 변경으로 배포 런타임이 잠시 이전 `src.analytics` 심볼 집합을 보고 있어도 `app.py` import 단계에서 앱 전체가 죽지 않도록 방어
+- 검증:
+  - `python -m compileall app.py src scripts tests`
+  - `python -m unittest discover -s tests -p "test_*.py"`
+  - `python -m streamlit run app.py --server.port 8517 --server.headless true`
+  - 결과: 테스트 39건 통과, 로컬 health check `ok`
+- 비고:
+  - 이번 수정은 배포 장애를 우선 복구하기 위한 호환성 패치다
+  - `data/portfolio.db`는 이번 커밋에 포함하지 않음
