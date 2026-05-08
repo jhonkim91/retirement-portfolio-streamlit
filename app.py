@@ -360,86 +360,6 @@ def inject_app_styles() -> None:
             background: transparent;
         }
 
-        .page-context {
-            background: linear-gradient(135deg, rgba(255, 255, 255, 0.92), rgba(242, 247, 246, 0.98));
-            border: 1px solid var(--line-soft);
-            border-radius: 22px;
-            padding: 1rem 1.1rem;
-            margin-bottom: 1rem;
-            box-shadow: 0 12px 30px rgba(15, 23, 42, 0.04);
-        }
-
-        .page-context__eyebrow {
-            font-size: 0.76rem;
-            letter-spacing: 0.08em;
-            text-transform: uppercase;
-            color: var(--text-muted);
-            margin-bottom: 0.7rem;
-            font-weight: 700;
-        }
-
-        .page-context__grid {
-            display: grid;
-            grid-template-columns: repeat(3, minmax(0, 1fr));
-            gap: 0.75rem;
-        }
-
-        .page-context__pill {
-            background: rgba(247, 249, 248, 0.95);
-            border: 1px solid rgba(15, 23, 42, 0.07);
-            border-radius: 16px;
-            padding: 0.85rem 0.95rem;
-        }
-
-        .page-context__label {
-            font-size: 0.78rem;
-            color: var(--text-muted);
-            margin-bottom: 0.3rem;
-        }
-
-        .page-context__value {
-            font-size: 1rem;
-            font-weight: 700;
-            color: var(--ink-strong);
-        }
-
-        .page-context__value--good {
-            color: var(--status-good);
-        }
-
-        .page-context__value--warn {
-            color: var(--status-warn);
-        }
-
-        .dashboard-hero {
-            background: linear-gradient(145deg, rgba(255, 255, 255, 0.96), rgba(241, 246, 245, 0.98));
-            border: 1px solid var(--line-soft);
-            border-radius: 24px;
-            padding: 1.35rem 1.4rem;
-            box-shadow: 0 14px 34px rgba(15, 23, 42, 0.04);
-        }
-
-        .dashboard-hero__eyebrow {
-            font-size: 0.8rem;
-            color: var(--text-muted);
-            margin-bottom: 0.45rem;
-            font-weight: 700;
-        }
-
-        .dashboard-hero__title {
-            font-size: clamp(1.8rem, 2.6vw, 2.6rem);
-            line-height: 1.1;
-            font-weight: 800;
-            color: var(--brand-deep);
-            margin: 0;
-        }
-
-        .dashboard-hero__subtitle {
-            margin-top: 0.5rem;
-            color: var(--text-muted);
-            font-size: 0.98rem;
-        }
-
         .dashboard-note {
             color: var(--text-muted);
             font-size: 0.9rem;
@@ -531,10 +451,6 @@ def inject_app_styles() -> None:
         }
 
         @media (max-width: 860px) {
-            .page-context__grid {
-                grid-template-columns: 1fr;
-            }
-
             .dashboard-metric-strip {
                 grid-template-columns: repeat(2, minmax(0, 1fr));
             }
@@ -617,38 +533,6 @@ def handle_auth_callback() -> bool:
 def account_label(account: dict[str, Any]) -> str:
     account_type = label_account_type(account.get("account_type") or "retirement")
     return f"{account['name']} | {account_type}"
-
-
-def render_page_context(account: dict[str, Any], active_page: str, status: dict[str, Any]) -> None:
-    """본문 상단에 현재 계좌와 페이지 맥락을 요약해서 보여준다."""
-
-    storage_name = "Supabase" if status["name"] == "supabase" else "로컬 SQLite"
-    storage_class = "page-context__value--good" if status["name"] == "supabase" else "page-context__value--warn"
-    account_value = html.escape(account_label(account))
-    page_value = html.escape(label_page(active_page))
-    storage_value = html.escape(storage_name)
-    st.markdown(
-        f"""
-        <div class="page-context">
-            <div class="page-context__eyebrow">Workspace Context</div>
-            <div class="page-context__grid">
-                <div class="page-context__pill">
-                    <div class="page-context__label">현재 계좌</div>
-                    <div class="page-context__value">{account_value}</div>
-                </div>
-                <div class="page-context__pill">
-                    <div class="page-context__label">현재 페이지</div>
-                    <div class="page-context__value">{page_value}</div>
-                </div>
-                <div class="page-context__pill">
-                    <div class="page-context__label">저장소 상태</div>
-                    <div class="page-context__value {storage_class}">{storage_value}</div>
-                </div>
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
 
 
 def render_dashboard_metric_strip(cards: list[dict[str, str]]) -> None:
@@ -997,36 +881,6 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]], roll
         if float(summary["net_flow"] or 0)
         else 0.0
     )
-    latest_interest_date = latest_date_text(interest_rows, "date")
-    holdings_count = int(len(frame.index)) if not frame.empty else 0
-    account_name = html.escape(str(account["name"]))
-    account_type = html.escape(label_account_type(account["account_type"]))
-
-    hero_col, status_col = st.columns((1.45, 1), gap="large")
-    with hero_col:
-        st.markdown(
-            f"""
-            <div class="dashboard-hero">
-                <div class="dashboard-hero__eyebrow">Dashboard</div>
-                <h1 class="dashboard-hero__title">{account_name}</h1>
-                <div class="dashboard-hero__subtitle">
-                    계좌 유형 <strong>{account_type}</strong> ·
-                    오늘 기준 핵심 자산 상태를 빠르게 훑어볼 수 있습니다.
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-    with status_col:
-        with st.container(border=True):
-            st.subheader("핵심 상태")
-            status_metric_left, status_metric_right = st.columns(2)
-            status_metric_left.metric("보유 종목", f"{holdings_count:,}개")
-            status_metric_right.metric("보유상품 추정 수익률", format_pct(summary["profit_rate"]), metric_delta(summary["profit_loss"]))
-            st.caption(f"최근 이자 적립: {latest_interest_date if latest_interest_date != '-' else '미적립'}")
-            if today_preview > 0:
-                st.caption(f"{rollup_date or date.today().isoformat()} 예상 현금 이자: {format_won(today_preview)}")
-
     cash_edit_state_key = f"dashboard-cash-editing:{account['id']}"
     cash_edit_amount_key = f"dashboard-cash-edit-amount:{account['id']}"
     summary_cols = st.columns(5, gap="small")
@@ -1715,8 +1569,6 @@ def main() -> None:
             )
         account = get_account(int(selected_account_id)) or account
     holdings = list_holdings(int(account["id"]))
-    render_page_context(account, active_page, status)
-
     if active_page == "Dashboard":
         dashboard_page(account, holdings, rollup_state)
     elif active_page == "Trades":

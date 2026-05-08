@@ -19,8 +19,10 @@
 - [x] historical snapshot 원장 기준 보정
 - [x] SQLite -> Supabase dry-run 재확인
 - [x] Supabase 401/403 fallback 회귀 테스트 추가
-- [ ] 실제 로그인 후 브라우저 내부 화면 확인
-- [ ] 배포 환경 시크릿/운영 점검 재검증
+- [x] 실제 로그인 후 브라우저 내부 화면 확인
+- [x] 배포 환경 시크릿/운영 점검 재검증
+- [ ] 현금 카드 직접 수정 UI 브라우저 재검증
+- [ ] `docs/progress-memory.md` 최신 상태 동기화
 
 ## 프로젝트 유형
 - Python 프로젝트
@@ -581,3 +583,53 @@ python -m unittest discover -s tests -p "test_*.py"
   - `python -m compileall app.py src scripts tests`
   - `python -m unittest discover -s tests -p "test_*.py"`
   - 결과: 테스트 30건 통과
+
+## 2026-05-08 구조/메모리/상태 재확인
+- 변경 파일:
+  - `Memory.md`
+- 변경 내용:
+  - 프로젝트 루트 구조, `requirements.txt`, `README.md`, `.streamlit/config.toml`, `Memory.md`, `docs/progress-memory.md`, git 상태/최근 커밋을 다시 확인
+  - 현재 `HEAD`와 `origin/main`이 둘 다 `2e66863`(`Move cash adjustment into dashboard summary card`)로 일치함을 확인
+  - 현재 워킹트리는 `data/portfolio.db` 수정 1건과 `.env.example`, `AGENTS.md`, `.vscode/`, `artifacts/`, `post-migration-dashboard.txt`, `tmp_source.png` 등 미추적 파일이 남아 있는 상태로 확인
+  - 루트 `Memory.md`는 최근 작업(`현금 카드 직접 수정 전환`)까지 반영되어 있으나 `docs/progress-memory.md`의 원격 반영 이력/운영 상태는 최신 커밋 기준으로 일부 뒤처져 있어 후속 동기화 후보로 남김
+- 실행/설정 기준:
+  - 실행 명령: `python -m pip install -r requirements.txt`, `streamlit run app.py`
+  - 권장 검증 명령: `python -m compileall app.py src scripts tests`, `python -m unittest discover -s tests -p "test_*.py"`
+  - `.streamlit/config.toml` 유지값: `theme.base="light"`, `theme.primaryColor="#0F766E"`, `[server] headless=true`
+- 검증:
+  - 이번 턴은 구조/문서/메모리/설정/깃 상태 점검만 수행했고 추가 테스트는 재실행하지 않음
+  - 최신 기록 기준 마지막 성공 검증은 `python -m compileall app.py src scripts tests`, `python -m unittest discover -s tests -p "test_*.py"`이며 결과는 테스트 30건 통과
+- 현재 상태 판단:
+  - 최근 완료 작업은 대시보드 `보유 현금` 카드 내부 직접 수정 전환까지 코드/원격 브랜치에 반영된 상태
+  - 미완료 항목은 실제 브라우저에서 현금 카드 저장 UX 최종 확인, 배포 화면 최신 커밋 재확인, 배포/운영 문서(`docs/progress-memory.md`) 최신 상태 동기화 정도로 정리 가능
+
+## 2026-05-08 상단 컨텍스트/헤더 영역 전면 제거
+- 변경 파일:
+  - `app.py`
+  - `Memory.md`
+- 변경 내용:
+  - 대시보드 상단의 `Workspace Context` 배너를 제거
+  - 대시보드 상단의 `Dashboard / 계좌명 / 핵심 상태` 헤더 블록을 제거
+  - 거래/데이터 페이지에도 남아 있던 공통 `render_page_context()` 호출을 제거해 모든 페이지가 바로 본문 카드/폼부터 시작하도록 정리
+  - 더 이상 쓰이지 않는 `page-context`, `dashboard-hero` 관련 CSS와 렌더 함수 마크업을 함께 삭제
+- 검증:
+  - `python -m compileall app.py src scripts tests`
+  - `python -m unittest discover -s tests -p "test_*.py"`
+  - 결과: 테스트 30건 통과
+- 비고:
+  - 이번 턴은 코드/테스트 검증만 수행했고 브라우저 시각 검증은 아직 미실행
+
+## 2026-05-08 상단 영역 제거 후 원격 반영
+- 변경 파일:
+  - `app.py`
+  - `Memory.md`
+- 변경 내용:
+  - 브라우저에 기존 `Workspace Context` / `Dashboard` / `핵심 상태` 영역이 남아 있던 원인을 재확인
+  - 현재 로컬 `app.py`에서는 해당 렌더링 코드가 이미 제거된 상태였고, 브라우저는 아직 푸시되지 않은 이전 배포본을 보고 있던 상황으로 정리
+  - 사용자 요청에 따라 UI 변경은 가능하면 푸시까지 마무리하고 그 사실을 `Memory.md`에 남기는 기준으로 진행
+- 검증:
+  - `git diff -- app.py`
+  - `git log --oneline --decorate -n 5`
+- 비고:
+  - 현재 턴 기준 원격 반영을 위해 `app.py`, `Memory.md`만 선택 커밋/푸시 대상으로 사용
+  - `data/portfolio.db`와 기타 미추적 파일은 이번 UI 변경 범위에 포함하지 않음
