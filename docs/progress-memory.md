@@ -94,8 +94,9 @@
   - 웹 로그인 검증
   - 데이터 화면의 실제 렌더링 확인
   - `scripts/verify_streamlit_deployment.py`로 로그인 후 `데이터 > 운영 상태` 자동 점검 가능 상태까지 안정화
+  - `tests/test_analytics.py`로 성과 계산 회귀 테스트 추가
+  - `tests/test_verify_streamlit_deployment.py`로 배포 검증 파서 회귀 테스트 추가
 - 남은 내용:
-  - 자동 회귀 테스트 추가
   - Streamlit Cloud 최신 커밋 재배포 확인
   - Supabase 운영 전환 후 재검증
 
@@ -202,3 +203,15 @@
   - `python -m unittest discover -s tests -p "test_*.py"`
   - `python -m py_compile src/analytics.py app.py tests/test_analytics.py`
 - This closes the local regression gap for the phase 5 analytics changes.
+
+## 2026-05-08 deployment verification parser regression tests
+
+- Added [tests/test_verify_streamlit_deployment.py](/C:/Users/JKKIM/retirement-portfolio-streamlit/tests/test_verify_streamlit_deployment.py) with built-in `unittest` coverage for:
+  - Supabase 온보딩 화면 판별
+  - `accounts` RLS 403 / `owner_user_id` hotfix 필요 상태 판별
+  - 작업공간 `운영 상태` 패널 값 추출
+  - 저장소 코드 정규화
+- Verification completed:
+  - `python -m unittest discover -s tests -p "test_*.py"`
+  - `python -m py_compile scripts/verify_streamlit_deployment.py tests/test_verify_streamlit_deployment.py`
+- This locks the current deployment verification text contract while the production Supabase RLS hotfix remains pending.
