@@ -10,6 +10,10 @@ from supabase import Client, create_client
 DEFAULT_SUPABASE_URL = "https://iyszkybxostbjfzbbymq.supabase.co"
 DEFAULT_EMAIL_REDIRECT_TO = "https://retirement-portfolio-app-nh2vq9ferqnpehsslbykbe.streamlit.app/"
 SESSION_STATE_KEY = "auth_session"
+BACKEND_STATE_KEY = "db_backend_state"
+DEMO_SESSION_MODE = "local_demo"
+DEMO_USER_ID = "local-demo-user"
+DEMO_USER_EMAIL = "demo@local"
 _FALLBACK_STATE: dict[str, Any] = {}
 
 
@@ -77,17 +81,37 @@ def _serialize_session(session: Any) -> dict[str, Any]:
         "expires_at": getattr(session, "expires_at", None),
         "user_id": getattr(user, "id", None),
         "email": getattr(user, "email", None),
+        "mode": "supabase",
     }
 
 
 def _save_session(session: Any) -> None:
     if not session:
         return
-    _state_store()[SESSION_STATE_KEY] = _serialize_session(session)
+    store = _state_store()
+    store[SESSION_STATE_KEY] = _serialize_session(session)
+    store.pop(BACKEND_STATE_KEY, None)
+
+
+def _save_demo_session() -> None:
+    """로컬 SQLite 기반 데모 세션을 저장한다."""
+
+    store = _state_store()
+    store[SESSION_STATE_KEY] = {
+        "access_token": "",
+        "refresh_token": "",
+        "expires_at": None,
+        "user_id": DEMO_USER_ID,
+        "email": DEMO_USER_EMAIL,
+        "mode": DEMO_SESSION_MODE,
+    }
+    store.pop(BACKEND_STATE_KEY, None)
 
 
 def clear_session() -> None:
-    _state_store().pop(SESSION_STATE_KEY, None)
+    store = _state_store()
+    store.pop(SESSION_STATE_KEY, None)
+    store.pop(BACKEND_STATE_KEY, None)
 
 
 def _raw_session() -> dict[str, Any] | None:
@@ -104,6 +128,8 @@ def get_client() -> Client:
     client = create_client(_supabase_url(), _supabase_key())
     session = _raw_session()
     if not session:
+        return client
+    if is_demo_user():
         return client
 
     access_token = str(session.get("access_token") or "")
@@ -124,6 +150,8 @@ def get_client() -> Client:
 
 
 def refresh_session_state() -> None:
+    if is_demo_user():
+        return
     if not is_enabled():
         clear_session()
         return
@@ -144,17 +172,15 @@ def sign_in(email: str, password: str) -> Any:
 
 
 def sign_in_demo_user() -> dict[str, str]:
-    """초기 화면의 데모 접속 버튼용 자동 로그인을 수행한다."""
+    """초기 화면의 데모 접속 버튼용 자동 로그인 또는 로컬 데모 진입을 수행한다."""
 
     email, password = get_demo_credentials()
-    if not email or not password:
-        raise RuntimeError(
-            "데모 접속 계정이 설정되지 않았습니다. "
-            "DEMO_LOGIN_EMAIL/DEMO_LOGIN_PASSWORD 또는 STREAMLIT_VERIFY_EMAIL/STREAMLIT_VERIFY_PASSWORD를 설정해 주세요."
-        )
+    if email and password:
+        sign_in(email=email, password=password)
+        return {"email": email, "mode": "supabase"}
 
-    sign_in(email=email, password=password)
-    return {"email": email}
+    _save_demo_session()
+    return {"email": DEMO_USER_EMAIL, "mode": DEMO_SESSION_MODE}
 
 
 def sign_up(email: str, password: str) -> Any:
@@ -213,7 +239,7 @@ def verify_otp(token_hash: str, otp_type: str) -> Any:
 
 
 def sign_out() -> None:
-    if is_enabled():
+    if is_enabled() and not is_demo_user():
         try:
             client = get_client()
             client.auth.sign_out()
@@ -226,6 +252,15 @@ def is_authenticated() -> bool:
     return bool(get_user_id())
 
 
+def is_demo_user() -> bool:
+    """현재 세션이 로컬 데모 세션인지 반환한다."""
+
+    session = _raw_session()
+    if not session:
+        return False
+    return str(session.get("mode") or "").strip() == DEMO_SESSION_MODE
+
+
 def get_user() -> dict[str, Any] | None:
     session = _raw_session()
     if not session:
@@ -236,6 +271,7 @@ def get_user() -> dict[str, Any] | None:
     return {
         "id": user_id,
         "email": session.get("email"),
+        "mode": session.get("mode"),
     }
 
 

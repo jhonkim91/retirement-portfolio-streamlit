@@ -169,6 +169,9 @@ def _sqlite_has_user_data() -> bool:
 def _select_initial_backend() -> tuple[str, str]:
     """현재 환경에서 우선 사용할 저장소와 선택 사유를 반환한다."""
 
+    if app_auth.is_demo_user():
+        return BACKEND_SQLITE, "데모 접속 세션이라 로컬 SQLite 데모 저장소를 우선 사용합니다."
+
     override = _normalized_backend_override()
     if override == BACKEND_SUPABASE:
         return BACKEND_SUPABASE, "PORTFOLIO_BACKEND=supabase 설정으로 Supabase 저장소를 강제 사용 중입니다."
@@ -875,6 +878,8 @@ def _activate_sqlite(reason: str) -> None:
 def _build_headers(prefer_return: str | None = None) -> dict[str, str]:
     if not _has_supabase_config():
         raise RuntimeError("SUPABASE_URL 또는 SUPABASE_KEY 설정이 없습니다.")
+    if app_auth.is_demo_user():
+        raise RuntimeError("로컬 데모 세션은 Supabase 요청을 사용하지 않습니다.")
 
     supabase_key = _supabase_key()
     access_token = None

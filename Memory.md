@@ -26,6 +26,7 @@
 - [x] 자산 배분 트리맵 전환
 - [x] 대시보드 전체 스타일 정리
 - [x] 초기 화면 데모 접속 및 테스트 데이터 자동 준비
+- [x] 초기 화면 데모 버튼 무자격 증명 즉시 진입
 
 ## 프로젝트 유형
 - Python 프로젝트
@@ -705,3 +706,30 @@ python -m unittest discover -s tests -p "test_*.py"
 - 미완료/다음 확인:
   - 실제 배포 또는 로컬 브라우저에서 초기 화면 `데모 접속` 버튼 클릭 후 곧바로 데모 계정 대시보드로 진입하는지 시각 검증 필요
   - 운영 배포에서 이 기능을 쓰려면 `DEMO_LOGIN_EMAIL`/`DEMO_LOGIN_PASSWORD` 또는 `STREAMLIT_VERIFY_EMAIL`/`STREAMLIT_VERIFY_PASSWORD`가 실제 시크릿에 설정되어 있어야 함
+
+## 2026-05-09 초기 화면 데모 버튼 무자격 증명 진입
+- 변경 파일:
+  - `app.py`
+  - `src/auth.py`
+  - `src/db.py`
+  - `tests/test_auth.py`
+  - `tests/test_db.py`
+  - `Memory.md`
+- 변경 내용:
+  - 초기 화면 `데모 접속` 버튼을 항상 활성화하고, 아이디/비밀번호 입력 없이 바로 진입할 수 있도록 변경
+  - `src/auth.py`에 로컬 데모 세션 모드(`demo@local`)를 추가해 데모 계정 설정이 없을 때도 세션을 직접 생성하도록 보강
+  - 데모 세션 진입 시 `db_backend_state`를 초기화하고, `src/db.py`에서 로컬 데모 세션이면 `SQLite`를 우선 사용하도록 백엔드 선택 규칙을 추가
+  - 같은 버튼으로 `seed_demo_workspace()`를 실행해 테스트 가능한 임의의 계좌/입금/매수/이자/이체/스냅샷 데이터가 자동 준비되도록 유지
+  - Supabase 설정이 없는 환경에서도 데모 버튼은 동작하도록 메인 초기 진입 가드를 완화하고, 실제 로그인/회원가입 버튼은 비활성 안내를 추가
+  - 회귀 테스트로 로컬 데모 세션 fallback, 데모 세션 판별, 데모 세션 SQLite 우선 선택을 추가
+- 검증:
+  - `python -m compileall app.py src scripts tests`
+  - `python -m unittest discover -s tests -p "test_*.py"`
+  - `python -m streamlit run app.py --server.port 8514 --server.headless true` 후 Playwright로 초기 화면 확인
+  - Playwright 결과:
+    - 초기 화면에 `데모 접속` 버튼과 `아이디 입력 없이 버튼만 눌러...` 안내 문구 노출 확인
+    - 버튼 클릭 후 `demo@local`, `로그아웃`, `데모 IRP`, `현재 저장소는 로컬 SQLite 임시 저장소입니다.` 표시 확인
+  - 결과: 테스트 37건 통과, 로컬 브라우저 데모 진입 성공
+- 비고:
+  - 로컬 브라우저 검증 과정에서 `data/portfolio.db`에 데모 데이터가 실제 기록됐으나 이번 커밋에는 포함하지 않음
+  - 실제 Supabase 데모 계정 시크릿이 설정돼 있으면 계속 그 계정으로 로그인하고, 없으면 로컬 SQLite 데모 작업공간으로 자동 fallback 한다

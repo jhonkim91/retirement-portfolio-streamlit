@@ -628,13 +628,12 @@ def render_auth_feedback() -> None:
 def render_demo_access_entry() -> None:
     """초기 인증 화면의 데모 접속 패널을 렌더링한다."""
 
-    credentials_ready = app_auth.has_demo_credentials()
     with st.container(border=True):
         info_col, action_col = st.columns((1.5, 1), gap="large")
         with info_col:
             st.subheader("데모 접속")
-            st.caption("로그인 화면에서 바로 테스트용 작업공간으로 들어갈 수 있습니다.")
-            st.write("전용 데모 계정으로 로그인한 뒤 테스트 계좌, 입금, 매수, 이자, 계좌 이동, 스냅샷 데이터를 자동으로 준비합니다.")
+            st.caption("아이디 입력 없이 버튼만 눌러 테스트용 작업공간으로 바로 들어갈 수 있습니다.")
+            st.write("임의의 테스트 계좌, 입금, 매수, 이자, 계좌 이동, 스냅샷 데이터를 자동으로 준비합니다.")
         with action_col:
             demo_submitted = st.button(
                 "데모 접속",
@@ -642,10 +641,11 @@ def render_demo_access_entry() -> None:
                 icon=":material/rocket_launch:",
                 width="stretch",
                 type="primary",
-                disabled=not credentials_ready,
             )
-            if not credentials_ready:
-                st.caption("`DEMO_LOGIN_EMAIL`/`DEMO_LOGIN_PASSWORD`를 설정하면 이 버튼으로 바로 데모 계정에 들어갈 수 있습니다.")
+            if app_auth.has_demo_credentials():
+                st.caption("설정된 데모 계정이 있으면 그 계정으로, 없으면 로컬 데모 작업공간으로 바로 연결됩니다.")
+            else:
+                st.caption("현재는 로컬 데모 작업공간으로 바로 연결됩니다.")
 
     if not demo_submitted:
         return
@@ -666,9 +666,13 @@ def render_demo_access_entry() -> None:
     st.session_state[PENDING_CONFIRMATION_EMAIL_KEY] = ""
     st.session_state["selected_account_id"] = int(result["selected_account_id"])
     st.session_state["active_page"] = PAGES[0]
-    demo_email = str(demo_identity.get("email") or "데모 계정").strip()
+    demo_mode = str(demo_identity.get("mode") or "").strip()
     result_message = str(result.get("message") or "데모 데이터를 준비했습니다.").strip()
-    set_auth_feedback("success", f"`{demo_email}` 계정으로 접속했습니다. {result_message}")
+    if demo_mode == "supabase":
+        demo_email = str(demo_identity.get("email") or "데모 계정").strip()
+        set_auth_feedback("success", f"`{demo_email}` 계정으로 접속했습니다. {result_message}")
+    else:
+        set_auth_feedback("success", f"로컬 데모 작업공간으로 접속했습니다. {result_message}")
     st.rerun()
 
 
@@ -1084,7 +1088,7 @@ def show_holdings_table(frame: pd.DataFrame, *, height: int = 420) -> None:
     st.dataframe(display, width="stretch", hide_index=True, height=height)
 
 
-def auth_page() -> None:
+def auth_page(auth_enabled: bool = True) -> None:
     st.title("은퇴 포트폴리오")
     st.caption("사용자별로 분리된 포트폴리오를 관리하려면 로그인해 주세요.")
     render_auth_feedback()
@@ -1109,7 +1113,9 @@ def auth_page() -> None:
         with st.form("sign-in-form", clear_on_submit=False):
             email = st.text_input("이메일", key="sign-in-email")
             password = st.text_input("비밀번호", type="password", key="sign-in-password")
-            submitted = st.form_submit_button("로그인", width="stretch")
+            submitted = st.form_submit_button("로그인", width="stretch", disabled=not auth_enabled)
+            if not auth_enabled:
+                st.caption("Supabase 인증 설정이 없어 실제 로그인은 잠시 비활성 상태입니다.")
         if submitted:
             try:
                 app_auth.sign_in(email=email, password=password)
@@ -1130,7 +1136,9 @@ def auth_page() -> None:
             email = st.text_input("이메일", key="sign-up-email")
             password = st.text_input("비밀번호", type="password", key="sign-up-password")
             confirm_password = st.text_input("비밀번호 확인", type="password", key="sign-up-password-confirm")
-            submitted = st.form_submit_button("계정 만들기", width="stretch")
+            submitted = st.form_submit_button("계정 만들기", width="stretch", disabled=not auth_enabled)
+            if not auth_enabled:
+                st.caption("Supabase 인증 설정이 없어 실제 계정 만들기는 잠시 비활성 상태입니다.")
         if submitted:
             if password != confirm_password:
                 st.error("비밀번호가 서로 다릅니다.")
@@ -1925,17 +1933,18 @@ def data_page(account: dict[str, Any], rollup_state: dict[str, Any] | None = Non
 def main() -> None:
     init_state()
     inject_app_styles()
-    if not app_auth.is_enabled():
-        st.error("Supabase 인증이 설정되지 않았습니다. Streamlit secrets에 SUPABASE_URL 과 SUPABASE_KEY 를 넣어 주세요.")
-        return
+    auth_enabled = app_auth.is_enabled()
 
-    if handle_auth_callback():
+    if auth_enabled and handle_auth_callback():
         st.rerun()
 
-    app_auth.refresh_session_state()
+    if auth_enabled or app_auth.is_demo_user():
+        app_auth.refresh_session_state()
     user = app_auth.get_user()
     if not user:
-        auth_page()
+        if not auth_enabled:
+            st.info("Supabase 인증 설정이 없어 실제 로그인은 비활성 상태입니다. 아래 `데모 접속`으로 로컬 테스트 작업공간은 바로 사용할 수 있습니다.")
+        auth_page(auth_enabled=auth_enabled)
         return
 
     initialize_database()

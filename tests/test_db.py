@@ -6,7 +6,9 @@ from unittest.mock import patch
 import requests
 
 from src.db import (
+    BACKEND_SQLITE,
     BACKEND_SUPABASE,
+    _select_initial_backend,
     _run_with_fallback,
     _should_fallback,
     _supabase_create_account,
@@ -107,6 +109,15 @@ class SupabaseCreateAccountTests(unittest.TestCase):
 
 class BackendFallbackPolicyTests(unittest.TestCase):
     """Supabase 오류별 SQLite fallback 정책을 검증한다."""
+
+    @patch("src.db.app_auth.is_demo_user", return_value=True)
+    def test_select_initial_backend_prefers_sqlite_for_demo_session(self, _is_demo_user_mock) -> None:
+        """로컬 데모 세션이면 Supabase 설정이 있어도 SQLite를 우선 사용한다."""
+
+        backend, reason = _select_initial_backend()
+
+        self.assertEqual(backend, BACKEND_SQLITE)
+        self.assertIn("데모 접속 세션", reason)
 
     def test_should_not_fallback_on_401_or_403(self) -> None:
         """인증/권한 오류는 로컬 SQLite로 우회하지 않는다."""
