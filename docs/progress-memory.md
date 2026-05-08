@@ -190,4 +190,15 @@
 - Local verification completed:
   - `python -m py_compile src/analytics.py app.py`
   - sample-data analytic check for account summary and snapshot trend cumulative flow behavior
-- This stage is locally validated and ready for commit/push once the dashboard text review is complete.
+- Commit `f4aa705` pushed to `origin/main`: `Refine performance and flow analytics`
+
+## 2026-05-08 analytics regression tests
+
+- Added [tests/test_analytics.py](/C:/Users/JKKIM/retirement-portfolio-streamlit/tests/test_analytics.py) with built-in `unittest` coverage for:
+  - principal / net flow / interest / actual profit separation in `account_summary()`
+  - fallback behavior when capital-flow history is missing
+  - cumulative snapshot trend enrichment in `snapshot_trend_frame()`
+- Verification completed:
+  - `python -m unittest discover -s tests -p "test_*.py"`
+  - `python -m py_compile src/analytics.py app.py tests/test_analytics.py`
+- This closes the local regression gap for the phase 5 analytics changes.
