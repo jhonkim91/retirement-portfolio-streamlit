@@ -566,3 +566,18 @@ python -m unittest discover -s tests -p "test_*.py"
   - `python -m compileall app.py src scripts tests`
   - `python -m unittest discover -s tests -p "test_*.py"`
   - 결과: 테스트 30건 통과
+
+## 2026-05-08 현금 카드 직접 수정 전환
+- 변경 파일:
+  - `app.py`
+  - `Memory.md`
+- 변경 내용:
+  - 대시보드 상단 5개 카드 중 `보유 현금` 카드만 `수정` 버튼 클릭 시 카드 내부에서 바로 편집 가능하도록 변경
+  - `수정` 클릭 시 목표 현금 잔액 입력과 `저장/취소` 버튼이 같은 카드 안에 열리도록 구현
+  - 저장 시 `adjust_cash_balance()`를 호출해 오늘 날짜 기준 `대시보드 현금 카드 조정` 메모로 기록
+  - 기존 하단 `현금 조정` 섹션은 제거
+  - 다른 체크 표시된 영역은 유지
+- 검증:
+  - `python -m compileall app.py src scripts tests`
+  - `python -m unittest discover -s tests -p "test_*.py"`
+  - 결과: 테스트 30건 통과

@@ -509,6 +509,27 @@ def inject_app_styles() -> None:
             line-height: 1.45;
         }
 
+        .dashboard-summary-card__label {
+            color: #58677b;
+            font-size: 0.86rem;
+            font-weight: 700;
+            letter-spacing: 0.01em;
+            margin-bottom: 0.85rem;
+        }
+
+        .dashboard-summary-card__value {
+            color: #0d3559;
+            font-size: clamp(1.6rem, 2vw, 2.2rem);
+            font-weight: 800;
+            line-height: 1.08;
+            letter-spacing: -0.03em;
+            margin-bottom: 0.15rem;
+        }
+
+        .dashboard-summary-card__value--accent {
+            color: #b42318;
+        }
+
         @media (max-width: 860px) {
             .page-context__grid {
                 grid-template-columns: 1fr;
@@ -659,6 +680,21 @@ def render_dashboard_metric_strip(cards: list[dict[str, str]]) -> None:
         )
         with column:
             st.markdown(card_html, unsafe_allow_html=True)
+
+
+def render_dashboard_summary_card(label: str, value: str, *, tone: str = "") -> None:
+    """기본 요약 카드 본문을 렌더링한다."""
+
+    value_class = "dashboard-summary-card__value"
+    if tone == "accent":
+        value_class += " dashboard-summary-card__value--accent"
+    st.markdown(
+        (
+            f'<div class="dashboard-summary-card__label">{html.escape(label)}</div>'
+            f'<div class="{value_class}">{html.escape(value)}</div>'
+        ),
+        unsafe_allow_html=True,
+    )
 
 
 def refresh_prices(holdings: list[dict[str, Any]]) -> tuple[int, list[str]]:
@@ -991,20 +1027,71 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]], roll
             if today_preview > 0:
                 st.caption(f"{rollup_date or date.today().isoformat()} 예상 현금 이자: {format_won(today_preview)}")
 
-    render_dashboard_metric_strip(
-        [
-            {"label": "입금 원금", "value": format_won(summary["total_principal"])},
-            {
-                "label": "보유 현금",
-                "value": format_won(display_cash),
-                "action": "수정",
-                "note": "요약 카드 아래 현금 조정 카드에서 바로 수정할 수 있습니다.",
-            },
-            {"label": "현재 평가액", "value": format_won(display_total_value)},
-            {"label": "원금 대비 평가손익", "value": format_won(display_principal_profit_loss), "tone": "accent"},
-            {"label": "원금 대비 수익률", "value": format_pct(display_principal_profit_rate), "tone": "accent"},
-        ]
-    )
+    cash_edit_state_key = f"dashboard-cash-editing:{account['id']}"
+    cash_edit_amount_key = f"dashboard-cash-edit-amount:{account['id']}"
+    summary_cols = st.columns(5, gap="small")
+
+    with summary_cols[0]:
+        with st.container(border=True):
+            render_dashboard_summary_card("입금 원금", format_won(summary["total_principal"]))
+
+    with summary_cols[1]:
+        with st.container(border=True):
+            header_col, action_col = st.columns((1, 0.52), gap="small")
+            with header_col:
+                st.markdown('<div class="dashboard-summary-card__label">보유 현금</div>', unsafe_allow_html=True)
+            with action_col:
+                if st.button(
+                    "수정" if not st.session_state.get(cash_edit_state_key, False) else "닫기",
+                    key=f"dashboard-cash-edit-toggle:{account['id']}",
+                    width="stretch",
+                ):
+                    st.session_state[cash_edit_state_key] = not bool(st.session_state.get(cash_edit_state_key, False))
+                    if st.session_state[cash_edit_state_key]:
+                        st.session_state[cash_edit_amount_key] = float(display_cash)
+                    st.rerun()
+            st.markdown(f'<div class="dashboard-summary-card__value">{html.escape(format_won(display_cash))}</div>', unsafe_allow_html=True)
+
+            if st.session_state.get(cash_edit_state_key, False):
+                st.number_input(
+                    "목표 현금 잔액",
+                    min_value=0.0,
+                    value=float(st.session_state.get(cash_edit_amount_key, display_cash) or 0.0),
+                    step=100000.0,
+                    key=cash_edit_amount_key,
+                )
+                save_col, cancel_col = st.columns(2, gap="small")
+                with save_col:
+                    if st.button("저장", key=f"dashboard-cash-save:{account['id']}", width="stretch"):
+                        try:
+                            adjust_cash_balance(
+                                int(account["id"]),
+                                target_amount=float(st.session_state.get(cash_edit_amount_key, display_cash) or 0.0),
+                                trade_date=date.today().isoformat(),
+                                notes="대시보드 현금 카드 조정",
+                            )
+                        except ValueError as exc:
+                            st.error(str(exc))
+                        else:
+                            st.session_state[cash_edit_state_key] = False
+                            st.success("현금 조정을 기록했습니다.")
+                            st.rerun()
+                with cancel_col:
+                    if st.button("취소", key=f"dashboard-cash-cancel:{account['id']}", width="stretch"):
+                        st.session_state[cash_edit_state_key] = False
+                        st.rerun()
+
+    with summary_cols[2]:
+        with st.container(border=True):
+            render_dashboard_summary_card("현재 평가액", format_won(display_total_value))
+
+    with summary_cols[3]:
+        with st.container(border=True):
+            render_dashboard_summary_card("원금 대비 평가손익", format_won(display_principal_profit_loss), tone="accent")
+
+    with summary_cols[4]:
+        with st.container(border=True):
+            render_dashboard_summary_card("원금 대비 수익률", format_pct(display_principal_profit_rate), tone="accent")
 
     overview_left, overview_right = st.columns((1, 1), gap="large")
     with overview_left:
@@ -1027,50 +1114,20 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]], roll
             else:
                 st.altair_chart(chart, width="stretch")
 
-    action_col, cash_col = st.columns((1.15, 0.95), gap="large")
-    with action_col:
-        with st.container(border=True):
-            st.subheader("시장 업데이트")
-            st.caption("가격 갱신과 코드 입력 규칙을 한 영역에서 정리했습니다.")
-            if holdings:
-                if st.button("현재가 새로고침", width="stretch"):
-                    updated, errors = refresh_prices(holdings)
-                    if updated:
-                        st.success(f"{updated}개 종목 가격을 갱신했습니다.")
-                    if errors:
-                        st.warning("\n".join(errors))
-                    st.rerun()
-            else:
-                st.info("보유 종목이 생기면 여기서 현재가를 한 번에 갱신할 수 있습니다.")
-            st.caption("숫자만 입력한 6자리 한국 종목 코드는 자동으로 `.KS`를 붙여 조회합니다. 코스닥/ETF 등은 필요하면 직접 야후 파이낸스 심볼을 넣어 주세요.")
-
-    with cash_col:
-        with st.container(border=True):
-            st.subheader("현금 조정")
-            st.caption("관리성 작업이므로 차트 영역과 분리해 조용한 톤으로 유지합니다.")
-            with st.form("cash-adjustment-form"):
-                amount = st.number_input("목표 현금 잔액", min_value=0.0, value=float(account["cash_balance"] or 0), step=100000.0)
-                adjustment_date = st.date_input("조정 기준일", value=date.today(), key=f"cash-adjustment-date:{account['id']}")
-                adjustment_notes = st.text_area(
-                    "조정 사유",
-                    height=80,
-                    key=f"cash-adjustment-notes:{account['id']}",
-                    placeholder="예: 외부 계좌에서 별도 입금했던 현금 맞춤",
-                )
-                adjustment_submitted = st.form_submit_button("현금 조정 기록", width="stretch")
-        if adjustment_submitted:
-            try:
-                adjust_cash_balance(
-                    int(account["id"]),
-                    target_amount=amount,
-                    trade_date=adjustment_date.isoformat(),
-                    notes=adjustment_notes,
-                )
-            except ValueError as exc:
-                st.error(str(exc))
-            else:
-                st.success("현금 조정을 기록했습니다.")
+    with st.container(border=True):
+        st.subheader("시장 업데이트")
+        st.caption("가격 갱신과 코드 입력 규칙을 한 영역에서 정리했습니다.")
+        if holdings:
+            if st.button("현재가 새로고침", width="stretch"):
+                updated, errors = refresh_prices(holdings)
+                if updated:
+                    st.success(f"{updated}개 종목 가격을 갱신했습니다.")
+                if errors:
+                    st.warning("\n".join(errors))
                 st.rerun()
+        else:
+            st.info("보유 종목이 생기면 여기서 현재가를 한 번에 갱신할 수 있습니다.")
+        st.caption("숫자만 입력한 6자리 한국 종목 코드는 자동으로 `.KS`를 붙여 조회합니다. 코스닥/ETF 등은 필요하면 직접 야후 파이낸스 심볼을 넣어 주세요.")
 
     with st.container(border=True):
         st.subheader("현재 보유 종목")
