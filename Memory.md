@@ -554,3 +554,15 @@ python -m unittest discover -s tests -p "test_*.py"
   - 다만 배포 검증 스크린샷은 시점에 따라 대시보드 대신 로그인 폼이 본문에 잠시 보이는 등 세션/재렌더 타이밍 편차가 있어, 브라우저 수동 확인까지 하면 더 안전함
 - 비고:
   - 현재 원격 최신 커밋은 `92a86d3`
+
+## 2026-05-08 대시보드 카드 문자열 렌더링 2차 보정
+- 변경 파일:
+  - `app.py`
+  - `Memory.md`
+- 변경 내용:
+  - 배포 웹에서 카드 HTML 일부가 여전히 조각 문자열처럼 보이는 현상을 재확인
+  - `render_dashboard_metric_strip()` 내부 카드 마크업을 들여쓰기 포함 멀티라인 f-string에서 단일 연결 문자열로 바꿔 Markdown 파서 간섭 여지를 제거
+- 검증:
+  - `python -m compileall app.py src scripts tests`
+  - `python -m unittest discover -s tests -p "test_*.py"`
+  - 결과: 테스트 30건 통과

@@ -645,22 +645,20 @@ def render_dashboard_metric_strip(cards: list[dict[str, str]]) -> None:
             value_class += " dashboard-metric-card__value--accent"
         note_html = f'<div class="dashboard-metric-card__note">{html.escape(note)}</div>' if note else ""
         action_html = f'<div class="dashboard-metric-card__action">{html.escape(action)}</div>' if action else ""
+        card_html = (
+            '<div class="dashboard-metric-card">'
+            '<div>'
+            '<div class="dashboard-metric-card__top">'
+            f'<div class="dashboard-metric-card__label">{label}</div>'
+            f"{action_html}"
+            "</div>"
+            f'<div class="{value_class}">{value}</div>'
+            "</div>"
+            f"{note_html}"
+            "</div>"
+        )
         with column:
-            st.markdown(
-                f"""
-                <div class="dashboard-metric-card">
-                    <div>
-                        <div class="dashboard-metric-card__top">
-                            <div class="dashboard-metric-card__label">{label}</div>
-                            {action_html}
-                        </div>
-                        <div class="{value_class}">{value}</div>
-                    </div>
-                    {note_html}
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
+            st.markdown(card_html, unsafe_allow_html=True)
 
 
 def refresh_prices(holdings: list[dict[str, Any]]) -> tuple[int, list[str]]:
