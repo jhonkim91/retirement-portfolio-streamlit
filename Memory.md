@@ -23,6 +23,7 @@
 - [x] 배포 환경 시크릿/운영 점검 재검증
 - [ ] 현금 카드 직접 수정 UI 브라우저 재검증
 - [ ] `docs/progress-memory.md` 최신 상태 동기화
+- [x] 자산 배분 트리맵 전환
 
 ## 프로젝트 유형
 - Python 프로젝트
@@ -633,3 +634,25 @@ python -m unittest discover -s tests -p "test_*.py"
 - 비고:
   - 현재 턴 기준 원격 반영을 위해 `app.py`, `Memory.md`만 선택 커밋/푸시 대상으로 사용
   - `data/portfolio.db`와 기타 미추적 파일은 이번 UI 변경 범위에 포함하지 않음
+
+## 2026-05-08 자산 배분 ECharts 트리맵 전환
+- 변경 파일:
+  - `app.py`
+  - `src/analytics.py`
+  - `tests/test_analytics.py`
+  - `requirements.txt`
+  - `Memory.md`
+- 변경 내용:
+  - 대시보드 `자산 배분` 섹션을 기존 Altair 도넛 차트에서 `streamlit-echarts` 기반 트리맵으로 전환
+  - 표시 계층은 `자산군 > 보유 종목` 구조로 구성하고, `현금`은 `예수금` 자식 노드로 표시
+  - ECharts 스타일 제목, 색상 구간 바, 상위 카테고리 헤더 느낌의 treemap 옵션을 추가
+  - 런타임에 `streamlit-echarts`가 없으면 기존 도넛 차트로 fallback 되도록 방어 로직 추가
+  - `src.analytics.allocation_treemap_nodes()`와 회귀 테스트 1건을 추가
+  - 배포 설치를 위해 `requirements.txt`에 `streamlit-echarts>=0.6.0,<0.7` 추가
+- 검증:
+  - `python -m pip install "streamlit-echarts>=0.6.0,<0.7"`
+  - `python -m compileall app.py src scripts tests`
+  - `python -m unittest discover -s tests -p "test_*.py"`
+  - 결과: 테스트 31건 통과
+- 비고:
+  - 이번 턴은 코드/테스트 기준 검증까지 완료했고, 실제 브라우저에서 treemap 모양 최종 확인은 아직 미실행

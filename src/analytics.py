@@ -177,6 +177,77 @@ def account_summary(
     }
 
 
+def allocation_treemap_nodes(
+    summary: dict[str, Any],
+    holdings: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """ECharts 트리맵용 자산 배분 계층 데이터를 만든다."""
+
+    frame = holdings_frame(holdings)
+    allocation = summary.get("allocation") or {}
+    bucket_specs = (
+        ("risk", "위험자산", "#E7D36F"),
+        ("safe", "안전자산", "#BFD26A"),
+        ("cash", "현금", "#8FD17B"),
+    )
+    nodes: list[dict[str, Any]] = []
+
+    for asset_type, bucket_label, bucket_color in bucket_specs:
+        if asset_type == "cash":
+            cash_value = float(allocation.get("cash") or summary.get("cash") or 0)
+            if cash_value <= 0:
+                continue
+            nodes.append(
+                {
+                    "name": bucket_label,
+                    "value": round(cash_value, 4),
+                    "itemStyle": {"color": bucket_color},
+                    "children": [
+                        {
+                            "name": "예수금",
+                            "value": round(cash_value, 4),
+                            "bucket": bucket_label,
+                            "profit_rate": None,
+                        }
+                    ],
+                }
+            )
+            continue
+
+        bucket_frame = frame.loc[frame["asset_type"] == asset_type].copy() if not frame.empty else pd.DataFrame()
+        if bucket_frame.empty:
+            continue
+
+        bucket_children: list[dict[str, Any]] = []
+        for _, row in bucket_frame.iterrows():
+            current_value = float(row.get("current_value") or 0)
+            if current_value <= 0:
+                continue
+            bucket_children.append(
+                {
+                    "name": str(row.get("product_name") or row.get("symbol") or "종목"),
+                    "value": round(current_value, 4),
+                    "bucket": bucket_label,
+                    "symbol": str(row.get("symbol") or "").strip().upper(),
+                    "profit_rate": round(float(row.get("profit_rate") or 0), 4),
+                }
+            )
+
+        if not bucket_children:
+            continue
+
+        nodes.append(
+            {
+                "name": bucket_label,
+                "value": round(sum(float(child["value"]) for child in bucket_children), 4),
+                "itemStyle": {"color": bucket_color},
+                "children": bucket_children,
+            }
+        )
+
+    return nodes
+
+
 def projected_today_interest(
     account: dict[str, Any],
     interest_rows: list[dict[str, Any]] | None = None,

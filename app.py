@@ -10,8 +10,15 @@ import pandas as pd
 import streamlit as st
 from dateutil.relativedelta import relativedelta
 
+try:
+    from streamlit_echarts import JsCode, st_echarts
+except ImportError:  # pragma: no cover - 의존성 미설치 환경 fallback
+    JsCode = None
+    st_echarts = None
+
 from src.analytics import (
     account_summary,
+    allocation_treemap_nodes,
     build_portfolio_trend,
     cumulative_contribution_frame,
     holdings_frame,
@@ -617,6 +624,145 @@ def allocation_chart(summary: dict[str, Any]) -> alt.Chart | None:
     )
 
 
+def allocation_treemap_options(summary: dict[str, Any], holdings: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """자산 배분 트리맵용 ECharts 옵션을 만든다."""
+
+    nodes = allocation_treemap_nodes(summary, holdings)
+    if not nodes:
+        return None
+
+    leaf_values = [
+        float(child.get("value") or 0)
+        for node in nodes
+        for child in (node.get("children") or [])
+        if float(child.get("value") or 0) > 0
+    ]
+    if not leaf_values:
+        return None
+
+    visual_min = min(leaf_values)
+    visual_max = max(leaf_values)
+    if visual_min == visual_max:
+        visual_min = 0.0
+
+    tooltip_formatter = None
+    if JsCode is not None:
+        tooltip_formatter = JsCode(
+            """
+            function(info) {
+                var value = Number(info.value || 0).toLocaleString('ko-KR');
+                var lines = ['<strong>' + info.name + '</strong>', '평가금액: ₩' + value];
+                if (info.data && info.data.bucket) {
+                    lines.push('구분: ' + info.data.bucket);
+                }
+                if (info.data && info.data.symbol) {
+                    lines.push('심볼: ' + info.data.symbol);
+                }
+                if (info.data && info.data.profit_rate !== null && info.data.profit_rate !== undefined) {
+                    lines.push('수익률: ' + Number(info.data.profit_rate).toFixed(2) + '%');
+                }
+                return lines.join('<br/>');
+            }
+            """
+        )
+
+    tooltip_config: dict[str, Any] = {
+        "backgroundColor": "rgba(21, 40, 31, 0.92)",
+        "borderWidth": 0,
+        "textStyle": {"color": "#F8FAFC", "fontSize": 12},
+    }
+    if tooltip_formatter is not None:
+        tooltip_config["formatter"] = tooltip_formatter
+
+    return {
+        "backgroundColor": "transparent",
+        "title": {
+            "text": "자산군 > 보유 종목",
+            "left": "center",
+            "top": 8,
+            "textStyle": {
+                "fontSize": 18,
+                "fontWeight": 700,
+                "color": "#2F3747",
+            },
+        },
+        "tooltip": tooltip_config,
+        "visualMap": {
+            "min": round(visual_min, 4),
+            "max": round(visual_max, 4),
+            "calculable": True,
+            "orient": "horizontal",
+            "left": "center",
+            "bottom": 6,
+            "text": ["High 비중", "Low 비중"],
+            "textStyle": {"color": "#667085"},
+            "itemWidth": 150,
+            "itemHeight": 12,
+            "inRange": {
+                "color": ["#F1646C", "#F6C85F", "#D8E36C", "#7DCE82"],
+            },
+        },
+        "series": [
+            {
+                "name": "자산 배분",
+                "type": "treemap",
+                "top": 44,
+                "left": 0,
+                "right": 0,
+                "bottom": 58,
+                "roam": False,
+                "nodeClick": False,
+                "breadcrumb": {"show": False},
+                "colorMappingBy": "value",
+                "visibleMin": 1,
+                "label": {
+                    "show": True,
+                    "formatter": "{b}",
+                    "color": "#FFFFFF",
+                    "fontWeight": 700,
+                    "fontSize": 13,
+                },
+                "upperLabel": {
+                    "show": True,
+                    "height": 28,
+                    "color": "#F8FAFC",
+                    "fontWeight": 700,
+                },
+                "itemStyle": {
+                    "borderColor": "#5E646B",
+                    "borderWidth": 2,
+                    "gapWidth": 2,
+                },
+                "levels": [
+                    {
+                        "itemStyle": {
+                            "borderColor": "#5E646B",
+                            "borderWidth": 3,
+                            "gapWidth": 3,
+                        },
+                        "upperLabel": {
+                            "show": True,
+                            "height": 30,
+                            "color": "#FFFFFF",
+                            "backgroundColor": "#5E646B",
+                            "padding": [6, 10],
+                        },
+                    },
+                    {
+                        "colorSaturation": [0.35, 0.8],
+                        "itemStyle": {
+                            "borderColor": "#C4CBD2",
+                            "borderWidth": 1,
+                            "gapWidth": 1,
+                        },
+                    },
+                ],
+                "data": nodes,
+            }
+        ],
+    }
+
+
 def holdings_bar_chart(frame: pd.DataFrame) -> alt.Chart | None:
     if frame.empty:
         return None
@@ -951,12 +1097,23 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]], roll
     with overview_left:
         with st.container(border=True):
             st.subheader("자산 배분")
-            st.caption("위험자산, 안전자산, 현금 비중을 빠르게 확인합니다.")
-            chart = allocation_chart(summary)
-            if chart is None:
+            st.caption("자산군에서 보유 종목까지 한 번에 보는 트리맵입니다.")
+            treemap_options = allocation_treemap_options(summary, holdings)
+            if treemap_options is None:
                 st.info("배분을 그릴 데이터가 아직 없습니다.")
+            elif st_echarts is None:
+                chart = allocation_chart(summary)
+                if chart is None:
+                    st.info("배분을 그릴 데이터가 아직 없습니다.")
+                else:
+                    st.altair_chart(chart, width="stretch")
+                    st.caption("`streamlit-echarts`가 없는 환경이라 기본 차트로 표시했습니다.")
             else:
-                st.altair_chart(chart, width="stretch")
+                st_echarts(
+                    options=treemap_options,
+                    height="520px",
+                    key=f"allocation-treemap:{account['id']}",
+                )
 
     with overview_right:
         with st.container(border=True):

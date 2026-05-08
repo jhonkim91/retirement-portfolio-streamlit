@@ -3,7 +3,13 @@ from __future__ import annotations
 from datetime import date
 import unittest
 
-from src.analytics import account_summary, cumulative_contribution_frame, projected_today_interest, snapshot_trend_frame
+from src.analytics import (
+    account_summary,
+    allocation_treemap_nodes,
+    cumulative_contribution_frame,
+    projected_today_interest,
+    snapshot_trend_frame,
+)
 
 
 class AccountSummaryTests(unittest.TestCase):
@@ -82,6 +88,23 @@ class AccountSummaryTests(unittest.TestCase):
         self.assertEqual(summary["company_principal"], 800_000.0)
         self.assertEqual(summary["contribution_principal"], 800_000.0)
         self.assertEqual(summary["total_principal"], 800_000.0)
+
+    def test_allocation_treemap_nodes_groups_holdings_and_cash(self) -> None:
+        account = {"cash_balance": 300_000}
+        holdings = [
+            {"product_name": "KODEX 200", "symbol": "069500", "quantity": 10, "avg_cost": 30_000, "current_price": 35_000, "asset_type": "risk"},
+            {"product_name": "국고채 ETF", "symbol": "148070", "quantity": 5, "avg_cost": 50_000, "current_price": 51_000, "asset_type": "safe"},
+        ]
+
+        summary = account_summary(account, holdings, trade_logs=[], interest_rows=[])
+        nodes = allocation_treemap_nodes(summary, holdings)
+
+        self.assertEqual([node["name"] for node in nodes], ["위험자산", "안전자산", "현금"])
+        self.assertEqual(nodes[0]["children"][0]["name"], "KODEX 200")
+        self.assertEqual(nodes[0]["children"][0]["symbol"], "069500")
+        self.assertEqual(nodes[1]["children"][0]["name"], "국고채 ETF")
+        self.assertEqual(nodes[2]["children"][0]["name"], "예수금")
+        self.assertEqual(nodes[2]["children"][0]["value"], 300_000.0)
 
 
 class SnapshotTrendFrameTests(unittest.TestCase):
