@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import base64
 import os
-from datetime import datetime
-from urllib.parse import urlparse
 from typing import Any, Callable, TypeVar
+from datetime import date, datetime, timedelta
+from urllib.parse import urlparse
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 import requests
 import streamlit as st
@@ -39,6 +40,10 @@ CASH_EVENT_LABELS = {
     "cash_adjustment": "현금 조정",
 }
 EXPORTABLE_TABLES = {"accounts", "holdings", "trade_logs", "daily_interest", "daily_account_snapshot"}
+DEFAULT_ANNUAL_INTEREST_RATE = 0.05
+DEFAULT_ROLLUP_TIMEZONE = "Asia/Seoul"
+AUTO_DAILY_INTEREST_NOTE = "일별 이자 적립"
+INTEREST_AMOUNT_TOLERANCE = 0.0001
 
 
 def _state_store() -> dict[str, Any]:
@@ -229,6 +234,463 @@ def _demo_account_totals(account_id: int) -> tuple[float, float, float]:
     account = get_account(account_id) or {}
     cash_balance = float(account.get("cash_balance") or 0)
     return cash_balance, market_value, total_cost
+
+
+def _rollup_today(timezone_name: str = DEFAULT_ROLLUP_TIMEZONE) -> date:
+    """롤업 기준 오늘 날짜를 반환한다."""
+
+    return datetime.now(ZoneInfo(timezone_name)).date()
+
+
+def _parse_iso_date(value: Any) -> date | None:
+    """문자열/타임스탬프 값을 날짜로 해석한다."""
+
+    text = str(value or "").strip()
+    if not text:
+        return None
+    normalized = text[:10]
+    try:
+        return date.fromisoformat(normalized)
+    except ValueError:
+        return None
+
+
+def _is_auto_daily_interest_trade(log: dict[str, Any]) -> bool:
+    """자동 적립된 일별 이자 trade log인지 판별한다."""
+
+    trade_type = str(log.get("trade_type") or "").strip().lower()
+    if trade_type != "interest":
+        return False
+    if str(log.get("notes") or "").strip() == AUTO_DAILY_INTEREST_NOTE:
+        return True
+    return str(log.get("product_name") or "").strip() == _cash_event_label("interest")
+
+
+def _interest_amount_matches(left: float, right: float) -> bool:
+    """일별 이자 금액을 허용 오차 내에서 비교한다."""
+
+    return abs(float(left or 0) - float(right or 0)) <= INTEREST_AMOUNT_TOLERANCE
+
+
+def _daily_interest_row_amount_by_date(
+    interest_rows: list[dict[str, Any]],
+    *,
+    target_date: date,
+) -> dict[str, float]:
+    """daily_interest 테이블 값을 날짜별로 정리한다."""
+
+    target_iso = target_date.isoformat()
+    existing: dict[str, float] = {}
+
+    for row in interest_rows:
+        interest_date = str(row.get("date") or row.get("interest_date") or "").strip()
+        if not interest_date or interest_date > target_iso:
+            continue
+        existing[interest_date] = float(row.get("interest_amount") or 0)
+
+    return existing
+
+
+def _trade_interest_amount_by_date(
+    trade_logs: list[dict[str, Any]],
+    *,
+    target_date: date,
+) -> dict[str, float]:
+    """자동 적립된 interest trade log 금액을 날짜별로 정리한다."""
+
+    target_iso = target_date.isoformat()
+    existing: dict[str, float] = {}
+
+    for log in trade_logs:
+        if not _is_auto_daily_interest_trade(log):
+            continue
+        trade_date = str(log.get("trade_date") or "").strip()
+        if not trade_date or trade_date > target_iso:
+            continue
+        amount = abs(float(log.get("cash_delta") or 0)) or abs(float(log.get("total_amount") or 0))
+        if amount > 0:
+            existing[trade_date] = amount
+
+    return existing
+
+
+def _actual_interest_amount_by_date(
+    trade_logs: list[dict[str, Any]],
+    interest_rows: list[dict[str, Any]],
+    *,
+    target_date: date,
+) -> dict[str, float]:
+    """현재 원장/상세 테이블 기준 일별 이자 금액을 날짜별로 정리한다."""
+
+    row_by_date = _daily_interest_row_amount_by_date(interest_rows, target_date=target_date)
+    trade_by_date = _trade_interest_amount_by_date(trade_logs, target_date=target_date)
+    existing = dict(row_by_date)
+    existing.update(trade_by_date)
+    return existing
+
+
+def _existing_interest_total_to_remove(
+    trade_logs: list[dict[str, Any]],
+    interest_rows: list[dict[str, Any]],
+    *,
+    target_date: date,
+) -> float:
+    """현재 계좌 현금에 반영된 자동 일별 이자 총액을 계산한다."""
+
+    row_by_date = _daily_interest_row_amount_by_date(interest_rows, target_date=target_date)
+    trade_by_date = _trade_interest_amount_by_date(trade_logs, target_date=target_date)
+    orphaned_row_total = sum(amount for interest_date, amount in row_by_date.items() if interest_date not in trade_by_date)
+    return round(sum(trade_by_date.values()) + orphaned_row_total, 4)
+
+
+def _build_interest_schedule(
+    account: dict[str, Any],
+    trade_logs: list[dict[str, Any]],
+    interest_rows: list[dict[str, Any]],
+    *,
+    target_date: date,
+    annual_rate: float,
+) -> list[tuple[str, float]]:
+    """원장 기준으로 기대되는 일별 이자 적립 일정을 계산한다."""
+
+    if annual_rate <= 0:
+        return []
+
+    non_interest_delta_by_date: dict[str, float] = {}
+    earliest_trade_date: date | None = None
+    ledger_cash_delta_total = 0.0
+    trade_interest_by_date = _trade_interest_amount_by_date(trade_logs, target_date=target_date)
+    row_interest_by_date = _daily_interest_row_amount_by_date(interest_rows, target_date=target_date)
+
+    for log in trade_logs:
+        cash_delta = float(log.get("cash_delta") or 0)
+        ledger_cash_delta_total += cash_delta
+
+        trade_date_text = str(log.get("trade_date") or "").strip()
+        trade_date = _parse_iso_date(trade_date_text)
+        if trade_date is None or trade_date > target_date:
+            continue
+
+        if earliest_trade_date is None or trade_date < earliest_trade_date:
+            earliest_trade_date = trade_date
+
+        if _is_auto_daily_interest_trade(log):
+            continue
+        non_interest_delta_by_date[trade_date.isoformat()] = non_interest_delta_by_date.get(trade_date.isoformat(), 0.0) + cash_delta
+
+    current_cash = float(account.get("cash_balance") or 0)
+    orphaned_interest_total = sum(
+        amount
+        for interest_date, amount in row_interest_by_date.items()
+        if interest_date not in trade_interest_by_date
+    )
+    opening_cash = current_cash - ledger_cash_delta_total - orphaned_interest_total
+    account_created_date = _parse_iso_date(account.get("created_at"))
+
+    start_date = earliest_trade_date or account_created_date
+    if start_date is None or start_date > target_date:
+        return []
+
+    running_cash = opening_cash
+    current_date = start_date
+    plan: list[tuple[str, float]] = []
+
+    while current_date <= target_date:
+        current_iso = current_date.isoformat()
+        running_cash += non_interest_delta_by_date.get(current_iso, 0.0)
+
+        if running_cash > 0:
+            interest_amount = round(running_cash * annual_rate / 365, 4)
+            if interest_amount > 0:
+                plan.append((current_iso, interest_amount))
+                running_cash += interest_amount
+
+        current_date += timedelta(days=1)
+
+    return plan
+
+
+def _interest_sync_diff(
+    desired_entries: list[tuple[str, float]],
+    trade_logs: list[dict[str, Any]],
+    interest_rows: list[dict[str, Any]],
+    *,
+    target_date: date,
+) -> dict[str, Any]:
+    """기대 이자 일정과 실제 저장 상태의 차이를 집계한다."""
+
+    desired_by_date = {interest_date: amount for interest_date, amount in desired_entries}
+    row_by_date = _daily_interest_row_amount_by_date(interest_rows, target_date=target_date)
+    trade_by_date = _trade_interest_amount_by_date(trade_logs, target_date=target_date)
+    actual_by_date = _actual_interest_amount_by_date(trade_logs, interest_rows, target_date=target_date)
+
+    added_dates = [interest_date for interest_date in desired_by_date if interest_date not in actual_by_date]
+    updated_dates = [
+        interest_date
+        for interest_date, amount in desired_by_date.items()
+        if interest_date in actual_by_date and not _interest_amount_matches(amount, actual_by_date[interest_date])
+    ]
+    removed_dates = [interest_date for interest_date in actual_by_date if interest_date not in desired_by_date]
+    inconsistent_dates = sorted(
+        interest_date
+        for interest_date in set(row_by_date) | set(trade_by_date)
+        if interest_date not in row_by_date
+        or interest_date not in trade_by_date
+        or not _interest_amount_matches(row_by_date.get(interest_date, 0.0), trade_by_date.get(interest_date, 0.0))
+    )
+
+    return {
+        "desired_entries": desired_entries,
+        "desired_by_date": desired_by_date,
+        "actual_by_date": actual_by_date,
+        "added_dates": added_dates,
+        "updated_dates": updated_dates,
+        "removed_dates": removed_dates,
+        "inconsistent_dates": inconsistent_dates,
+        "net_amount_delta": round(sum(desired_by_date.values()) - sum(actual_by_date.values()), 4),
+        "requires_rebuild": bool(updated_dates or removed_dates or inconsistent_dates),
+    }
+
+
+def _replace_interest_history_counts(diff: dict[str, Any]) -> dict[str, int]:
+    """재구성 결과를 추가/수정/삭제 건수로 정리한다."""
+
+    added_dates = set(diff.get("added_dates") or [])
+    updated_dates = set(diff.get("updated_dates") or [])
+    removed_dates = set(diff.get("removed_dates") or [])
+    inconsistent_dates = set(diff.get("inconsistent_dates") or [])
+    desired_dates = set((diff.get("desired_by_date") or {}).keys())
+
+    updated_dates |= (inconsistent_dates & desired_dates) - added_dates
+    removed_dates |= inconsistent_dates - desired_dates
+    return {
+        "interest_rows_added": len(added_dates),
+        "interest_rows_updated": len(updated_dates),
+        "interest_rows_removed": len(removed_dates),
+    }
+
+
+def _snapshot_matches_current(
+    snapshot: dict[str, Any],
+    *,
+    cash_balance: float,
+    market_value: float,
+    total_value: float,
+    total_cost: float,
+) -> bool:
+    """기존 스냅샷이 현재 값과 사실상 같은지 확인한다."""
+
+    comparisons = (
+        (snapshot.get("cash_balance"), cash_balance),
+        (snapshot.get("market_value"), market_value),
+        (snapshot.get("total_value"), total_value),
+        (snapshot.get("total_cost"), total_cost),
+    )
+    return all(abs(float(left or 0) - float(right or 0)) <= 0.0001 for left, right in comparisons)
+
+
+def _cash_delta_by_date(
+    trade_logs: list[dict[str, Any]],
+    interest_rows: list[dict[str, Any]],
+    *,
+    target_date: date,
+) -> dict[str, float]:
+    """거래 원장과 orphan 이자 행을 합쳐 날짜별 현금 증감을 계산한다."""
+
+    target_iso = target_date.isoformat()
+    delta_by_date: dict[str, float] = {}
+
+    for log in trade_logs:
+        trade_date = str(log.get("trade_date") or "").strip()
+        if not trade_date or trade_date > target_iso:
+            continue
+        delta_by_date[trade_date] = delta_by_date.get(trade_date, 0.0) + float(log.get("cash_delta") or 0)
+
+    row_by_date = _daily_interest_row_amount_by_date(interest_rows, target_date=target_date)
+    trade_by_date = _trade_interest_amount_by_date(trade_logs, target_date=target_date)
+    for interest_date, amount in row_by_date.items():
+        if interest_date in trade_by_date:
+            continue
+        delta_by_date[interest_date] = delta_by_date.get(interest_date, 0.0) + amount
+
+    return delta_by_date
+
+
+def _historical_cash_balance_by_date(
+    account: dict[str, Any],
+    trade_logs: list[dict[str, Any]],
+    interest_rows: list[dict[str, Any]],
+    *,
+    target_date: date,
+    snapshot_dates: list[str],
+) -> dict[str, float]:
+    """지정한 스냅샷 날짜별 종가 기준 현금 잔액을 계산한다."""
+
+    if not snapshot_dates:
+        return {}
+
+    trade_interest_by_date = _trade_interest_amount_by_date(trade_logs, target_date=target_date)
+    row_interest_by_date = _daily_interest_row_amount_by_date(interest_rows, target_date=target_date)
+    orphaned_interest_total = sum(
+        amount
+        for interest_date, amount in row_interest_by_date.items()
+        if interest_date not in trade_interest_by_date
+    )
+    current_cash = float(account.get("cash_balance") or 0)
+    ledger_cash_delta_total = sum(float(log.get("cash_delta") or 0) for log in trade_logs)
+    opening_cash = current_cash - ledger_cash_delta_total - orphaned_interest_total
+    delta_by_date = _cash_delta_by_date(trade_logs, interest_rows, target_date=target_date)
+
+    snapshot_date_values = [date.fromisoformat(item) for item in snapshot_dates]
+    account_created_date = _parse_iso_date(account.get("created_at"))
+    iter_start = min(snapshot_date_values)
+    if account_created_date and account_created_date < iter_start:
+        iter_start = account_created_date
+
+    running_cash = opening_cash
+    result: dict[str, float] = {}
+    current_date = iter_start
+    target_snapshot_dates = set(snapshot_dates)
+    while current_date <= target_date:
+        current_iso = current_date.isoformat()
+        running_cash += delta_by_date.get(current_iso, 0.0)
+        if current_iso in target_snapshot_dates:
+            result[current_iso] = round(running_cash, 4)
+        current_date += timedelta(days=1)
+
+    return result
+
+
+def _historical_total_cost_by_date(
+    trade_logs: list[dict[str, Any]],
+    *,
+    target_date: date,
+    snapshot_dates: list[str],
+) -> dict[str, float]:
+    """지정한 스냅샷 날짜별 종가 기준 총원가를 계산한다."""
+
+    if not snapshot_dates:
+        return {}
+
+    trade_logs_sorted = sorted(
+        trade_logs,
+        key=lambda row: (str(row.get("trade_date") or ""), int(row.get("id") or 0)),
+    )
+    trade_events_by_date: dict[str, list[dict[str, Any]]] = {}
+    earliest_trade_date: date | None = None
+    for log in trade_logs_sorted:
+        trade_type = str(log.get("trade_type") or "").strip().lower()
+        if trade_type not in BUY_SELL_TRADE_TYPES:
+            continue
+        trade_date = _parse_iso_date(log.get("trade_date"))
+        if trade_date is None or trade_date > target_date:
+            continue
+        trade_events_by_date.setdefault(trade_date.isoformat(), []).append(log)
+        if earliest_trade_date is None or trade_date < earliest_trade_date:
+            earliest_trade_date = trade_date
+
+    snapshot_date_values = [date.fromisoformat(item) for item in snapshot_dates]
+    iter_start = min(snapshot_date_values)
+    if earliest_trade_date and earliest_trade_date < iter_start:
+        iter_start = earliest_trade_date
+
+    positions: dict[str, tuple[float, float]] = {}
+    result: dict[str, float] = {}
+    current_date = iter_start
+    target_snapshot_dates = set(snapshot_dates)
+    while current_date <= target_date:
+        current_iso = current_date.isoformat()
+        for log in trade_events_by_date.get(current_iso, []):
+            symbol = str(log.get("symbol") or "").strip().upper()
+            quantity = float(log.get("quantity") or 0)
+            price = float(log.get("price") or 0)
+            trade_type = str(log.get("trade_type") or "").strip().lower()
+            current_quantity, avg_cost = positions.get(symbol, (0.0, 0.0))
+
+            if trade_type == "buy":
+                next_quantity = current_quantity + quantity
+                if next_quantity > 0:
+                    avg_cost = ((current_quantity * avg_cost) + (quantity * price)) / next_quantity
+                positions[symbol] = (next_quantity, avg_cost)
+            else:
+                next_quantity = max(current_quantity - quantity, 0.0)
+                if next_quantity <= 0:
+                    positions.pop(symbol, None)
+                else:
+                    positions[symbol] = (next_quantity, avg_cost)
+
+        if current_iso in target_snapshot_dates:
+            result[current_iso] = round(
+                sum(quantity * avg_cost for quantity, avg_cost in positions.values() if quantity > 0),
+                4,
+            )
+        current_date += timedelta(days=1)
+
+    return result
+
+
+def _sync_historical_snapshots(
+    account_id: int,
+    *,
+    account: dict[str, Any],
+    trade_logs: list[dict[str, Any]],
+    interest_rows: list[dict[str, Any]],
+    snapshot_rows: list[dict[str, Any]],
+    start_date: date,
+    target_date: date,
+) -> int:
+    """기존 historical snapshot의 현금/원가/총액을 원장 기준으로 다시 맞춘다."""
+
+    relevant_rows_by_date: dict[str, dict[str, Any]] = {}
+    for row in snapshot_rows:
+        snapshot_date = _parse_iso_date(row.get("snapshot_date"))
+        if snapshot_date is None or snapshot_date < start_date or snapshot_date > target_date:
+            continue
+        relevant_rows_by_date[snapshot_date.isoformat()] = row
+
+    snapshot_dates = sorted(relevant_rows_by_date)
+    if not snapshot_dates:
+        return 0
+
+    cash_balance_by_date = _historical_cash_balance_by_date(
+        account,
+        trade_logs,
+        interest_rows,
+        target_date=target_date,
+        snapshot_dates=snapshot_dates,
+    )
+    total_cost_by_date = _historical_total_cost_by_date(
+        trade_logs,
+        target_date=target_date,
+        snapshot_dates=snapshot_dates,
+    )
+
+    updated_count = 0
+    for snapshot_date in snapshot_dates:
+        snapshot_row = relevant_rows_by_date[snapshot_date]
+        market_value = float(snapshot_row.get("market_value") or 0)
+        cash_balance = float(cash_balance_by_date.get(snapshot_date, snapshot_row.get("cash_balance") or 0))
+        total_cost = float(total_cost_by_date.get(snapshot_date, snapshot_row.get("total_cost") or 0))
+        total_value = round(cash_balance + market_value, 4)
+        if _snapshot_matches_current(
+            snapshot_row,
+            cash_balance=cash_balance,
+            market_value=market_value,
+            total_value=total_value,
+            total_cost=total_cost,
+        ):
+            continue
+        record_account_snapshot(
+            account_id,
+            snapshot_date=snapshot_date,
+            cash_balance=cash_balance,
+            market_value=market_value,
+            total_value=total_value,
+            total_cost=total_cost,
+        )
+        updated_count += 1
+
+    return updated_count
 
 
 def _demo_account_is_complete(account_id: int, account_spec: dict[str, Any]) -> bool:
@@ -1231,6 +1693,61 @@ def _supabase_record_daily_interest(account_id: int, *, interest_date: str, amou
     )
 
 
+def _supabase_delete_rows_by_ids(table_name: str, row_ids: list[int]) -> None:
+    """Supabase 테이블에서 지정한 ID 행들을 삭제한다."""
+
+    cleaned_ids = [str(int(row_id)) for row_id in row_ids if int(row_id) > 0]
+    if not cleaned_ids:
+        return
+    _supabase_request("DELETE", table_name, filters={"id": f"in.({','.join(cleaned_ids)})"})
+
+
+def _supabase_replace_interest_history(
+    account_id: int,
+    *,
+    target_date: str,
+    desired_entries: list[tuple[str, float]],
+) -> None:
+    """Supabase 계좌의 자동 일별 이자 이력을 목표 일정으로 다시 만든다."""
+
+    account = _supabase_get_account(account_id)
+    if not account:
+        raise ValueError("계좌를 찾을 수 없습니다.")
+
+    target_date_value = date.fromisoformat(target_date)
+    trade_logs = _supabase_list_trade_logs(account_id)
+    interest_rows = _supabase_list_daily_interest(account_id)
+    removed_interest_total = _existing_interest_total_to_remove(
+        trade_logs,
+        interest_rows,
+        target_date=target_date_value,
+    )
+    base_cash = round(float(account.get("cash_balance") or 0) - removed_interest_total, 4)
+    if base_cash < -INTEREST_AMOUNT_TOLERANCE:
+        raise ValueError("자동 이자 재계산 후 현금 잔액이 음수가 됩니다.")
+    base_cash = max(base_cash, 0.0)
+
+    daily_interest_ids = [
+        int(row["id"])
+        for row in interest_rows
+        if row.get("id") is not None
+        and (_parse_iso_date(row.get("date") or row.get("interest_date")) or date.max) <= target_date_value
+    ]
+    auto_trade_log_ids = [
+        int(log["id"])
+        for log in trade_logs
+        if log.get("id") is not None
+        and _is_auto_daily_interest_trade(log)
+        and (_parse_iso_date(log.get("trade_date")) or date.max) <= target_date_value
+    ]
+
+    _supabase_delete_rows_by_ids("daily_interest", daily_interest_ids)
+    _supabase_delete_rows_by_ids("trade_logs", auto_trade_log_ids)
+    _supabase_update_cash_balance(account_id, base_cash)
+    for interest_date, amount in desired_entries:
+        _supabase_record_daily_interest(account_id, interest_date=interest_date, amount=amount)
+
+
 def _supabase_record_account_transfer(
     from_account_id: int,
     *,
@@ -1488,6 +2005,86 @@ def _sqlite_record_daily_interest(account_id: int, *, interest_date: str, amount
     )
 
 
+def _sqlite_replace_interest_history(
+    account_id: int,
+    *,
+    target_date: str,
+    desired_entries: list[tuple[str, float]],
+) -> None:
+    """SQLite 계좌의 자동 일별 이자 이력을 목표 일정으로 다시 만든다."""
+
+    account = _sqlite_get_account(account_id)
+    if not account:
+        raise ValueError("계좌를 찾을 수 없습니다.")
+
+    target_date_value = date.fromisoformat(target_date)
+    trade_logs = sqlite_db.list_trade_logs(account_id)
+    interest_rows = sqlite_db.list_daily_interest(account_id)
+    removed_interest_total = _existing_interest_total_to_remove(
+        trade_logs,
+        interest_rows,
+        target_date=target_date_value,
+    )
+    next_cash = round(float(account.get("cash_balance") or 0) - removed_interest_total, 4)
+    if next_cash < -INTEREST_AMOUNT_TOLERANCE:
+        raise ValueError("자동 이자 재계산 후 현금 잔액이 음수가 됩니다.")
+    next_cash = max(next_cash, 0.0)
+
+    timestamp = sqlite_db.now_iso()
+    with sqlite_db.connect() as connection:
+        sqlite_db._require_account(connection, account_id)
+        connection.execute(
+            """
+            DELETE FROM daily_interest
+            WHERE account_id = ?
+              AND date <= ?
+            """,
+            (account_id, target_date),
+        )
+        connection.execute(
+            """
+            DELETE FROM trade_logs
+            WHERE account_id = ?
+              AND trade_type = 'interest'
+              AND trade_date <= ?
+              AND (
+                    TRIM(COALESCE(notes, '')) = ?
+                 OR TRIM(COALESCE(product_name, '')) = ?
+              )
+            """,
+            (account_id, target_date, AUTO_DAILY_INTEREST_NOTE, _cash_event_label("interest")),
+        )
+        for interest_date, amount in desired_entries:
+            interest_amount = float(amount or 0)
+            connection.execute(
+                """
+                INSERT INTO daily_interest (account_id, date, interest_amount, created_at)
+                VALUES (?, ?, ?, ?)
+                """,
+                (account_id, interest_date, interest_amount, timestamp),
+            )
+            sqlite_db._insert_trade_log(
+                connection,
+                account_id=account_id,
+                symbol="",
+                product_name=_cash_event_label("interest"),
+                trade_type="interest",
+                asset_type="cash",
+                quantity=0,
+                price=0,
+                total_amount=interest_amount,
+                cash_delta=interest_amount,
+                trade_date=interest_date,
+                notes=AUTO_DAILY_INTEREST_NOTE,
+                created_at=timestamp,
+                metadata_json=sqlite_db._metadata_json(),
+            )
+            next_cash += interest_amount
+
+        sqlite_db._update_account_cash_balance(connection, account_id, round(next_cash, 4), timestamp)
+        connection.commit()
+
+
 def _sqlite_record_account_transfer(
     from_account_id: int,
     *,
@@ -1730,6 +2327,28 @@ def record_daily_interest(account_id: int, *, interest_date: str, amount: float)
     )
 
 
+def _replace_interest_history(
+    account_id: int,
+    *,
+    target_date: str,
+    desired_entries: list[tuple[str, float]],
+) -> None:
+    """현재 저장소에서 자동 일별 이자 이력을 목표 일정으로 재구성한다."""
+
+    _run_with_fallback(
+        supabase_call=lambda: _supabase_replace_interest_history(
+            account_id,
+            target_date=target_date,
+            desired_entries=desired_entries,
+        ),
+        sqlite_call=lambda: _sqlite_replace_interest_history(
+            account_id,
+            target_date=target_date,
+            desired_entries=desired_entries,
+        ),
+    )
+
+
 def record_account_snapshot(
     account_id: int,
     *,
@@ -1759,6 +2378,127 @@ def record_account_snapshot(
             total_cost=total_cost,
         ),
     )
+
+
+def sync_account_rollup(
+    account_id: int,
+    *,
+    annual_rate: float = DEFAULT_ANNUAL_INTEREST_RATE,
+    today_date: str | None = None,
+    timezone_name: str = DEFAULT_ROLLUP_TIMEZONE,
+) -> dict[str, Any]:
+    """원장 기준으로 자동 일별 이자를 보정하고 오늘 스냅샷을 맞춘다."""
+
+    account = get_account(account_id)
+    if not account:
+        raise ValueError("계좌를 찾을 수 없습니다.")
+
+    today = date.fromisoformat(today_date) if today_date else _rollup_today(timezone_name)
+    target_date = today - timedelta(days=1)
+    interest_rows_added = 0
+    interest_rows_updated = 0
+    interest_rows_removed = 0
+    historical_snapshots_updated = 0
+    interest_amount_added = 0.0
+    changed_interest_dates: set[str] = set()
+
+    trade_logs = list_trade_logs(account_id)
+    interest_rows = list_daily_interest(account_id)
+    if target_date >= date.min:
+        desired_entries = _build_interest_schedule(
+            account,
+            trade_logs,
+            interest_rows,
+            target_date=target_date,
+            annual_rate=float(annual_rate or 0),
+        )
+        diff = _interest_sync_diff(
+            desired_entries,
+            trade_logs,
+            interest_rows,
+            target_date=target_date,
+        )
+        if diff["requires_rebuild"]:
+            changed_interest_dates = set(diff["added_dates"]) | set(diff["updated_dates"]) | set(diff["removed_dates"]) | set(
+                diff["inconsistent_dates"]
+            )
+            _replace_interest_history(
+                account_id,
+                target_date=target_date.isoformat(),
+                desired_entries=desired_entries,
+            )
+            rebuild_counts = _replace_interest_history_counts(diff)
+            interest_rows_added = rebuild_counts["interest_rows_added"]
+            interest_rows_updated = rebuild_counts["interest_rows_updated"]
+            interest_rows_removed = rebuild_counts["interest_rows_removed"]
+            interest_amount_added = float(diff["net_amount_delta"] or 0)
+        else:
+            added_dates = set(diff["added_dates"])
+            changed_interest_dates = set(added_dates)
+            for interest_date, amount in desired_entries:
+                if interest_date not in added_dates:
+                    continue
+                record_daily_interest(account_id, interest_date=interest_date, amount=amount)
+                interest_rows_added += 1
+                interest_amount_added += amount
+
+    if changed_interest_dates:
+        account = get_account(account_id) or account
+        trade_logs = list_trade_logs(account_id)
+        interest_rows = list_daily_interest(account_id)
+        historical_start_date = date.fromisoformat(min(changed_interest_dates))
+        snapshot_rows = list_account_snapshots(account_id, start_date=historical_start_date.isoformat())
+        historical_snapshots_updated = _sync_historical_snapshots(
+            account_id,
+            account=account,
+            trade_logs=trade_logs,
+            interest_rows=interest_rows,
+            snapshot_rows=snapshot_rows,
+            start_date=historical_start_date,
+            target_date=target_date,
+        )
+
+    cash_balance, market_value, total_cost = _demo_account_totals(account_id)
+    total_value = cash_balance + market_value
+    snapshot_date = today.isoformat()
+    existing_snapshots = list_account_snapshots(account_id, start_date=snapshot_date)
+    existing_snapshot = next(
+        (
+            row
+            for row in existing_snapshots
+            if str(row.get("snapshot_date") or "").strip() == snapshot_date
+        ),
+        None,
+    )
+    snapshot_updated = not (
+        existing_snapshot
+        and _snapshot_matches_current(
+            existing_snapshot,
+            cash_balance=cash_balance,
+            market_value=market_value,
+            total_value=total_value,
+            total_cost=total_cost,
+        )
+    )
+    if snapshot_updated:
+        record_account_snapshot(
+            account_id,
+            snapshot_date=snapshot_date,
+            cash_balance=cash_balance,
+            market_value=market_value,
+            total_value=total_value,
+            total_cost=total_cost,
+        )
+
+    return {
+        "interest_rows_added": interest_rows_added,
+        "interest_rows_updated": interest_rows_updated,
+        "interest_rows_removed": interest_rows_removed,
+        "historical_snapshots_updated": historical_snapshots_updated,
+        "interest_amount_added": round(interest_amount_added, 4),
+        "snapshot_date": snapshot_date,
+        "snapshot_updated": snapshot_updated,
+    }
 
 
 def record_account_transfer(

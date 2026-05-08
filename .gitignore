@@ -10,3 +10,15 @@ tools/
 .env
 .env.local
 streamlit-*.log
+playwright-*.png
+playwright-*.txt
+current-verify*.png
+current-verify*.txt
+final-verify-*.png
+final-verify-*.txt
+supabase-*-output.png
+supabase-*-output.txt
+supabase-sql-page.png
+streamlit-*.png
+after-reboot-raw.png
+post-push-raw.png

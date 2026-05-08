@@ -17,9 +17,9 @@
 ## 기술 구조
 
 - UI: `Streamlit`
-- 저장소: 로컬 `SQLite`
+- 저장소: `Supabase` 우선, 필요 시 로컬 `SQLite` fallback
 - 시세: `yfinance`
-- 앱 데이터 파일: `data/portfolio.db`
+- 로컬 앱 데이터 파일: `data/portfolio.db`
 
 ## 로컬 실행
 
@@ -42,28 +42,45 @@ streamlit run app.py
 3. `setup_supabase.sql` 파일의 모든 코드 복사 & 실행
 4. 실행 완료 확인
 
-#### 2단계: 환경 변수 설정
+#### 2단계: 시크릿 설정
 
-Streamlit Cloud에 배포할 때:
+Streamlit Community Cloud 배포 시 아래 값을 준비합니다.
 
-1. https://share.streamlit.io 에서 앱 배포 후
-2. **Settings** > **Secrets** 에서 다음 추가:
 ```toml
 SUPABASE_URL = "https://your-project.supabase.co"
 SUPABASE_KEY = "your-anon-public-key"
 ```
 
-3. **Redeploy** 클릭
+- 배포 화면의 **Advanced settings** > **Secrets** 에 바로 붙여넣을 수 있습니다.
+- 이미 배포한 앱이라면 `Settings > Secrets` 에서 같은 값을 추가하면 됩니다.
 
-#### 3단계: Streamlit Cloud에 배포
+#### 3단계: Streamlit Community Cloud에 배포
 
-1. GitHub에 코드 업로드 (위 방법 참고)
+1. GitHub에 코드 업로드
 2. https://share.streamlit.io 접속
-3. **New app** 클릭
-4. Repository: `YOUR_USERNAME/retirement-portfolio-streamlit`
-   Branch: `main`
-   Main file path: `app.py`
-5. **Deploy!** 클릭
+3. 우측 상단 **Create app** 클릭
+4. Repository: `jhonkim91/retirement-portfolio-streamlit`
+5. Branch: `main`
+6. Main file path: `app.py`
+7. 필요하면 **Advanced settings** 에서 Python 버전과 Secrets 설정
+8. **Deploy** 클릭
+
+배포 URL은 기본적으로 `*.streamlit.app` 형식으로 생성됩니다.
+
+---
+
+### 배포 후 시크릿 추가 방법
+
+이미 앱이 올라간 뒤라면 아래 순서로 시크릿을 추가할 수 있습니다.
+
+1. https://share.streamlit.io 에서 대상 앱 열기
+2. **Settings** > **Secrets** 이동
+3. 다음 값 추가:
+```toml
+SUPABASE_URL = "https://your-project.supabase.co"
+SUPABASE_KEY = "your-anon-public-key"
+```
+4. 저장 후 필요 시 **Reboot app** 또는 재배포
 
 ---
 
@@ -132,3 +149,21 @@ python scripts/run_daily_rollup.py --backend supabase --date 2026-05-10 --annual
 - `SUPABASE_URL`과 `SUPABASE_KEY`가 있으면 앱은 기본적으로 `Supabase`를 우선 사용합니다.
 - `PORTFOLIO_BACKEND=sqlite`가 설정되어 있으면 배포 환경에서도 로컬 SQLite를 강제로 사용하므로 운영 배포에서는 권장하지 않습니다.
 - 웹 앱의 `데이터 > 운영 상태` 패널에서 현재 저장소, Supabase 설정 감지 여부, 강제 백엔드 설정 여부를 바로 확인할 수 있습니다.
+
+## 웹 배포 검증
+
+배포된 앱 로그인과 저장소 상태는 `scripts/verify_streamlit_deployment.py`로 자동 점검할 수 있습니다.
+
+```powershell
+python -m pip install playwright
+python -m playwright install chromium
+
+$env:STREAMLIT_VERIFY_EMAIL = "you@example.com"
+$env:STREAMLIT_VERIFY_PASSWORD = "your-password"
+python scripts/verify_streamlit_deployment.py --page data --expect-backend supabase
+```
+
+- `--screenshot`을 주면 전체 화면 이미지를 저장합니다.
+- `--text-output`을 주면 화면 본문 텍스트를 UTF-8로 저장합니다.
+- 기대 저장소와 실제 저장소가 다르면 종료 코드 `2`를 반환합니다.
+- 로그인 자격 증명이 없으면 종료 코드 `1`과 함께 `--email/--password ... 가 필요합니다.` 오류를 반환합니다.

@@ -124,7 +124,7 @@
 - 따라서 `Streamlit secrets/Supabase 연결` 자체는 반영된 것으로 보이며, 기존 `SQLite` 병목은 해소된 상태다
 - 현재 실제 상태는 `Supabase 연결 완료 + 아직 첫 계좌가 없는 신규 온보딩 화면`이다
 - 로컬 코드 기준 진단은 `SUPABASE_URL=default`, `SUPABASE_KEY=missing`일 때 이유를 별도 표기하도록 보강 완료
-- 로컬 SQLite dry-run 기준 이관 대상은 `계좌 4개 / 보유종목 6개 / 거래기록 58개 / 일별 이자 0개 / 스냅샷 0개`다
+- 2026-05-08 dry-run 재확인 기준 이관 대상은 `계좌 4개 / 보유종목 6개 / 거래기록 122개 / 일별 이자 64개 / 스냅샷 1개`다
 - 데모 모드는 `데모 IRP`, `데모 일반계좌`와 입금/매수/이자/이체/스냅샷 예시를 한 번에 생성하도록 구현 중이다
 - 데모 버튼 실검증 중 `Supabase 쓰기 403` 뒤 `SQLite fallback`이 발생해, 인증 토큰 재확인과 `401/403 fallback 금지` 수정까지 추가 진행 중이다
 - 계좌 이름 접두사도 `session user_id` 대신 JWT `sub` 우선 기준으로 맞추도록 보강 중이다
@@ -258,6 +258,27 @@
   - `trade_logs`
   - legacy `mcb_*` tables
   and was missing `daily_interest` / `daily_account_snapshot`.
+
+## 2026-05-08 migration dry-run recheck
+
+- Re-ran [migrate_sqlite_to_supabase.py](/C:/Users/JKKIM/retirement-portfolio-streamlit/scripts/migrate_sqlite_to_supabase.py) without `--write`.
+- Current observed source namespace:
+  - `6e4d857d-b654-40c9-b458-a0b084449fce`
+- Current dry-run totals:
+  - accounts: 4
+  - holdings: 6
+  - trade_logs: 122
+  - daily_interest: 64
+  - daily_account_snapshot: 1
+- Per-account plan:
+  - `미래에셋증권`: cash `32,042,266`, holdings `0`, trades `30`
+  - `IRP (신한)`: cash `254,298.2625`, holdings `3`, trades `73`, interest `64`, snapshots `1`
+  - `엄마 주식`: cash `0`, holdings `1`, trades `2`
+  - `카카오증권`: cash `0`, holdings `2`, trades `17`
+- Write is still blocked until operator credentials are provided:
+  - target email
+  - target user password env
+  - `SUPABASE_KEY`
 - After the full setup, live deployment verification with a longer wait showed:
   - login succeeds
   - workspace opens on Supabase backend

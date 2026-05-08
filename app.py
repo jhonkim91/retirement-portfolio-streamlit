@@ -13,7 +13,9 @@ from dateutil.relativedelta import relativedelta
 from src.analytics import (
     account_summary,
     build_portfolio_trend,
+    cumulative_contribution_frame,
     holdings_frame,
+    projected_today_interest,
     realized_summary,
     snapshot_trend_frame,
 )
@@ -43,6 +45,7 @@ seed_demo_workspace = _db.seed_demo_workspace
 set_holding_price = _db.set_holding_price
 backend_status = _db.backend_status
 is_accounts_hotfix_error = _db.is_accounts_hotfix_error
+sync_account_rollup = _db.sync_account_rollup
 
 
 st.set_page_config(
@@ -79,7 +82,7 @@ PAGE_LABELS = {
     "Data": "데이터",
 }
 ACCOUNT_TYPE_LABELS = {
-    "retirement": "연금",
+    "retirement": "연금(IRP/퇴직연금)",
     "brokerage": "일반",
 }
 TRADE_TYPE_LABELS = {
@@ -442,8 +445,82 @@ def inject_app_styles() -> None:
             font-size: 0.9rem;
         }
 
+        .dashboard-metric-strip {
+            display: grid;
+            grid-template-columns: repeat(5, minmax(0, 1fr));
+            gap: 0.85rem;
+            margin: 1.1rem 0 1.35rem;
+        }
+
+        .dashboard-metric-card {
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 251, 250, 0.98));
+            border: 1px solid rgba(37, 99, 235, 0.16);
+            border-radius: 16px;
+            padding: 1.05rem 1.1rem 1rem;
+            box-shadow: 0 12px 30px rgba(15, 23, 42, 0.04);
+            min-height: 9rem;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        .dashboard-metric-card__top {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 0.65rem;
+        }
+
+        .dashboard-metric-card__label {
+            color: #58677b;
+            font-size: 0.86rem;
+            font-weight: 700;
+            letter-spacing: 0.01em;
+        }
+
+        .dashboard-metric-card__action {
+            border: 1px solid rgba(37, 99, 235, 0.22);
+            border-radius: 10px;
+            padding: 0.2rem 0.72rem;
+            font-size: 0.84rem;
+            font-weight: 700;
+            color: #0f3b66;
+            background: rgba(255, 255, 255, 0.96);
+            white-space: nowrap;
+        }
+
+        .dashboard-metric-card__value {
+            color: #0d3559;
+            font-size: clamp(1.6rem, 2vw, 2.2rem);
+            font-weight: 800;
+            line-height: 1.08;
+            letter-spacing: -0.03em;
+            margin-top: 1.2rem;
+        }
+
+        .dashboard-metric-card__value--accent {
+            color: #b42318;
+        }
+
+        .dashboard-metric-card__note {
+            margin-top: 0.75rem;
+            color: #64748b;
+            font-size: 0.82rem;
+            line-height: 1.45;
+        }
+
         @media (max-width: 860px) {
             .page-context__grid {
+                grid-template-columns: 1fr;
+            }
+
+            .dashboard-metric-strip {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+        }
+
+        @media (max-width: 560px) {
+            .dashboard-metric-strip {
                 grid-template-columns: 1fr;
             }
         }
@@ -553,6 +630,39 @@ def render_page_context(account: dict[str, Any], active_page: str, status: dict[
     )
 
 
+def render_dashboard_metric_strip(cards: list[dict[str, str]]) -> None:
+    """대시보드 상단 핵심 지표를 카드 스트립 형태로 렌더링한다."""
+
+    items: list[str] = []
+    for card in cards:
+        label = html.escape(str(card.get("label") or ""))
+        value = html.escape(str(card.get("value") or ""))
+        note = str(card.get("note") or "").strip()
+        action = str(card.get("action") or "").strip()
+        tone = str(card.get("tone") or "").strip()
+        value_class = "dashboard-metric-card__value"
+        if tone == "accent":
+            value_class += " dashboard-metric-card__value--accent"
+        note_html = f'<div class="dashboard-metric-card__note">{html.escape(note)}</div>' if note else ""
+        action_html = f'<div class="dashboard-metric-card__action">{html.escape(action)}</div>' if action else ""
+        items.append(
+            f"""
+            <div class="dashboard-metric-card">
+                <div>
+                    <div class="dashboard-metric-card__top">
+                        <div class="dashboard-metric-card__label">{label}</div>
+                        {action_html}
+                    </div>
+                    <div class="{value_class}">{value}</div>
+                </div>
+                {note_html}
+            </div>
+            """
+        )
+
+    st.markdown(f'<div class="dashboard-metric-strip">{"".join(items)}</div>', unsafe_allow_html=True)
+
+
 def refresh_prices(holdings: list[dict[str, Any]]) -> tuple[int, list[str]]:
     updated = 0
     errors: list[str] = []
@@ -648,7 +758,7 @@ def show_holdings_table(frame: pd.DataFrame, *, height: int = 420) -> None:
     for column in ("평단가", "현재가", "원금", "평가금액", "손익"):
         display[column] = display[column].map(lambda value: f"{float(value or 0):,.0f}")
     display["수익률(%)"] = display["수익률(%)"].map(lambda value: f"{float(value or 0):+.2f}")
-    st.dataframe(display, use_container_width=True, hide_index=True, height=height)
+    st.dataframe(display, width="stretch", hide_index=True, height=height)
 
 
 def auth_page() -> None:
@@ -661,7 +771,7 @@ def auth_page() -> None:
         with st.container(border=True):
             st.write(f"이메일 확인 대기: `{pending_email}`")
             st.caption("예전 확인 링크가 열리지 않았다면 여기서 새 메일을 다시 보내고, 가장 최근 메일의 링크를 열어 주세요.")
-            if st.button("확인 메일 다시 보내기", key="resend-confirmation", use_container_width=True):
+            if st.button("확인 메일 다시 보내기", key="resend-confirmation", width="stretch"):
                 try:
                     app_auth.resend_signup(pending_email)
                 except Exception as exc:  # noqa: BLE001
@@ -675,7 +785,7 @@ def auth_page() -> None:
         with st.form("sign-in-form", clear_on_submit=False):
             email = st.text_input("이메일", key="sign-in-email")
             password = st.text_input("비밀번호", type="password", key="sign-in-password")
-            submitted = st.form_submit_button("로그인", use_container_width=True)
+            submitted = st.form_submit_button("로그인", width="stretch")
         if submitted:
             try:
                 app_auth.sign_in(email=email, password=password)
@@ -696,7 +806,7 @@ def auth_page() -> None:
             email = st.text_input("이메일", key="sign-up-email")
             password = st.text_input("비밀번호", type="password", key="sign-up-password")
             confirm_password = st.text_input("비밀번호 확인", type="password", key="sign-up-password-confirm")
-            submitted = st.form_submit_button("계정 만들기", use_container_width=True)
+            submitted = st.form_submit_button("계정 만들기", width="stretch")
         if submitted:
             if password != confirm_password:
                 st.error("비밀번호가 서로 다릅니다.")
@@ -729,7 +839,7 @@ def empty_state() -> None:
             name = st.text_input("계좌 이름", placeholder="예: IRP, ISA, 미국주식")
             account_type = st.selectbox("계좌 유형", ["retirement", "brokerage"], format_func=label_account_type)
             opening_cash = st.number_input("시작 현금", min_value=0.0, value=0.0, step=100000.0)
-            submitted = st.form_submit_button("첫 계좌 만들기", use_container_width=True)
+            submitted = st.form_submit_button("첫 계좌 만들기", width="stretch")
     if submitted:
         try:
             account_id = create_account(name=name, account_type=account_type, opening_cash=opening_cash)
@@ -748,7 +858,7 @@ def empty_state() -> None:
             demo_submitted = st.button(
                 "데모 데이터 불러오기",
                 icon=":material/rocket_launch:",
-                use_container_width=True,
+                width="stretch",
                 type="secondary",
             )
         if demo_submitted:
@@ -778,7 +888,7 @@ def sidebar(accounts: list[dict[str, Any]], selected_account_id: int | None, use
             st.caption("로그인 계정")
             st.write(f"`{user_label}`")
             st.caption(f"열려 있는 페이지: `{label_page(st.session_state.get('active_page', PAGES[0]))}`")
-            if st.button("로그아웃", use_container_width=True):
+            if st.button("로그아웃", width="stretch"):
                 app_auth.sign_out()
                 st.session_state["selected_account_id"] = None
                 st.rerun()
@@ -814,7 +924,7 @@ def sidebar(accounts: list[dict[str, Any]], selected_account_id: int | None, use
                     name = st.text_input("계좌 이름")
                     account_type = st.selectbox("유형", ["retirement", "brokerage"], format_func=label_account_type, key="new-account-type")
                     opening_cash = st.number_input("시작 현금", min_value=0.0, value=0.0, step=100000.0, key="new-account-cash")
-                    submitted = st.form_submit_button("계좌 추가", use_container_width=True)
+                    submitted = st.form_submit_button("계좌 추가", width="stretch")
                 if submitted:
                     try:
                         create_account(name=name, account_type=account_type, opening_cash=opening_cash)
@@ -827,12 +937,32 @@ def sidebar(accounts: list[dict[str, Any]], selected_account_id: int | None, use
     return selected_account_id, st.session_state["active_page"]
 
 
-def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]]) -> None:
+def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]], rollup_state: dict[str, Any] | None = None) -> None:
     frame = holdings_frame(holdings)
     trade_logs = list_trade_logs(int(account["id"]))
     interest_rows = list_daily_interest(int(account["id"]))
     summary = account_summary(account, holdings, trade_logs=trade_logs, interest_rows=interest_rows)
-    total_interest = float(summary["total_interest"] or 0)
+    rollup_date = str((rollup_state or {}).get("snapshot_date") or "").strip()
+    today_preview = projected_today_interest(
+        account,
+        interest_rows=interest_rows,
+        as_of=date.fromisoformat(rollup_date) if rollup_date else None,
+    )
+    total_interest = float(summary["total_interest"] or 0) + today_preview
+    display_cash = float(summary["cash"] or 0) + today_preview
+    display_total_value = float(summary["total_value"] or 0) + today_preview
+    display_principal_profit_loss = float(summary["principal_profit_loss"] or 0) + today_preview
+    display_principal_profit_rate = (
+        display_principal_profit_loss / float(summary["total_principal"] or 0) * 100
+        if float(summary["total_principal"] or 0)
+        else 0.0
+    )
+    display_actual_profit_loss = float(summary["actual_profit_loss"] or 0) + today_preview
+    display_actual_profit_rate = (
+        display_actual_profit_loss / float(summary["net_flow"] or 0) * 100
+        if float(summary["net_flow"] or 0)
+        else 0.0
+    )
     latest_interest_date = latest_date_text(interest_rows, "date")
     holdings_count = int(len(frame.index)) if not frame.empty else 0
     account_name = html.escape(str(account["name"]))
@@ -858,18 +988,25 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]]) -> N
             st.subheader("핵심 상태")
             status_metric_left, status_metric_right = st.columns(2)
             status_metric_left.metric("보유 종목", f"{holdings_count:,}개")
-            status_metric_right.metric("순유입", format_won(summary["net_flow"]))
+            status_metric_right.metric("보유상품 추정 수익률", format_pct(summary["profit_rate"]), metric_delta(summary["profit_loss"]))
             st.caption(f"최근 이자 적립: {latest_interest_date if latest_interest_date != '-' else '미적립'}")
+            if today_preview > 0:
+                st.caption(f"{rollup_date or date.today().isoformat()} 예상 현금 이자: {format_won(today_preview)}")
 
-    st.caption("핵심 지표")
-    primary_metric_left, primary_metric_right = st.columns(2, gap="large")
-    primary_metric_left.metric("포트폴리오 평가액", format_won(summary["total_value"]))
-    primary_metric_right.metric("실제 성과", format_won(summary["actual_profit_loss"]), metric_delta(summary["actual_profit_loss"]))
-
-    secondary_metric_1, secondary_metric_2, secondary_metric_3 = st.columns(3, gap="large")
-    secondary_metric_1.metric("투입 원금", format_won(summary["total_principal"]))
-    secondary_metric_2.metric("현금", format_won(summary["cash"]))
-    secondary_metric_3.metric("누적 이자", format_won(total_interest))
+    render_dashboard_metric_strip(
+        [
+            {"label": "입금 원금", "value": format_won(summary["total_principal"])},
+            {
+                "label": "보유 현금",
+                "value": format_won(display_cash),
+                "action": "수정",
+                "note": "요약 카드 아래 현금 조정 카드에서 바로 수정할 수 있습니다.",
+            },
+            {"label": "현재 평가액", "value": format_won(display_total_value)},
+            {"label": "원금 대비 평가손익", "value": format_won(display_principal_profit_loss), "tone": "accent"},
+            {"label": "원금 대비 수익률", "value": format_pct(display_principal_profit_rate), "tone": "accent"},
+        ]
+    )
 
     overview_left, overview_right = st.columns((1, 1), gap="large")
     with overview_left:
@@ -880,7 +1017,7 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]]) -> N
             if chart is None:
                 st.info("배분을 그릴 데이터가 아직 없습니다.")
             else:
-                st.altair_chart(chart, use_container_width=True)
+                st.altair_chart(chart, width="stretch")
 
     with overview_right:
         with st.container(border=True):
@@ -890,7 +1027,7 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]]) -> N
             if chart is None:
                 st.info("보유 종목이 없어 수익률 차트를 그릴 수 없습니다.")
             else:
-                st.altair_chart(chart, use_container_width=True)
+                st.altair_chart(chart, width="stretch")
 
     action_col, cash_col = st.columns((1.15, 0.95), gap="large")
     with action_col:
@@ -898,7 +1035,7 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]]) -> N
             st.subheader("시장 업데이트")
             st.caption("가격 갱신과 코드 입력 규칙을 한 영역에서 정리했습니다.")
             if holdings:
-                if st.button("현재가 새로고침", use_container_width=True):
+                if st.button("현재가 새로고침", width="stretch"):
                     updated, errors = refresh_prices(holdings)
                     if updated:
                         st.success(f"{updated}개 종목 가격을 갱신했습니다.")
@@ -922,7 +1059,7 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]]) -> N
                     key=f"cash-adjustment-notes:{account['id']}",
                     placeholder="예: 외부 계좌에서 별도 입금했던 현금 맞춤",
                 )
-                adjustment_submitted = st.form_submit_button("현금 조정 기록", use_container_width=True)
+                adjustment_submitted = st.form_submit_button("현금 조정 기록", width="stretch")
         if adjustment_submitted:
             try:
                 adjust_cash_balance(
@@ -975,6 +1112,9 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]]) -> N
                         alt.Tooltip("total_value:Q", title="총자산", format=",.0f"),
                         alt.Tooltip("market_value:Q", title="평가금액", format=",.0f"),
                         alt.Tooltip("cash_balance:Q", title="현금", format=",.0f"),
+                        alt.Tooltip("total_principal:Q", title="누적 납입 원금", format=",.0f"),
+                        alt.Tooltip("principal_profit_loss:Q", title="원금 대비 손익", format=",.0f"),
+                        alt.Tooltip("principal_profit_rate:Q", title="원금 대비 수익률 (%)", format=".2f"),
                         alt.Tooltip("net_flow:Q", title="순유입", format=",.0f"),
                         alt.Tooltip("actual_profit_loss:Q", title="실제 성과", format=",.0f"),
                     ],
@@ -994,7 +1134,7 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]]) -> N
                     ],
                 )
             )
-        st.altair_chart(trend_chart, use_container_width=True)
+        st.altair_chart(trend_chart, width="stretch")
 
         if not snapshot_frame.empty:
             st.caption("일별 스냅샷에 순유입과 실제 성과 기준을 함께 반영해 추이를 보여주고 있습니다.")
@@ -1046,7 +1186,7 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]]) -> N
                     ],
                 )
             )
-            st.altair_chart(detail_chart, use_container_width=True)
+            st.altair_chart(detail_chart, width="stretch")
 
 
 def trade_entry_page(account: dict[str, Any], holdings: list[dict[str, Any]], accounts: list[dict[str, Any]]) -> None:
@@ -1091,7 +1231,7 @@ def trade_entry_page(account: dict[str, Any], holdings: list[dict[str, Any]], ac
                             st.button(
                                 product_search_label(product),
                                 key=f"product-suggestion:{account['id']}:{product['code']}",
-                                use_container_width=True,
+                                width="stretch",
                                 on_click=apply_search_product,
                                 args=(product,),
                             )
@@ -1114,7 +1254,7 @@ def trade_entry_page(account: dict[str, Any], holdings: list[dict[str, Any]], ac
         price = st.number_input("단가", min_value=0.0, step=100.0, key=TRADE_PRICE_KEY)
         trade_date = st.date_input("거래일", key=TRADE_DATE_KEY)
         notes = st.text_area("메모", height=90, key=TRADE_NOTES_KEY)
-        submitted = st.button("거래 저장", use_container_width=True, key=f"trade-save:{account['id']}")
+        submitted = st.button("거래 저장", width="stretch", key=f"trade-save:{account['id']}")
         if submitted:
             try:
                 record_trade(
@@ -1151,7 +1291,7 @@ def trade_entry_page(account: dict[str, Any], holdings: list[dict[str, Any]], ac
         amount = st.number_input("금액", min_value=0.0, step=100000.0, key=CASH_FLOW_AMOUNT_KEY)
         trade_date = st.date_input("처리일", key=CASH_FLOW_DATE_KEY)
         notes = st.text_area("사유", height=90, key=CASH_FLOW_NOTES_KEY)
-        submitted = st.button("현금 기록", use_container_width=True, key=f"cash-flow-save:{account['id']}")
+        submitted = st.button("현금 기록", width="stretch", key=f"cash-flow-save:{account['id']}")
         if submitted:
             try:
                 record_cash_flow(
@@ -1195,7 +1335,7 @@ def trade_entry_page(account: dict[str, Any], holdings: list[dict[str, Any]], ac
             transfer_amount = st.number_input("이체 금액", min_value=0.0, step=100000.0, key=TRANSFER_AMOUNT_KEY)
             transfer_date = st.date_input("이체일", key=TRANSFER_DATE_KEY)
             transfer_notes = st.text_area("이체 메모", height=90, key=TRANSFER_NOTES_KEY)
-            submitted = st.button("이체 기록", use_container_width=True, key=f"transfer-save:{account['id']}")
+            submitted = st.button("이체 기록", width="stretch", key=f"transfer-save:{account['id']}")
             if submitted:
                 try:
                     record_account_transfer(
@@ -1240,7 +1380,7 @@ def trade_entry_page(account: dict[str, Any], holdings: list[dict[str, Any]], ac
                 ],
             )
         )
-        st.altair_chart(chart, use_container_width=True)
+        st.altair_chart(chart, width="stretch")
 
         position_frame = pd.DataFrame(realized_positions)
         position_frame = position_frame[["product_name", "symbol", "asset_type", "buy_amount", "sell_amount", "profit_loss", "profit_rate", "sell_date"]].copy()
@@ -1250,7 +1390,7 @@ def trade_entry_page(account: dict[str, Any], holdings: list[dict[str, Any]], ac
             position_frame[column] = position_frame[column].map(lambda value: f"{float(value or 0):,.0f}")
         position_frame["실현수익률(%)"] = position_frame["실현수익률(%)"].map(lambda value: f"{float(value or 0):+.2f}")
         st.subheader("실현 손익 요약")
-        st.dataframe(position_frame, use_container_width=True, hide_index=True, height=280)
+        st.dataframe(position_frame, width="stretch", hide_index=True, height=280)
 
     if logs:
         account_name_map = {int(item["id"]): account_label(item) for item in accounts}
@@ -1283,20 +1423,39 @@ def trade_entry_page(account: dict[str, Any], holdings: list[dict[str, Any]], ac
         for column in ("단가", "총액", "현금증감"):
             log_frame[column] = log_frame[column].map(lambda value: f"{float(value or 0):,.0f}")
         st.subheader("거래 기록")
-        st.dataframe(log_frame, use_container_width=True, hide_index=True, height=420)
+        st.dataframe(log_frame, width="stretch", hide_index=True, height=420)
     else:
         st.info("아직 기록된 거래가 없습니다.")
 
 
-def data_page(account: dict[str, Any]) -> None:
+def data_page(account: dict[str, Any], rollup_state: dict[str, Any] | None = None) -> None:
     st.title("데이터")
     st.caption("운영 상태 확인과 원본 데이터 CSV 내보내기를 한 곳에서 처리합니다.")
 
     account_id = int(account["id"])
     status = backend_status()
+    holdings = list_holdings(account_id)
+    trade_logs = list_trade_logs(account_id)
     interest_rows = list_daily_interest(account_id)
     snapshot_rows = list_account_snapshots(account_id)
-    total_interest = sum(float(row.get("interest_amount") or 0) for row in interest_rows)
+    rollup_date = str((rollup_state or {}).get("snapshot_date") or "").strip()
+    today_preview = projected_today_interest(
+        account,
+        interest_rows=interest_rows,
+        as_of=date.fromisoformat(rollup_date) if rollup_date else None,
+    )
+    summary = account_summary(account, holdings, trade_logs=trade_logs, interest_rows=interest_rows)
+    total_interest = sum(float(row.get("interest_amount") or 0) for row in interest_rows) + today_preview
+    cumulative_frame = cumulative_contribution_frame(
+        trade_logs=trade_logs,
+        interest_rows=interest_rows,
+        snapshots=snapshot_rows,
+        current_total_value=float(summary["total_value"] or 0) + today_preview,
+        current_market_value=float(summary["market_value"] or 0),
+        current_cash_balance=float(summary["cash"] or 0) + today_preview,
+        current_total_cost=float(summary["total_cost"] or 0),
+        current_date=rollup_date or date.today().isoformat(),
+    )
 
     with st.container(border=True):
         st.subheader("운영 상태")
@@ -1306,6 +1465,8 @@ def data_page(account: dict[str, Any]) -> None:
         status_col_2.metric("누적 이자", format_won(total_interest))
         status_col_3.metric("이자 롤업", f"{len(interest_rows):,}건", latest_date_text(interest_rows, "date"))
         status_col_4.metric("자산 스냅샷", f"{len(snapshot_rows):,}건", latest_date_text(snapshot_rows, "snapshot_date"))
+        if today_preview > 0:
+            st.caption(f"{rollup_date or date.today().isoformat()} 예상 현금 이자까지 표시 중입니다: `{format_won(today_preview)}`")
         if status.get("override", "auto") != "auto":
             st.caption(f"백엔드 강제 설정: `{status['override']}`")
         st.caption(f"Supabase 설정 감지: `{'예' if status.get('has_supabase_config') else '아니오'}`")
@@ -1337,6 +1498,77 @@ def data_page(account: dict[str, Any]) -> None:
         else:
             st.success("현재 배포본은 Supabase를 사용 중입니다.")
 
+    with st.container(border=True):
+        st.subheader("원금 누적 기록")
+        st.caption("최초 입금일부터 현재까지 누적 원금, 회사 납입금, 누적 이자, 현재 평가액 기준 수익률을 함께 봅니다.")
+        st.caption("연금(IRP/퇴직연금) 계좌는 회사 납입금을 투자원금에 포함하고, 현재 수익률은 현재 평가액을 기준으로 계산합니다.")
+        if cumulative_frame.empty:
+            st.info("누적 원금 기록을 만들 현금 흐름 데이터가 아직 없습니다.")
+        else:
+            latest_row = cumulative_frame.iloc[-1]
+            metric_col_1, metric_col_2, metric_col_3 = st.columns(3)
+            metric_col_1.metric("누적 투자원금", format_won(latest_row["total_principal"]))
+            metric_col_2.metric("현재 평가액", format_won(latest_row["total_value"]))
+            metric_col_3.metric(
+                "원금 대비 현재 수익률",
+                format_pct(latest_row["principal_profit_rate"]),
+                metric_delta(latest_row["principal_profit_loss"]),
+            )
+
+            display_frame = cumulative_frame[
+                [
+                    "date",
+                    "personal_deposit_delta",
+                    "employer_deposit_delta",
+                    "withdraw_delta",
+                    "interest_delta",
+                    "company_principal",
+                    "total_principal",
+                    "total_interest",
+                    "total_value",
+                    "principal_profit_loss",
+                    "principal_profit_rate",
+                ]
+            ].copy()
+            display_frame.columns = [
+                "기준일",
+                "당일 개인 입금",
+                "당일 회사 납입",
+                "당일 출금",
+                "당일 이자",
+                "회사 납입 누계",
+                "누적 투자원금",
+                "누적 이자",
+                "현재 평가액",
+                "원금 대비 손익",
+                "원금 대비 수익률(%)",
+            ]
+
+            def _format_optional_won(value: Any) -> str:
+                if pd.isna(value):
+                    return "-"
+                return format_won(value)
+
+            def _format_optional_pct(value: Any) -> str:
+                if pd.isna(value):
+                    return "-"
+                return format_pct(value)
+
+            for column in (
+                "당일 개인 입금",
+                "당일 회사 납입",
+                "당일 출금",
+                "당일 이자",
+                "회사 납입 누계",
+                "누적 투자원금",
+                "누적 이자",
+                "현재 평가액",
+                "원금 대비 손익",
+            ):
+                display_frame[column] = display_frame[column].map(_format_optional_won)
+            display_frame["원금 대비 수익률(%)"] = display_frame["원금 대비 수익률(%)"].map(_format_optional_pct)
+            st.dataframe(display_frame, width="stretch", hide_index=True, height=320)
+
     for table_name in ("accounts", "holdings", "trade_logs", "daily_interest", "daily_account_snapshot"):
         rows = export_dataframe_rows(table_name)
         frame = pd.DataFrame(rows)
@@ -1346,7 +1578,7 @@ def data_page(account: dict[str, Any]) -> None:
             st.subheader(table_label)
             st.write(f"행 수: `{len(frame):,}`")
             if not frame.empty:
-                st.dataframe(frame, use_container_width=True, hide_index=True, height=220)
+                st.dataframe(frame, width="stretch", hide_index=True, height=220)
             else:
                 st.info("데이터가 없습니다.")
             st.download_button(
@@ -1354,7 +1586,7 @@ def data_page(account: dict[str, Any]) -> None:
                 data=csv_bytes,
                 file_name=f"{table_name}.csv",
                 mime="text/csv",
-                use_container_width=True,
+                width="stretch",
             )
 
 
@@ -1393,15 +1625,49 @@ def main() -> None:
     if not account:
         st.session_state["selected_account_id"] = None
         st.rerun()
+    rollup_state: dict[str, Any] = {
+        "interest_rows_added": 0,
+        "interest_rows_updated": 0,
+        "interest_rows_removed": 0,
+        "historical_snapshots_updated": 0,
+        "interest_amount_added": 0.0,
+        "snapshot_date": date.today().isoformat(),
+        "snapshot_updated": False,
+    }
+    try:
+        rollup_state = sync_account_rollup(int(account["id"]))
+    except Exception as exc:  # noqa: BLE001
+        st.warning(f"자동 이자 반영을 건너뛰었습니다: {exc}")
+    else:
+        added_count = int(rollup_state.get("interest_rows_added", 0) or 0)
+        updated_count = int(rollup_state.get("interest_rows_updated", 0) or 0)
+        removed_count = int(rollup_state.get("interest_rows_removed", 0) or 0)
+        historical_snapshot_count = int(rollup_state.get("historical_snapshots_updated", 0) or 0)
+        if added_count or updated_count or removed_count or historical_snapshot_count:
+            detail_parts: list[str] = []
+            if added_count:
+                detail_parts.append(f"추가 `{added_count:,}`건")
+            if updated_count:
+                detail_parts.append(f"재계산 `{updated_count:,}`건")
+            if removed_count:
+                detail_parts.append(f"제거 `{removed_count:,}`건")
+            if historical_snapshot_count:
+                detail_parts.append(f"과거 스냅샷 보정 `{historical_snapshot_count:,}`건")
+            detail_parts.append(f"순변동 금액: `{format_won(rollup_state['interest_amount_added'])}`")
+            st.info(
+                "전일까지의 일별 이자 이력을 원장 기준으로 자동 반영했습니다. "
+                + ", ".join(detail_parts)
+            )
+        account = get_account(int(selected_account_id)) or account
     holdings = list_holdings(int(account["id"]))
     render_page_context(account, active_page, status)
 
     if active_page == "Dashboard":
-        dashboard_page(account, holdings)
+        dashboard_page(account, holdings, rollup_state)
     elif active_page == "Trades":
         trade_entry_page(account, holdings, accounts)
     else:
-        data_page(account)
+        data_page(account, rollup_state)
 
 
 if __name__ == "__main__":

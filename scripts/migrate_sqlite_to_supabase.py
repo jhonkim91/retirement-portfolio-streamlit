@@ -34,6 +34,7 @@ LEGACY_TRADE_TYPE_MAP = {
     "deposit": "personal_deposit",
     "withdraw": "withdraw",
 }
+LEGACY_EMPLOYER_DEPOSIT_NAMES = {"회사 현금입금", "회사 납입금"}
 
 
 @dataclass
@@ -197,6 +198,16 @@ def normalize_trade_type(value: Any) -> str:
     return LEGACY_TRADE_TYPE_MAP.get(normalized, normalized)
 
 
+def normalize_trade_type_with_context(row: dict[str, Any]) -> str:
+    """레거시 상품명 힌트까지 반영해 거래 유형을 정규화한다."""
+
+    normalized = normalize_trade_type(row.get("trade_type"))
+    product_name = str(row.get("product_name") or "").strip()
+    if normalized == "personal_deposit" and product_name in LEGACY_EMPLOYER_DEPOSIT_NAMES:
+        return "employer_deposit"
+    return normalized
+
+
 def default_product_name(trade_type: str, current_name: str) -> str:
     """현금 이벤트일 때 비어 있는 상품명을 기본 한글 라벨로 채운다."""
 
@@ -270,7 +281,7 @@ def load_source_bundle(connection: sqlite3.Connection, namespace: str) -> dict[s
 
         normalized_logs: list[dict[str, Any]] = []
         for log in trade_logs:
-            trade_type = normalize_trade_type(log.get("trade_type"))
+            trade_type = normalize_trade_type_with_context(log)
             product_name = default_product_name(trade_type, str(log.get("product_name") or "").strip())
             asset_type = str(log.get("asset_type") or "").strip().lower() or "risk"
             if trade_type not in BUY_SELL_TRADE_TYPES:

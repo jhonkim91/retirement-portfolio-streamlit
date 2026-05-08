@@ -41,6 +41,7 @@ PREFERRED_DOMESTIC_BRANDS = {
     "TIMEFOLIO",
     "TREX",
 }
+KRX_LISTED_CODE_PATTERN = r"(?:[0-9]{6}|[0-9]{4}[A-Z][0-9])"
 
 
 def clean_code(code: str) -> str:
@@ -59,7 +60,7 @@ def clean_code(code: str) -> str:
 
 def normalize_symbol(symbol: str) -> str:
     raw = str(symbol or "").strip().upper()
-    if re.fullmatch(r"[0-9]{6}\.(KS|KQ)", raw):
+    if re.fullmatch(rf"{KRX_LISTED_CODE_PATTERN}\.(KS|KQ)", raw):
         return raw
     cleaned = clean_code(raw)
     if cleaned.isdigit() and len(cleaned) < 6:
@@ -78,7 +79,7 @@ def contains_hangul(value: str) -> bool:
 
 
 def is_krx_code(code: str) -> bool:
-    return bool(re.fullmatch(r"[0-9]{6}", clean_code(code)))
+    return bool(re.fullmatch(KRX_LISTED_CODE_PATTERN, clean_code(code)))
 
 
 def is_fund_code(code: str) -> bool:
@@ -127,7 +128,7 @@ def search_products_from_yfinance(query: str, limit: int, *, include_global: boo
             name = quote.get("shortname") or quote.get("longname")
             if not name:
                 continue
-            match = re.match(r"^([0-9]{6})\.(KS|KQ)$", symbol)
+            match = re.match(rf"^({KRX_LISTED_CODE_PATTERN})\.(KS|KQ)$", symbol)
             if match:
                 code = match.group(1)
                 if code in seen:

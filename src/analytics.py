@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from datetime import date
 from typing import Any
 
 import pandas as pd
@@ -14,6 +15,8 @@ TRANSFER_IN_TYPES = {"transfer_in"}
 TRANSFER_OUT_TYPES = {"transfer_out"}
 MANUAL_ADJUSTMENT_TYPES = {"cash_adjustment"}
 INTEREST_TYPES = {"interest"}
+DEFAULT_ANNUAL_INTEREST_RATE = 0.05
+LEGACY_EMPLOYER_DEPOSIT_NAMES = {"회사 현금입금", "회사 납입금"}
 
 
 def _trade_match_key(log: dict[str, Any]) -> str:
@@ -49,6 +52,16 @@ def _amount_from_log(log: dict[str, Any]) -> float:
     return abs(float(log.get("cash_delta") or 0))
 
 
+def _normalized_trade_type(log: dict[str, Any]) -> str:
+    """레거시 라벨을 반영해 거래 유형을 정규화한다."""
+
+    trade_type = str(log.get("trade_type") or "").strip().lower()
+    product_name = str(log.get("product_name") or "").strip()
+    if trade_type == "personal_deposit" and product_name in LEGACY_EMPLOYER_DEPOSIT_NAMES:
+        return "employer_deposit"
+    return trade_type
+
+
 def _cash_flow_summary(
     trade_logs: list[dict[str, Any]] | None = None,
     interest_rows: list[dict[str, Any]] | None = None,
@@ -73,7 +86,7 @@ def _cash_flow_summary(
         summary["total_interest"] = sum(float(row.get("interest_amount") or 0) for row in interest_rows)
 
     for log in ordered_logs:
-        trade_type = str(log.get("trade_type") or "").strip().lower()
+        trade_type = _normalized_trade_type(log)
         amount = _amount_from_log(log)
         if trade_type in CAPITAL_INFLOW_TYPES:
             summary[trade_type] += amount
@@ -122,11 +135,17 @@ def account_summary(
 
     flow_summary = _cash_flow_summary(trade_logs, interest_rows)
     inferred_capital_base = total_cost + cash
+    company_principal = float(flow_summary["employer_deposit"] or 0)
+    contribution_principal = float(flow_summary["personal_deposit"] or 0) + company_principal
     net_flow = float(flow_summary["net_flow"] or 0)
     total_principal = float(flow_summary["net_principal"] or 0)
     if not bool(flow_summary["has_capital_events"]) and inferred_capital_base > 0:
         net_flow = inferred_capital_base
         total_principal = inferred_capital_base
+        contribution_principal = inferred_capital_base
+        company_principal = 0.0
+    principal_profit_loss = total_value - total_principal
+    principal_profit_rate = (principal_profit_loss / total_principal * 100) if total_principal else 0.0
     actual_profit_loss = total_value - net_flow
     actual_profit_rate = (actual_profit_loss / net_flow * 100) if net_flow else 0.0
 
@@ -135,6 +154,8 @@ def account_summary(
 
     return {
         "total_cost": total_cost,
+        "company_principal": company_principal,
+        "contribution_principal": contribution_principal,
         "total_principal": total_principal,
         "net_flow": net_flow,
         "total_interest": float(flow_summary["total_interest"] or 0),
@@ -143,6 +164,8 @@ def account_summary(
         "total_value": total_value,
         "profit_loss": market_profit_loss,
         "profit_rate": market_profit_rate,
+        "principal_profit_loss": principal_profit_loss,
+        "principal_profit_rate": principal_profit_rate,
         "actual_profit_loss": actual_profit_loss,
         "actual_profit_rate": actual_profit_rate,
         "allocation": {
@@ -152,6 +175,29 @@ def account_summary(
         },
         "cash_flow": flow_summary,
     }
+
+
+def projected_today_interest(
+    account: dict[str, Any],
+    interest_rows: list[dict[str, Any]] | None = None,
+    *,
+    annual_rate: float = DEFAULT_ANNUAL_INTEREST_RATE,
+    as_of: date | None = None,
+) -> float:
+    """오늘 이자가 아직 적립되지 않았다면 현재 현금 기준 예상 이자를 계산한다."""
+
+    if annual_rate <= 0:
+        return 0.0
+
+    current_date = as_of or date.today()
+    current_iso = current_date.isoformat()
+    if any(str(row.get("date") or "").strip() == current_iso for row in interest_rows or []):
+        return 0.0
+
+    cash_balance = float(account.get("cash_balance") or 0)
+    if cash_balance <= 0:
+        return 0.0
+    return round(cash_balance * annual_rate / 365, 4)
 
 
 def realized_summary(trade_logs: list[dict[str, Any]]) -> dict[str, Any]:
@@ -261,24 +307,34 @@ def _cash_flow_event_frame(
     event_rows: list[dict[str, Any]] = []
 
     for log in trade_logs or []:
-        trade_type = str(log.get("trade_type") or "").strip().lower()
+        trade_type = _normalized_trade_type(log)
         trade_date = str(log.get("trade_date") or "").strip()
         if not trade_date:
             continue
 
         event = {
             "date": pd.to_datetime(trade_date),
+            "personal_deposit_delta": 0.0,
+            "employer_deposit_delta": 0.0,
+            "withdraw_delta": 0.0,
             "principal_delta": 0.0,
             "flow_delta": 0.0,
             "interest_delta": 0.0,
             "capital_event_flag": 0,
         }
         amount = _amount_from_log(log)
-        if trade_type in CAPITAL_INFLOW_TYPES:
+        if trade_type == "personal_deposit":
+            event["personal_deposit_delta"] = amount
+            event["principal_delta"] = amount
+            event["flow_delta"] = amount
+            event["capital_event_flag"] = 1
+        elif trade_type == "employer_deposit":
+            event["employer_deposit_delta"] = amount
             event["principal_delta"] = amount
             event["flow_delta"] = amount
             event["capital_event_flag"] = 1
         elif trade_type in CAPITAL_OUTFLOW_TYPES:
+            event["withdraw_delta"] = amount
             event["principal_delta"] = -amount
             event["flow_delta"] = -amount
             event["capital_event_flag"] = 1
@@ -318,6 +374,9 @@ def _cash_flow_event_frame(
     grouped = (
         frame.groupby("date", as_index=False)
         .agg(
+            personal_deposit_delta=("personal_deposit_delta", "sum"),
+            employer_deposit_delta=("employer_deposit_delta", "sum"),
+            withdraw_delta=("withdraw_delta", "sum"),
             principal_delta=("principal_delta", "sum"),
             flow_delta=("flow_delta", "sum"),
             interest_delta=("interest_delta", "sum"),
@@ -328,6 +387,101 @@ def _cash_flow_event_frame(
     )
     grouped["capital_event_seen"] = grouped["capital_event_flag"].astype(int).cumsum().gt(0)
     return grouped
+
+
+def cumulative_contribution_frame(
+    trade_logs: list[dict[str, Any]] | None = None,
+    interest_rows: list[dict[str, Any]] | None = None,
+    snapshots: list[dict[str, Any]] | None = None,
+    *,
+    current_total_value: float | None = None,
+    current_market_value: float | None = None,
+    current_cash_balance: float | None = None,
+    current_total_cost: float | None = None,
+    current_date: str | date | None = None,
+) -> pd.DataFrame:
+    """최초 입금일부터 현재까지 누적 원금 흐름과 평가 요약을 만든다."""
+
+    event_frame = _cash_flow_event_frame(trade_logs, interest_rows)
+    if event_frame.empty:
+        return pd.DataFrame()
+
+    result = event_frame[
+        [
+            "date",
+            "personal_deposit_delta",
+            "employer_deposit_delta",
+            "withdraw_delta",
+            "principal_delta",
+            "flow_delta",
+            "interest_delta",
+        ]
+    ].copy()
+    result = result.sort_values("date").reset_index(drop=True)
+    result["personal_principal"] = result["personal_deposit_delta"].cumsum()
+    result["company_principal"] = result["employer_deposit_delta"].cumsum()
+    result["total_principal"] = result["principal_delta"].cumsum()
+    result["net_flow"] = result["flow_delta"].cumsum()
+    result["total_interest"] = result["interest_delta"].cumsum()
+
+    snapshot_frame = pd.DataFrame(snapshots or [])
+    if snapshot_frame.empty:
+        result["cash_balance"] = float("nan")
+        result["market_value"] = float("nan")
+        result["total_value"] = float("nan")
+        result["total_cost"] = float("nan")
+    else:
+        snapshot_frame = snapshot_frame.copy()
+        snapshot_frame["date"] = pd.to_datetime(snapshot_frame["snapshot_date"])
+        for column in ("cash_balance", "market_value", "total_value", "total_cost"):
+            snapshot_frame[column] = snapshot_frame[column].astype(float)
+        snapshot_frame = snapshot_frame.sort_values("date").drop_duplicates(subset=["date"], keep="last")
+        result = result.merge(
+            snapshot_frame[["date", "cash_balance", "market_value", "total_value", "total_cost"]],
+            on="date",
+            how="left",
+        )
+
+    if any(
+        value is not None
+        for value in (current_total_value, current_market_value, current_cash_balance, current_total_cost, current_date)
+    ):
+        normalized_current_date = pd.to_datetime(current_date or date.today().isoformat())
+        current_mask = result["date"].eq(normalized_current_date)
+        if current_mask.any():
+            current_index = result.index[current_mask][-1]
+            if current_cash_balance is not None:
+                result.at[current_index, "cash_balance"] = float(current_cash_balance)
+            if current_market_value is not None:
+                result.at[current_index, "market_value"] = float(current_market_value)
+            if current_total_value is not None:
+                result.at[current_index, "total_value"] = float(current_total_value)
+            if current_total_cost is not None:
+                result.at[current_index, "total_cost"] = float(current_total_cost)
+        else:
+            latest = result.iloc[-1].copy()
+            latest["date"] = normalized_current_date
+            latest["personal_deposit_delta"] = 0.0
+            latest["employer_deposit_delta"] = 0.0
+            latest["withdraw_delta"] = 0.0
+            latest["principal_delta"] = 0.0
+            latest["flow_delta"] = 0.0
+            latest["interest_delta"] = 0.0
+            latest["cash_balance"] = float(current_cash_balance) if current_cash_balance is not None else float("nan")
+            latest["market_value"] = float(current_market_value) if current_market_value is not None else float("nan")
+            latest["total_value"] = float(current_total_value) if current_total_value is not None else float("nan")
+            latest["total_cost"] = float(current_total_cost) if current_total_cost is not None else float("nan")
+            result.loc[len(result)] = latest
+
+    result["principal_profit_loss"] = result["total_value"] - result["total_principal"]
+    result["principal_profit_rate"] = result.apply(
+        lambda row: (row["principal_profit_loss"] / row["total_principal"] * 100)
+        if pd.notna(row["total_value"]) and row["total_principal"]
+        else pd.NA,
+        axis=1,
+    )
+    result["date"] = result["date"].dt.strftime("%Y-%m-%d")
+    return result.sort_values("date").reset_index(drop=True)
 
 
 def snapshot_trend_frame(
@@ -383,6 +537,11 @@ def snapshot_trend_frame(
     result["actual_profit_loss"] = result["total_value"] - result["net_flow"]
     result["actual_profit_rate"] = result.apply(
         lambda row: (row["actual_profit_loss"] / row["net_flow"] * 100) if row["net_flow"] else 0,
+        axis=1,
+    )
+    result["principal_profit_loss"] = result["total_value"] - result["total_principal"]
+    result["principal_profit_rate"] = result.apply(
+        lambda row: (row["principal_profit_loss"] / row["total_principal"] * 100) if row["total_principal"] else 0,
         axis=1,
     )
     return result.sort_values("date").reset_index(drop=True)
