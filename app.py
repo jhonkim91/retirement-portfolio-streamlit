@@ -813,9 +813,10 @@ def sidebar(accounts: list[dict[str, Any]], selected_account_id: int | None, use
 
 def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]]) -> None:
     frame = holdings_frame(holdings)
-    summary = account_summary(account, holdings)
+    trade_logs = list_trade_logs(int(account["id"]))
     interest_rows = list_daily_interest(int(account["id"]))
-    total_interest = sum(float(row.get("interest_amount") or 0) for row in interest_rows)
+    summary = account_summary(account, holdings, trade_logs=trade_logs, interest_rows=interest_rows)
+    total_interest = float(summary["total_interest"] or 0)
     latest_interest_date = latest_date_text(interest_rows, "date")
     holdings_count = int(len(frame.index)) if not frame.empty else 0
     account_name = html.escape(str(account["name"]))
@@ -841,16 +842,16 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]]) -> N
             st.subheader("핵심 상태")
             status_metric_left, status_metric_right = st.columns(2)
             status_metric_left.metric("보유 종목", f"{holdings_count:,}개")
-            status_metric_right.metric("최근 이자 적립", latest_interest_date if latest_interest_date != "-" else "미적립")
-            st.caption("핵심 카드와 아래 분석 섹션은 같은 계좌 기준으로 동기화됩니다.")
+            status_metric_right.metric("순유입", format_won(summary["net_flow"]))
+            st.caption(f"최근 이자 적립: {latest_interest_date if latest_interest_date != '-' else '미적립'}")
 
     st.caption("핵심 지표")
     primary_metric_left, primary_metric_right = st.columns(2, gap="large")
     primary_metric_left.metric("포트폴리오 평가액", format_won(summary["total_value"]))
-    primary_metric_right.metric("평가 손익", format_won(summary["profit_loss"]), metric_delta(summary["profit_loss"]))
+    primary_metric_right.metric("실제 성과", format_won(summary["actual_profit_loss"]), metric_delta(summary["actual_profit_loss"]))
 
     secondary_metric_1, secondary_metric_2, secondary_metric_3 = st.columns(3, gap="large")
-    secondary_metric_1.metric("투입 원금", format_won(summary["total_cost"]))
+    secondary_metric_1.metric("투입 원금", format_won(summary["total_principal"]))
     secondary_metric_2.metric("현금", format_won(summary["cash"]))
     secondary_metric_3.metric("누적 이자", format_won(total_interest))
 
@@ -939,7 +940,7 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]]) -> N
                 key=f"trend-period:{account['id']}",
             )
         snapshot_rows = list_account_snapshots(int(account["id"]), start_date=period_start_date(period).isoformat())
-        snapshot_frame = snapshot_trend_frame(snapshot_rows)
+        snapshot_frame = snapshot_trend_frame(snapshot_rows, trade_logs=trade_logs, interest_rows=interest_rows)
         portfolio_trend, holding_trend = build_portfolio_trend(holdings, period=period)
         trend_source = snapshot_frame if not snapshot_frame.empty else portfolio_trend
         if trend_source.empty:
@@ -958,6 +959,8 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]]) -> N
                         alt.Tooltip("total_value:Q", title="총자산", format=",.0f"),
                         alt.Tooltip("market_value:Q", title="평가금액", format=",.0f"),
                         alt.Tooltip("cash_balance:Q", title="현금", format=",.0f"),
+                        alt.Tooltip("net_flow:Q", title="순유입", format=",.0f"),
+                        alt.Tooltip("actual_profit_loss:Q", title="실제 성과", format=",.0f"),
                     ],
                 )
             )
@@ -978,7 +981,7 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]]) -> N
         st.altair_chart(trend_chart, use_container_width=True)
 
         if not snapshot_frame.empty:
-            st.caption("일별 스냅샷 기준 추이를 보여주고 있습니다.")
+            st.caption("일별 스냅샷에 순유입과 실제 성과 기준을 함께 반영해 추이를 보여주고 있습니다.")
 
         if holding_trend.empty:
             st.info("종목별 비교 추이는 아직 준비되지 않았습니다.")

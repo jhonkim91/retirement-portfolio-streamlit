@@ -171,3 +171,23 @@
   - onboarding still blocked by RLS
   - onboarding screen visible but demo click not triggered
   - demo data seeded successfully and dashboard opened
+
+## 2026-05-08 analytics step 5 follow-up
+
+- Continued the pending stage 5 analytics work while the production Supabase RLS fix remains blocked.
+- Updated [analytics.py](/C:/Users/JKKIM/retirement-portfolio-streamlit/src/analytics.py) so `account_summary()` now separates:
+  - `total_principal`
+  - `net_flow`
+  - `total_interest`
+  - `actual_profit_loss`
+  - existing market-only holding P/L
+- Updated snapshot trend enrichment so [snapshot_trend_frame](/C:/Users/JKKIM/retirement-portfolio-streamlit/src/analytics.py) derives cumulative principal / net flow / interest and actual performance from `trade_logs + daily_interest`.
+- Updated the dashboard in [app.py](/C:/Users/JKKIM/retirement-portfolio-streamlit/app.py) to show:
+  - `실제 성과`
+  - `투입 원금`
+  - `순유입`
+  - snapshot trend tooltip support for `순유입` and `실제 성과`
+- Local verification completed:
+  - `python -m py_compile src/analytics.py app.py`
+  - sample-data analytic check for account summary and snapshot trend cumulative flow behavior
+- This stage is locally validated and ready for commit/push once the dashboard text review is complete.
