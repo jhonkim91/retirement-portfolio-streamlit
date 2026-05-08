@@ -19,10 +19,17 @@ Supabase SQL Editor에서 아래 파일 내용을 그대로 실행합니다.
 
 핫픽스 적용 후 아래 명령으로 웹 배포본을 다시 검증합니다.
 
+먼저 로컬 셸에 검증 계정 정보를 넣습니다.
+
+```powershell
+$env:STREAMLIT_VERIFY_EMAIL = "you@example.com"
+$env:STREAMLIT_VERIFY_PASSWORD = "your-password"
+```
+
+그다음 아래 명령을 실행합니다.
+
 ```powershell
 python scripts/verify_streamlit_deployment.py `
-  --email "jhonkim2025@gmail.com" `
-  --password "854854" `
   --page dashboard `
   --expect-backend supabase `
   --click-demo `
@@ -37,6 +44,10 @@ python scripts/verify_streamlit_deployment.py `
 - `demo_seeded = true`
 - `hotfix_required = false`
 - `onboarding_visible = false`
+
+주의:
+
+- 로그인은 성공했는데 온보딩 화면에서 `accounts` RLS 403이 보이면, 인증 문제가 아니라 운영 Supabase 쓰기 정책이 아직 구버전인 상태입니다.
 
 ## 3. 후속 단계
 

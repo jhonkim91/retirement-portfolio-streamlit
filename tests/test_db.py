@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import requests
 
-from src.db import _supabase_create_account, is_accounts_hotfix_error
+from src.db import _supabase_create_account, is_accounts_hotfix_error, seed_demo_workspace
 
 
 def _http_error(status_code: int, detail: str) -> requests.HTTPError:
@@ -95,6 +95,108 @@ class SupabaseCreateAccountTests(unittest.TestCase):
         self.assertIn("owner_user_id", first_call.kwargs["data"])
         self.assertNotIn("owner_user_id", second_call.kwargs["data"])
         self.assertEqual(second_call.args[:2], ("POST", "accounts"))
+
+
+class DemoWorkspaceSeedTests(unittest.TestCase):
+    """데모 워크스페이스 재시드 동작을 검증한다."""
+
+    def _blueprint(self) -> dict[str, object]:
+        return {
+            "accounts": (
+                {
+                    "name": "데모 IRP",
+                    "account_type": "retirement",
+                    "opening_cash": 0.0,
+                    "cash_flows": (),
+                    "trades": (),
+                    "interest": (),
+                    "price_updates": {},
+                    "snapshot_date": "2026-05-08",
+                },
+                {
+                    "name": "데모 일반계좌",
+                    "account_type": "brokerage",
+                    "opening_cash": 0.0,
+                    "cash_flows": (),
+                    "trades": (),
+                    "interest": (),
+                    "price_updates": {},
+                    "snapshot_date": "2026-05-08",
+                },
+            ),
+            "transfers": (),
+        }
+
+    @patch("src.db._demo_workspace_blueprint")
+    @patch("src.db.list_accounts")
+    @patch("src.db.list_account_snapshots")
+    @patch("src.db.list_daily_interest", return_value=[])
+    @patch("src.db.list_holdings", return_value=[])
+    @patch("src.db.create_account")
+    def test_seed_demo_workspace_reuses_complete_existing_workspace(
+        self,
+        create_account_mock,
+        _list_holdings_mock,
+        _list_daily_interest_mock,
+        list_snapshots_mock,
+        list_accounts_mock,
+        blueprint_mock,
+    ) -> None:
+        """데모 계좌와 스냅샷이 모두 있으면 재생성하지 않는다."""
+
+        blueprint_mock.return_value = self._blueprint()
+        list_accounts_mock.return_value = [
+            {"id": 10, "name": "데모 IRP"},
+            {"id": 11, "name": "데모 일반계좌"},
+        ]
+        list_snapshots_mock.return_value = [{"snapshot_date": "2026-05-08"}]
+
+        result = seed_demo_workspace()
+
+        self.assertFalse(result["created"])
+        self.assertEqual(result["selected_account_id"], 10)
+        create_account_mock.assert_not_called()
+
+    @patch("src.db._demo_workspace_blueprint")
+    @patch("src.db.list_accounts")
+    @patch("src.db._delete_account")
+    @patch("src.db.create_account")
+    @patch("src.db.record_cash_flow")
+    @patch("src.db.record_trade")
+    @patch("src.db.record_account_transfer")
+    @patch("src.db.record_daily_interest")
+    @patch("src.db.set_holding_price")
+    @patch("src.db.record_account_snapshot")
+    @patch("src.db._demo_account_totals", return_value=(0.0, 0.0, 0.0))
+    @patch("src.db.list_holdings", return_value=[])
+    def test_seed_demo_workspace_rebuilds_partial_workspace(
+        self,
+        _list_holdings_mock,
+        _demo_totals_mock,
+        record_snapshot_mock,
+        _set_holding_price_mock,
+        _record_daily_interest_mock,
+        _record_transfer_mock,
+        _record_trade_mock,
+        _record_cash_flow_mock,
+        create_account_mock,
+        delete_account_mock,
+        list_accounts_mock,
+        blueprint_mock,
+    ) -> None:
+        """데모 계좌가 일부만 남아 있으면 정리 후 처음부터 다시 만든다."""
+
+        blueprint_mock.return_value = self._blueprint()
+        list_accounts_mock.return_value = [{"id": 18, "name": "데모 IRP"}]
+        create_account_mock.side_effect = [21, 22]
+
+        result = seed_demo_workspace()
+
+        delete_account_mock.assert_called_once_with(18)
+        self.assertTrue(result["created"])
+        self.assertEqual(result["selected_account_id"], 21)
+        self.assertEqual(create_account_mock.call_count, 2)
+        self.assertEqual(record_snapshot_mock.call_count, 2)
 
 
 if __name__ == "__main__":

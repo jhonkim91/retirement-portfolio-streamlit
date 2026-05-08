@@ -236,3 +236,39 @@
 - Verification completed:
   - `python -m unittest discover -s tests -p "test_*.py"`
   - `python -m py_compile app.py src/db.py tests/test_db.py tests/test_verify_streamlit_deployment.py`
+
+## 2026-05-08 live login and demo recheck
+
+- Re-ran the deployed app verifier against `https://retirement-portfolio-app-nh2vq9ferqnpehsslbykbe.streamlit.app/`.
+- Current observed result:
+  - login succeeds for the verification account
+  - the app lands on onboarding, not the workspace
+  - clicking `데모 데이터 불러오기` reproduces `Supabase POST accounts ... 403 ... row-level security policy for table "accounts"`
+- Conclusion:
+  - the current production blocker is still the Supabase `accounts INSERT` RLS policy
+  - this is not a local code syntax or unit-test regression
+- Also removed the hard-coded verification password from [supabase-hotfix-runbook.md](/C:/Users/JKKIM/retirement-portfolio-streamlit/docs/supabase-hotfix-runbook.md) and switched the instructions to environment variables.
+
+## 2026-05-08 Supabase live apply and demo recovery
+
+- Applied the production schema update in Supabase SQL Editor by running [setup_supabase.sql](/C:/Users/JKKIM/retirement-portfolio-streamlit/setup_supabase.sql) after the narrower hotfix failed on missing `public.daily_interest`.
+- Verified the remote `public` schema had only:
+  - `accounts`
+  - `holdings`
+  - `trade_logs`
+  - legacy `mcb_*` tables
+  and was missing `daily_interest` / `daily_account_snapshot`.
+- After the full setup, live deployment verification with a longer wait showed:
+  - login succeeds
+  - workspace opens on Supabase backend
+  - onboarding / `accounts INSERT` RLS blocker is gone
+- Found a follow-up bug in [src/db.py](/C:/Users/JKKIM/retirement-portfolio-streamlit/src/db.py):
+  - `seed_demo_workspace()` treated any existing demo account as a complete demo workspace
+  - a previously interrupted seed left only `데모 IRP` with two cash-flow rows, which blocked future demo retries
+- Fixed `seed_demo_workspace()` so partial demo workspaces are deleted and rebuilt from scratch instead of being reused blindly.
+- Added regression tests in [tests/test_db.py](/C:/Users/JKKIM/retirement-portfolio-streamlit/tests/test_db.py) for:
+  - complete demo workspace reuse
+  - partial demo workspace cleanup + rebuild
+- Verification completed:
+  - `python -m py_compile src/db.py tests/test_db.py`
+  - `python -m unittest tests.test_db`

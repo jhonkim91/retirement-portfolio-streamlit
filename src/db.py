@@ -230,6 +230,83 @@ def _demo_account_totals(account_id: int) -> tuple[float, float, float]:
     return cash_balance, market_value, total_cost
 
 
+def _demo_account_is_complete(account_id: int, account_spec: dict[str, Any]) -> bool:
+    """데모 계좌가 기대하는 샘플 구성까지 모두 채워졌는지 확인한다."""
+
+    expected_symbols = {str(trade["symbol"]).upper() for trade in account_spec["trades"]}
+    if expected_symbols:
+        holdings = list_holdings(account_id, include_closed=True)
+        holding_symbols = {str(item.get("symbol") or "").upper() for item in holdings}
+        if not expected_symbols.issubset(holding_symbols):
+            return False
+
+    expected_interest_dates = {str(entry["interest_date"]) for entry in account_spec["interest"]}
+    if expected_interest_dates:
+        interest_rows = list_daily_interest(account_id)
+        interest_dates = {
+            str(row.get("date") or row.get("interest_date") or "").strip()
+            for row in interest_rows
+            if str(row.get("date") or row.get("interest_date") or "").strip()
+        }
+        if not expected_interest_dates.issubset(interest_dates):
+            return False
+
+    snapshot_date = str(account_spec["snapshot_date"])
+    snapshots = list_account_snapshots(account_id, start_date=snapshot_date)
+    snapshot_dates = {
+        str(row.get("snapshot_date") or "").strip()
+        for row in snapshots
+        if str(row.get("snapshot_date") or "").strip()
+    }
+    return snapshot_date in snapshot_dates
+
+
+def _existing_demo_workspace_is_complete(
+    existing_demo_accounts: list[dict[str, Any]],
+    blueprint: dict[str, Any],
+) -> bool:
+    """기존 데모 계좌가 전부 존재하고 필요한 샘플 데이터까지 갖췄는지 확인한다."""
+
+    demo_account_ids = {str(account.get("name") or ""): int(account["id"]) for account in existing_demo_accounts}
+    expected_names = [str(item["name"]) for item in blueprint["accounts"]]
+    if len(demo_account_ids) != len(expected_names):
+        return False
+
+    for account_spec in blueprint["accounts"]:
+        account_name = str(account_spec["name"])
+        account_id = demo_account_ids.get(account_name)
+        if not account_id:
+            return False
+        if not _demo_account_is_complete(account_id, account_spec):
+            return False
+    return True
+
+
+def _supabase_delete_account(account_id: int) -> None:
+    """Supabase 계좌를 삭제하고 연관 데이터는 CASCADE 규칙에 맡긴다."""
+
+    if not _supabase_get_account(account_id):
+        return
+    _supabase_request("DELETE", "accounts", filters={"id": f"eq.{account_id}"})
+
+
+def _sqlite_delete_account(account_id: int) -> None:
+    """SQLite 계좌를 삭제하고 연관 데이터는 CASCADE 규칙에 맡긴다."""
+
+    with sqlite_db.connect() as connection:
+        connection.execute("DELETE FROM accounts WHERE id = ?", (account_id,))
+        connection.commit()
+
+
+def _delete_account(account_id: int) -> None:
+    """현재 저장소에서 계좌를 삭제한다."""
+
+    _run_with_fallback(
+        supabase_call=lambda: _supabase_delete_account(account_id),
+        sqlite_call=lambda: _sqlite_delete_account(account_id),
+    )
+
+
 def seed_demo_workspace() -> dict[str, Any]:
     """현재 로그인 사용자 계정에 데모용 샘플 계좌와 거래 데이터를 생성한다."""
 
@@ -240,12 +317,16 @@ def seed_demo_workspace() -> dict[str, Any]:
     existing_demo_accounts = [existing_by_name[name] for name in demo_names if name in existing_by_name]
 
     if existing_demo_accounts:
-        return {
-            "created": False,
-            "selected_account_id": int(existing_demo_accounts[0]["id"]),
-            "account_ids": [int(account["id"]) for account in existing_demo_accounts],
-            "message": "이미 데모 계좌가 있어 기존 데이터를 그대로 사용합니다.",
-        }
+        if _existing_demo_workspace_is_complete(existing_demo_accounts, blueprint):
+            return {
+                "created": False,
+                "selected_account_id": int(existing_demo_accounts[0]["id"]),
+                "account_ids": [int(account["id"]) for account in existing_demo_accounts],
+                "message": "이미 데모 계좌가 있어 기존 데이터를 그대로 사용합니다.",
+            }
+
+        for account in sorted(existing_demo_accounts, key=lambda row: int(row["id"]), reverse=True):
+            _delete_account(int(account["id"]))
 
     created_account_ids: dict[str, int] = {}
     for account_spec in blueprint["accounts"]:
