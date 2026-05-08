@@ -81,6 +81,7 @@
   - 메트릭 카드를 `총자산·평가손익` 우선, `투입원금·현금·누적이자` 보조 구조로 분리
   - `자산 배분`, `보유 종목 수익률`, `시장 업데이트`, `현금 조정`, `보유 종목`, `추이`를 카드형 섹션으로 정리
   - `운영 상태` 패널에 `SUPABASE_URL/SUPABASE_KEY` 존재 여부, 설정 출처(secret/env/default/missing), 프로젝트 호스트, 누락 설정 안내 추가
+  - 첫 계좌 생성, 사이드바 계좌 추가, 데모 시드 실패 시 `owner_user_id` RLS 핫픽스 안내를 구조화해 노출
 - 남은 내용:
   - 거래 화면 카드화 여부와 밀도 재조정
   - 데이터 화면 운영자 액션 링크 보강
@@ -96,6 +97,7 @@
   - `scripts/verify_streamlit_deployment.py`로 로그인 후 `데이터 > 운영 상태` 자동 점검 가능 상태까지 안정화
   - `tests/test_analytics.py`로 성과 계산 회귀 테스트 추가
   - `tests/test_verify_streamlit_deployment.py`로 배포 검증 파서 회귀 테스트 추가
+  - `tests/test_db.py`로 Supabase 계좌 생성 payload/legacy schema 재시도 회귀 테스트 추가
 - 남은 내용:
   - Streamlit Cloud 최신 커밋 재배포 확인
   - Supabase 운영 전환 후 재검증
@@ -215,3 +217,22 @@
   - `python -m unittest discover -s tests -p "test_*.py"`
   - `python -m py_compile scripts/verify_streamlit_deployment.py tests/test_verify_streamlit_deployment.py`
 - This locks the current deployment verification text contract while the production Supabase RLS hotfix remains pending.
+
+## 2026-05-08 Supabase account creation compatibility hardening
+
+- Updated [src/db.py](/C:/Users/JKKIM/retirement-portfolio-streamlit/src/db.py) so `_supabase_create_account()` now:
+  - sends `owner_user_id` explicitly on account insert
+  - retries once without `owner_user_id` when the remote schema is still the legacy version and returns a 400 schema-cache/column-missing error
+- Added `is_accounts_hotfix_error()` for UI-side detection of `accounts INSERT RLS` hotfix blockers.
+- Updated [app.py](/C:/Users/JKKIM/retirement-portfolio-streamlit/app.py) so:
+  - first account creation
+  - sidebar account creation
+  - demo workspace seed
+  all show a structured operator follow-up block instead of only a raw error string when the `owner_user_id` hotfix is required.
+- Added [tests/test_db.py](/C:/Users/JKKIM/retirement-portfolio-streamlit/tests/test_db.py) with coverage for:
+  - hotfix error classification
+  - `owner_user_id` payload on modern schema
+  - legacy schema retry without `owner_user_id`
+- Verification completed:
+  - `python -m unittest discover -s tests -p "test_*.py"`
+  - `python -m py_compile app.py src/db.py tests/test_db.py tests/test_verify_streamlit_deployment.py`

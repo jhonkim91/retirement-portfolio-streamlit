@@ -42,6 +42,7 @@ record_trade = _db.record_trade
 seed_demo_workspace = _db.seed_demo_workspace
 set_holding_price = _db.set_holding_price
 backend_status = _db.backend_status
+is_accounts_hotfix_error = _db.is_accounts_hotfix_error
 
 
 st.set_page_config(
@@ -178,6 +179,21 @@ def label_transaction_type(value: Any) -> str:
 
 def label_table_name(value: Any) -> str:
     return TABLE_LABELS.get(str(value), str(value))
+
+
+def render_operation_error(exc: Exception) -> None:
+    """사용자 작업 오류와 필요한 운영 후속 조치를 함께 표시한다."""
+
+    st.error(str(exc))
+    if not is_accounts_hotfix_error(exc):
+        return
+
+    with st.container(border=True):
+        st.caption("운영 조치 필요")
+        st.write("현재 계좌 생성과 데모 데이터 시드는 앱 코드가 아니라 운영 Supabase RLS 정책 때문에 차단되고 있습니다.")
+        st.write("1. 운영 Supabase SQL Editor에서 `docs/supabase-owner-user-id-hotfix.sql` 또는 최신 `setup_supabase.sql`을 적용합니다.")
+        st.write("2. 적용 후 앱에서 `첫 계좌 만들기` 또는 `데모 데이터 불러오기`를 다시 실행합니다.")
+        st.write("3. 필요하면 `python scripts/verify_streamlit_deployment.py --click-demo --expect-backend supabase`로 재검증합니다.")
 
 
 def label_detail_measure(value: Any) -> str:
@@ -718,7 +734,7 @@ def empty_state() -> None:
         try:
             account_id = create_account(name=name, account_type=account_type, opening_cash=opening_cash)
         except Exception as exc:  # noqa: BLE001
-            st.error(str(exc))
+            render_operation_error(exc)
         else:
             st.session_state["selected_account_id"] = account_id
             st.success("계좌를 만들었습니다.")
@@ -739,7 +755,7 @@ def empty_state() -> None:
             try:
                 result = seed_demo_workspace()
             except Exception as exc:  # noqa: BLE001
-                st.error(str(exc))
+                render_operation_error(exc)
             else:
                 st.session_state["selected_account_id"] = int(result["selected_account_id"])
                 st.session_state["active_page"] = PAGES[0]
@@ -802,8 +818,8 @@ def sidebar(accounts: list[dict[str, Any]], selected_account_id: int | None, use
                 if submitted:
                     try:
                         create_account(name=name, account_type=account_type, opening_cash=opening_cash)
-                    except ValueError as exc:
-                        st.error(str(exc))
+                    except Exception as exc:  # noqa: BLE001
+                        render_operation_error(exc)
                     else:
                         st.success("계좌를 추가했습니다.")
                         st.rerun()

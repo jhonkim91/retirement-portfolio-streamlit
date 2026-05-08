@@ -492,12 +492,7 @@ def _supabase_request(
     except requests.HTTPError as exc:
         detail = response.text.strip().replace("\n", " ")
         detail_lower = detail.lower()
-        if (
-            response.status_code == 403
-            and method == "POST"
-            and table == "accounts"
-            and "row-level security policy" in detail_lower
-        ):
+        if _is_accounts_rls_hotfix_response(method, table, response.status_code, detail_lower):
             detail = (
                 "운영 Supabase의 accounts INSERT RLS 정책이 오래된 상태입니다. "
                 "setup_supabase.sql의 owner_user_id 핫픽스를 적용한 뒤 다시 시도해 주세요."
@@ -518,6 +513,50 @@ def _supabase_request(
     if method in {"POST", "PATCH"}:
         return payload[0] if isinstance(payload, list) and payload else payload
     return payload
+
+
+def _is_accounts_rls_hotfix_response(method: str, table: str, status_code: int, detail_lower: str) -> bool:
+    """accounts INSERT가 owner_user_id 핫픽스로 막힌 응답인지 판별한다."""
+
+    return (
+        status_code == 403
+        and method == "POST"
+        and table == "accounts"
+        and "row-level security policy" in detail_lower
+    )
+
+
+def _is_missing_owner_user_id_schema_error(exc: Exception) -> bool:
+    """구형 스키마에서 owner_user_id 컬럼이 없어 재시도가 필요한지 판별한다."""
+
+    if not isinstance(exc, requests.HTTPError) or exc.response is None:
+        return False
+
+    if exc.response.status_code != 400:
+        return False
+
+    detail_lower = exc.response.text.strip().replace("\n", " ").lower()
+    if "owner_user_id" not in detail_lower:
+        return False
+
+    markers = (
+        "schema cache",
+        "could not find the 'owner_user_id' column",
+        "column owner_user_id does not exist",
+        "unknown column",
+    )
+    return any(marker in detail_lower for marker in markers)
+
+
+def is_accounts_hotfix_error(error: Any) -> bool:
+    """accounts RLS 핫픽스가 필요한 오류인지 사용자용으로 판별한다."""
+
+    message = str(error or "").strip().lower()
+    return (
+        "accounts insert rls" in message
+        or ("row-level security" in message and "accounts" in message)
+        or ("owner_user_id" in message and ("핫픽스" in message or "hotfix" in message))
+    )
 
 
 def _supabase_insert_trade_log(
@@ -718,18 +757,35 @@ def _supabase_create_account(name: str, account_type: str = "retirement", openin
 
     timestamp = now_iso()
     stored_name = _storage_account_name(cleaned_name)
-    result = _supabase_request(
-        "POST",
-        "accounts",
-        data={
-            "name": stored_name,
-            "account_type": cleaned_type,
-            "cash_balance": float(opening_cash or 0),
-            "created_at": timestamp,
-            "updated_at": timestamp,
-        },
-        prefer_return="minimal",
-    )
+    insert_payload = {
+        "name": stored_name,
+        "account_type": cleaned_type,
+        "cash_balance": float(opening_cash or 0),
+        "owner_user_id": _require_user_id(),
+        "created_at": timestamp,
+        "updated_at": timestamp,
+    }
+
+    try:
+        result = _supabase_request(
+            "POST",
+            "accounts",
+            data=insert_payload,
+            prefer_return="minimal",
+        )
+    except requests.HTTPError as exc:
+        if not _is_missing_owner_user_id_schema_error(exc):
+            raise
+
+        # 운영 스키마가 아직 구버전이면 owner_user_id 없이 한 번만 재시도한다.
+        legacy_payload = dict(insert_payload)
+        legacy_payload.pop("owner_user_id", None)
+        result = _supabase_request(
+            "POST",
+            "accounts",
+            data=legacy_payload,
+            prefer_return="minimal",
+        )
     if isinstance(result, dict) and result.get("id") is not None:
         return int(result["id"])
     if isinstance(result, list) and result and result[0].get("id") is not None:
