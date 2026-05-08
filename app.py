@@ -129,6 +129,11 @@ PERIOD_LABELS = {
     "6mo": "6개월",
     "1y": "1년",
 }
+DASHBOARD_OVERVIEW_PANEL_HEIGHT = 560
+DASHBOARD_OVERVIEW_CHART_HEIGHT = 400
+DASHBOARD_TREND_CHART_HEIGHT = 340
+DASHBOARD_DETAIL_CHART_HEIGHT = 300
+DASHBOARD_HOLDINGS_TABLE_HEIGHT = 380
 PRODUCT_TYPE_LABELS = {
     "stock": "주식",
     "stock/ETF": "주식/ETF",
@@ -318,6 +323,10 @@ def inject_app_styles() -> None:
             --brand-accent: #d97706;
             --status-good: #0f766e;
             --status-warn: #b45309;
+            --panel-radius: 20px;
+            --panel-padding: 1.05rem 1.1rem 1.15rem;
+            --section-gap: 1rem;
+            --chart-gap: 0.85rem;
         }
 
         .stApp {
@@ -327,8 +336,9 @@ def inject_app_styles() -> None:
         }
 
         .block-container {
-            padding-top: 1.6rem;
+            padding-top: 1.35rem;
             padding-bottom: 3rem;
+            max-width: 1580px;
         }
 
         [data-testid="stSidebar"] {
@@ -370,6 +380,67 @@ def inject_app_styles() -> None:
         .dashboard-note {
             color: var(--text-muted);
             font-size: 0.9rem;
+        }
+
+        .dashboard-section-header {
+            display: flex;
+            flex-direction: column;
+            gap: 0.28rem;
+            margin-bottom: var(--section-gap);
+        }
+
+        .dashboard-section-header--compact {
+            margin-bottom: 0.9rem;
+        }
+
+        .dashboard-section-header__title {
+            color: var(--brand-deep);
+            font-size: clamp(1.28rem, 1.55vw, 1.9rem);
+            font-weight: 800;
+            line-height: 1.1;
+            letter-spacing: -0.03em;
+            margin: 0;
+        }
+
+        .dashboard-section-header__title--compact {
+            font-size: clamp(1.12rem, 1.35vw, 1.45rem);
+        }
+
+        .dashboard-section-header__caption {
+            color: var(--text-muted);
+            font-size: 0.94rem;
+            line-height: 1.45;
+            margin: 0;
+        }
+
+        .dashboard-chart-shell {
+            display: flex;
+            flex-direction: column;
+            gap: var(--chart-gap);
+        }
+
+        .dashboard-chart-shell__legend {
+            margin-top: auto;
+        }
+
+        .dashboard-treemap-legend {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.8rem;
+            margin-top: 0.15rem;
+            color: #607285;
+            font-size: 0.82rem;
+            font-weight: 700;
+        }
+
+        .dashboard-treemap-legend__bar {
+            width: min(320px, 48vw);
+            height: 14px;
+            border-radius: 999px;
+            border: 1px solid rgba(15, 23, 42, 0.08);
+            background: linear-gradient(90deg, #f1646c 0%, #f2b85b 32%, #d6de6b 62%, #82cc80 100%);
+            box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
         }
 
         .dashboard-metric-strip {
@@ -441,31 +512,90 @@ def inject_app_styles() -> None:
             font-size: 0.86rem;
             font-weight: 700;
             letter-spacing: 0.01em;
-            margin-bottom: 0.85rem;
+            margin: 0;
         }
 
         .dashboard-summary-card__value {
             color: #0d3559;
-            font-size: clamp(1.6rem, 2vw, 2.2rem);
+            font-size: clamp(1.52rem, 1.9vw, 2.15rem);
             font-weight: 800;
-            line-height: 1.08;
+            line-height: 1.04;
             letter-spacing: -0.03em;
-            margin-bottom: 0.15rem;
+            min-height: 2.55rem;
+            display: flex;
+            align-items: flex-end;
+            margin: 0;
+            white-space: nowrap;
+            overflow: hidden;
         }
 
         .dashboard-summary-card__value--accent {
             color: #b42318;
         }
 
+        .dashboard-summary-card__header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 0.7rem;
+            min-height: 2.35rem;
+            margin-bottom: 0.85rem;
+        }
+
+        .dashboard-summary-card__field {
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            min-height: 5.1rem;
+        }
+
+        .st-key-dashboard-card-cash [data-testid="stButton"] > button {
+            min-height: 2.4rem;
+            padding: 0.1rem 1rem;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+
+        .st-key-dashboard-card-cash [data-testid="stHorizontalBlock"] {
+            align-items: flex-start;
+        }
+
+        .st-key-dashboard-card-cash [data-testid="stNumberInput"] label p,
+        .st-key-dashboard-panel-trend [data-testid="stSegmentedControl"] label p,
+        .st-key-dashboard-panel-trend [data-testid="stMultiSelect"] label p {
+            color: #607285;
+            font-weight: 700;
+        }
+
+        .st-key-dashboard-panel-market [data-testid="stButton"] > button {
+            min-height: 2.65rem;
+        }
+
         @media (max-width: 860px) {
             .dashboard-metric-strip {
                 grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
+            .dashboard-treemap-legend {
+                gap: 0.55rem;
+            }
+
+            .dashboard-treemap-legend__bar {
+                width: min(240px, 44vw);
             }
         }
 
         @media (max-width: 560px) {
             .dashboard-metric-strip {
                 grid-template-columns: 1fr;
+            }
+
+            .dashboard-treemap-legend {
+                flex-direction: column;
+            }
+
+            .dashboard-treemap-legend__bar {
+                width: min(280px, 78vw);
             }
         }
         </style>
@@ -581,10 +711,62 @@ def render_dashboard_summary_card(label: str, value: str, *, tone: str = "") -> 
         value_class += " dashboard-summary-card__value--accent"
     st.markdown(
         (
+            '<div class="dashboard-summary-card__field">'
             f'<div class="dashboard-summary-card__label">{html.escape(label)}</div>'
             f'<div class="{value_class}">{html.escape(value)}</div>'
+            "</div>"
         ),
         unsafe_allow_html=True,
+    )
+
+
+def render_dashboard_section_header(title: str, description: str, *, compact: bool = False) -> None:
+    """대시보드 섹션 헤더를 동일한 타이포 체계로 렌더링한다."""
+
+    wrapper_class = "dashboard-section-header dashboard-section-header--compact" if compact else "dashboard-section-header"
+    title_class = "dashboard-section-header__title dashboard-section-header__title--compact" if compact else "dashboard-section-header__title"
+    st.markdown(
+        (
+            f'<div class="{wrapper_class}">'
+            f'<div class="{title_class}">{html.escape(title)}</div>'
+            f'<p class="dashboard-section-header__caption">{html.escape(description)}</p>'
+            "</div>"
+        ),
+        unsafe_allow_html=True,
+    )
+
+
+def render_dashboard_treemap_legend() -> None:
+    """트리맵 하단 범례를 커스텀 HTML로 렌더링한다."""
+
+    st.markdown(
+        (
+            '<div class="dashboard-treemap-legend">'
+            '<span>낮은 비중</span>'
+            '<div class="dashboard-treemap-legend__bar"></div>'
+            '<span>높은 비중</span>'
+            "</div>"
+        ),
+        unsafe_allow_html=True,
+    )
+
+
+def style_dashboard_altair_chart(chart: alt.Chart, *, height: int) -> alt.Chart:
+    """대시보드 Altair 차트에 공통 높이와 축 스타일을 적용한다."""
+
+    return (
+        chart.properties(height=height)
+        .configure_view(stroke=None)
+        .configure_axis(
+            gridColor="#D7E2E7",
+            domainColor="#C8D4DA",
+            tickColor="#C8D4DA",
+            labelColor="#607285",
+            titleColor="#607285",
+            titleFontWeight=700,
+            labelFontSize=12,
+            titleFontSize=12,
+        )
     )
 
 
@@ -674,64 +856,66 @@ def allocation_treemap_options(summary: dict[str, Any], holdings: list[dict[str,
     if tooltip_formatter is not None:
         tooltip_config["formatter"] = tooltip_formatter
 
+    label_formatter: Any = "{b}"
+    if JsCode is not None:
+        label_formatter = JsCode(
+            """
+            function(info) {
+                var name = String(info.name || '');
+                return name.length > 14 ? name.slice(0, 13) + '…' : name;
+            }
+            """
+        )
+
     return {
         "backgroundColor": "transparent",
-        "title": {
-            "text": "자산군 > 보유 종목",
-            "left": "center",
-            "top": 8,
-            "textStyle": {
-                "fontSize": 18,
-                "fontWeight": 700,
-                "color": "#2F3747",
-            },
-        },
+        "animationDurationUpdate": 220,
         "tooltip": tooltip_config,
-        "visualMap": {
-            "min": round(visual_min, 4),
-            "max": round(visual_max, 4),
-            "calculable": True,
-            "orient": "horizontal",
-            "left": "center",
-            "bottom": 6,
-            "text": ["High 비중", "Low 비중"],
-            "textStyle": {"color": "#667085"},
-            "itemWidth": 150,
-            "itemHeight": 12,
-            "inRange": {
-                "color": ["#F1646C", "#F6C85F", "#D8E36C", "#7DCE82"],
-            },
-        },
         "series": [
             {
                 "name": "자산 배분",
                 "type": "treemap",
-                "top": 44,
+                "top": 2,
                 "left": 0,
                 "right": 0,
-                "bottom": 58,
+                "bottom": 2,
                 "roam": False,
                 "nodeClick": False,
+                "sort": "desc",
                 "breadcrumb": {"show": False},
-                "colorMappingBy": "value",
-                "visibleMin": 1,
+                "visibleMin": max(round(visual_max * 0.01, 4), 1),
                 "label": {
                     "show": True,
-                    "formatter": "{b}",
+                    "formatter": label_formatter,
                     "color": "#FFFFFF",
                     "fontWeight": 700,
-                    "fontSize": 13,
+                    "fontSize": 14,
+                    "lineHeight": 18,
+                    "overflow": "truncate",
+                    "ellipsis": "…",
                 },
                 "upperLabel": {
                     "show": True,
+                    "formatter": label_formatter,
                     "height": 28,
                     "color": "#F8FAFC",
                     "fontWeight": 700,
+                    "overflow": "truncate",
+                    "ellipsis": "…",
                 },
                 "itemStyle": {
                     "borderColor": "#5E646B",
                     "borderWidth": 2,
                     "gapWidth": 2,
+                    "borderRadius": 2,
+                },
+                "emphasis": {
+                    "itemStyle": {
+                        "borderColor": "#173F46",
+                        "borderWidth": 2,
+                        "shadowBlur": 16,
+                        "shadowColor": "rgba(15, 23, 42, 0.12)",
+                    }
                 },
                 "levels": [
                     {
@@ -749,9 +933,9 @@ def allocation_treemap_options(summary: dict[str, Any], holdings: list[dict[str,
                         },
                     },
                     {
-                        "colorSaturation": [0.35, 0.8],
+                        "colorSaturation": [0.42, 0.82],
                         "itemStyle": {
-                            "borderColor": "#C4CBD2",
+                            "borderColor": "#D5DDE3",
                             "borderWidth": 1,
                             "gapWidth": 1,
                         },
@@ -768,13 +952,40 @@ def holdings_bar_chart(frame: pd.DataFrame) -> alt.Chart | None:
         return None
     chart_frame = frame.sort_values("current_value", ascending=False).head(10).copy()
     chart_frame["tone"] = chart_frame["profit_rate"].apply(lambda value: "수익" if float(value or 0) >= 0 else "손실")
-    return (
+    chart_frame["display_name"] = chart_frame["product_name"].astype(str).apply(
+        lambda value: value if len(value) <= 14 else f"{value[:13]}…"
+    )
+    display_order = chart_frame["display_name"].tolist()
+    chart = (
         alt.Chart(chart_frame)
-        .mark_bar(cornerRadiusTopLeft=6, cornerRadiusTopRight=6)
+        .mark_bar(cornerRadiusTopLeft=8, cornerRadiusTopRight=8, size=52)
         .encode(
-            x=alt.X("product_name:N", sort="-y", title="종목"),
-            y=alt.Y("profit_rate:Q", title="수익률 (%)"),
-            color=alt.Color("tone:N", scale=alt.Scale(domain=["수익", "손실"], range=["#0F766E", "#B91C1C"])),
+            x=alt.X(
+                "display_name:N",
+                sort=display_order,
+                title="종목",
+                axis=alt.Axis(
+                    labelAngle=-32,
+                    labelLimit=118,
+                    labelPadding=10,
+                    titlePadding=14,
+                    labelColor="#607285",
+                    titleColor="#607285",
+                ),
+            ),
+            y=alt.Y(
+                "profit_rate:Q",
+                title="수익률 (%)",
+                axis=alt.Axis(
+                    format=".0f",
+                    grid=True,
+                    gridColor="#D7E2E7",
+                    tickCount=6,
+                    labelColor="#607285",
+                    titleColor="#607285",
+                ),
+            ),
+            color=alt.Color("tone:N", legend=None, scale=alt.Scale(domain=["수익", "손실"], range=["#1D7F78", "#D14D57"])),
             tooltip=[
                 alt.Tooltip("product_name:N", title="종목"),
                 alt.Tooltip("current_value:Q", title="평가금액", format=",.0f"),
@@ -782,6 +993,7 @@ def holdings_bar_chart(frame: pd.DataFrame) -> alt.Chart | None:
             ],
         )
     )
+    return style_dashboard_altair_chart(chart, height=DASHBOARD_OVERVIEW_CHART_HEIGHT)
 
 
 def show_holdings_table(frame: pd.DataFrame, *, height: int = 420) -> None:
@@ -1029,17 +1241,20 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]], roll
     )
     cash_edit_state_key = f"dashboard-cash-editing:{account['id']}"
     cash_edit_amount_key = f"dashboard-cash-edit-amount:{account['id']}"
-    summary_cols = st.columns(5, gap="small")
+    summary_cols = st.columns(5, gap="small", vertical_alignment="top")
 
     with summary_cols[0]:
-        with st.container(border=True):
+        with st.container(border=True, key="dashboard-card-principal"):
             render_dashboard_summary_card("입금 원금", format_won(summary["total_principal"]))
 
     with summary_cols[1]:
-        with st.container(border=True):
-            header_col, action_col = st.columns((1, 0.52), gap="small")
+        with st.container(border=True, key="dashboard-card-cash"):
+            header_col, action_col = st.columns((1, 0.52), gap="small", vertical_alignment="top")
             with header_col:
-                st.markdown('<div class="dashboard-summary-card__label">보유 현금</div>', unsafe_allow_html=True)
+                st.markdown(
+                    '<div class="dashboard-summary-card__header"><div class="dashboard-summary-card__label">보유 현금</div></div>',
+                    unsafe_allow_html=True,
+                )
             with action_col:
                 if st.button(
                     "수정" if not st.session_state.get(cash_edit_state_key, False) else "닫기",
@@ -1050,7 +1265,14 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]], roll
                     if st.session_state[cash_edit_state_key]:
                         st.session_state[cash_edit_amount_key] = float(display_cash)
                     st.rerun()
-            st.markdown(f'<div class="dashboard-summary-card__value">{html.escape(format_won(display_cash))}</div>', unsafe_allow_html=True)
+            st.markdown(
+                (
+                    '<div class="dashboard-summary-card__field">'
+                    f'<div class="dashboard-summary-card__value">{html.escape(format_won(display_cash))}</div>'
+                    "</div>"
+                ),
+                unsafe_allow_html=True,
+            )
 
             if st.session_state.get(cash_edit_state_key, False):
                 st.number_input(
@@ -1082,22 +1304,21 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]], roll
                         st.rerun()
 
     with summary_cols[2]:
-        with st.container(border=True):
+        with st.container(border=True, key="dashboard-card-total-value"):
             render_dashboard_summary_card("현재 평가액", format_won(display_total_value))
 
     with summary_cols[3]:
-        with st.container(border=True):
+        with st.container(border=True, key="dashboard-card-profit"):
             render_dashboard_summary_card("원금 대비 평가손익", format_won(display_principal_profit_loss), tone="accent")
 
     with summary_cols[4]:
-        with st.container(border=True):
+        with st.container(border=True, key="dashboard-card-profit-rate"):
             render_dashboard_summary_card("원금 대비 수익률", format_pct(display_principal_profit_rate), tone="accent")
 
-    overview_left, overview_right = st.columns((1, 1), gap="large")
+    overview_left, overview_right = st.columns((1, 1), gap="large", vertical_alignment="top")
     with overview_left:
-        with st.container(border=True):
-            st.subheader("자산 배분")
-            st.caption("자산군에서 보유 종목까지 한 번에 보는 트리맵입니다.")
+        with st.container(border=True, height=DASHBOARD_OVERVIEW_PANEL_HEIGHT, key="dashboard-panel-allocation"):
+            render_dashboard_section_header("자산 배분", "자산군에서 보유 종목까지 한 번에 보는 트리맵입니다.")
             treemap_options = allocation_treemap_options(summary, holdings)
             if treemap_options is None:
                 st.info("배분을 그릴 데이터가 아직 없습니다.")
@@ -1106,28 +1327,27 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]], roll
                 if chart is None:
                     st.info("배분을 그릴 데이터가 아직 없습니다.")
                 else:
-                    st.altair_chart(chart, width="stretch")
+                    st.altair_chart(style_dashboard_altair_chart(chart, height=DASHBOARD_OVERVIEW_CHART_HEIGHT), width="stretch")
                     st.caption("`streamlit-echarts`가 없는 환경이라 기본 차트로 표시했습니다.")
             else:
                 st_echarts(
                     options=treemap_options,
-                    height="520px",
+                    height=f"{DASHBOARD_OVERVIEW_CHART_HEIGHT}px",
                     key=f"allocation-treemap:{account['id']}",
                 )
+                render_dashboard_treemap_legend()
 
     with overview_right:
-        with st.container(border=True):
-            st.subheader("보유 종목 수익률")
-            st.caption("현재 보유 상위 종목의 수익률 흐름을 우선 확인합니다.")
+        with st.container(border=True, height=DASHBOARD_OVERVIEW_PANEL_HEIGHT, key="dashboard-panel-holdings"):
+            render_dashboard_section_header("보유 종목 수익률", "현재 보유 상위 종목의 수익률 흐름을 우선 확인합니다.")
             chart = holdings_bar_chart(frame)
             if chart is None:
                 st.info("보유 종목이 없어 수익률 차트를 그릴 수 없습니다.")
             else:
                 st.altair_chart(chart, width="stretch")
 
-    with st.container(border=True):
-        st.subheader("시장 업데이트")
-        st.caption("가격 갱신과 코드 입력 규칙을 한 영역에서 정리했습니다.")
+    with st.container(border=True, key="dashboard-panel-market"):
+        render_dashboard_section_header("시장 업데이트", "가격 갱신과 코드 입력 규칙을 한 영역에서 정리했습니다.", compact=True)
         if holdings:
             if st.button("현재가 새로고침", width="stretch"):
                 updated, errors = refresh_prices(holdings)
@@ -1140,16 +1360,14 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]], roll
             st.info("보유 종목이 생기면 여기서 현재가를 한 번에 갱신할 수 있습니다.")
         st.caption("숫자만 입력한 6자리 한국 종목 코드는 자동으로 `.KS`를 붙여 조회합니다. 코스닥/ETF 등은 필요하면 직접 야후 파이낸스 심볼을 넣어 주세요.")
 
-    with st.container(border=True):
-        st.subheader("현재 보유 종목")
-        st.caption("계좌 전체 포지션을 표로 읽고, 이후 아래 추이 차트와 이어서 확인합니다.")
-        show_holdings_table(frame, height=360)
+    with st.container(border=True, key="dashboard-panel-holdings-table"):
+        render_dashboard_section_header("현재 보유 종목", "계좌 전체 포지션을 표로 읽고, 이후 아래 추이 차트와 이어서 확인합니다.", compact=True)
+        show_holdings_table(frame, height=DASHBOARD_HOLDINGS_TABLE_HEIGHT)
 
-    with st.container(border=True):
-        trend_title_col, period_col = st.columns((1.2, 1), gap="large")
+    with st.container(border=True, key="dashboard-panel-trend"):
+        trend_title_col, period_col = st.columns((1.2, 1), gap="large", vertical_alignment="bottom")
         with trend_title_col:
-            st.subheader("추이")
-            st.caption("총자산 흐름을 먼저 보고, 이어서 종목별 비교를 같은 섹션에서 확인합니다.")
+            render_dashboard_section_header("추이", "총자산 흐름을 먼저 보고, 이어서 종목별 비교를 같은 섹션에서 확인합니다.", compact=True)
         with period_col:
             period = st.segmented_control(
                 "기간",
@@ -1200,7 +1418,7 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]], roll
                     ],
                 )
             )
-        st.altair_chart(trend_chart, width="stretch")
+        st.altair_chart(style_dashboard_altair_chart(trend_chart, height=DASHBOARD_TREND_CHART_HEIGHT), width="stretch")
 
         if not snapshot_frame.empty:
             st.caption("일별 스냅샷에 순유입과 실제 성과 기준을 함께 반영해 추이를 보여주고 있습니다.")
@@ -1252,7 +1470,7 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]], roll
                     ],
                 )
             )
-            st.altair_chart(detail_chart, width="stretch")
+            st.altair_chart(style_dashboard_altair_chart(detail_chart, height=DASHBOARD_DETAIL_CHART_HEIGHT), width="stretch")
 
 
 def trade_entry_page(account: dict[str, Any], holdings: list[dict[str, Any]], accounts: list[dict[str, Any]]) -> None:
