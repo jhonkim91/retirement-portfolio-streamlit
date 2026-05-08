@@ -5,6 +5,7 @@ import os
 from datetime import datetime
 from urllib.parse import urlparse
 from typing import Any, Callable, TypeVar
+from uuid import uuid4
 
 import requests
 import streamlit as st
