@@ -520,3 +520,18 @@ python -m unittest discover -s tests -p "test_*.py"
   - 로컬 변경은 아직 커밋/푸시 전 상태
 - 비고:
   - 웹 반영을 위해서는 관련 변경을 커밋하고 원격으로 푸시한 뒤 Streamlit 배포가 다시 돌아야 함
+
+## 2026-05-08 대시보드 카드 HTML 렌더링 보정
+- 변경 파일:
+  - `app.py`
+  - `Memory.md`
+- 변경 내용:
+  - 첫 배포 후 대시보드 카드 일부가 HTML 문자열 그대로 노출되는 현상 확인
+  - 원인: 카드 5개를 하나의 큰 HTML 블록으로 이어 붙이는 방식이 배포 환경에서 안정적으로 렌더링되지 않음
+  - 조치: `render_dashboard_metric_strip()`를 `st.columns()` 기반으로 바꾸고, 카드마다 개별 `st.markdown(..., unsafe_allow_html=True)`를 호출하도록 수정
+- 검증:
+  - `python -m compileall app.py src scripts tests`
+  - `python -m unittest discover -s tests -p "test_*.py"`
+  - 결과: 테스트 30건 통과
+- 비고:
+  - 이 수정은 카드 스타일/라벨은 유지하면서 렌더 방식만 안전하게 바꾸는 최소 패치다

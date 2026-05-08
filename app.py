@@ -633,8 +633,8 @@ def render_page_context(account: dict[str, Any], active_page: str, status: dict[
 def render_dashboard_metric_strip(cards: list[dict[str, str]]) -> None:
     """대시보드 상단 핵심 지표를 카드 스트립 형태로 렌더링한다."""
 
-    items: list[str] = []
-    for card in cards:
+    columns = st.columns(len(cards), gap="small")
+    for column, card in zip(columns, cards):
         label = html.escape(str(card.get("label") or ""))
         value = html.escape(str(card.get("value") or ""))
         note = str(card.get("note") or "").strip()
@@ -645,22 +645,22 @@ def render_dashboard_metric_strip(cards: list[dict[str, str]]) -> None:
             value_class += " dashboard-metric-card__value--accent"
         note_html = f'<div class="dashboard-metric-card__note">{html.escape(note)}</div>' if note else ""
         action_html = f'<div class="dashboard-metric-card__action">{html.escape(action)}</div>' if action else ""
-        items.append(
-            f"""
-            <div class="dashboard-metric-card">
-                <div>
-                    <div class="dashboard-metric-card__top">
-                        <div class="dashboard-metric-card__label">{label}</div>
-                        {action_html}
+        with column:
+            st.markdown(
+                f"""
+                <div class="dashboard-metric-card">
+                    <div>
+                        <div class="dashboard-metric-card__top">
+                            <div class="dashboard-metric-card__label">{label}</div>
+                            {action_html}
+                        </div>
+                        <div class="{value_class}">{value}</div>
                     </div>
-                    <div class="{value_class}">{value}</div>
+                    {note_html}
                 </div>
-                {note_html}
-            </div>
-            """
-        )
-
-    st.markdown(f'<div class="dashboard-metric-strip">{"".join(items)}</div>', unsafe_allow_html=True)
+                """,
+                unsafe_allow_html=True,
+            )
 
 
 def refresh_prices(holdings: list[dict[str, Any]]) -> tuple[int, list[str]]:
