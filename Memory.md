@@ -27,6 +27,7 @@
 - [x] 대시보드 전체 스타일 정리
 - [x] 초기 화면 데모 접속 및 테스트 데이터 자동 준비
 - [x] 초기 화면 데모 버튼 무자격 증명 즉시 진입
+- [x] 자산 배분 수익률 하이라이트 연동
 
 ## 프로젝트 유형
 - Python 프로젝트
@@ -733,3 +734,26 @@ python -m unittest discover -s tests -p "test_*.py"
 - 비고:
   - 로컬 브라우저 검증 과정에서 `data/portfolio.db`에 데모 데이터가 실제 기록됐으나 이번 커밋에는 포함하지 않음
   - 실제 Supabase 데모 계정 시크릿이 설정돼 있으면 계속 그 계정으로 로그인하고, 없으면 로컬 SQLite 데모 작업공간으로 자동 fallback 한다
+
+## 2026-05-09 자산 배분 수익률 하이라이트 연동
+- 변경 파일:
+  - `app.py`
+  - `src/analytics.py`
+  - `tests/test_analytics.py`
+  - `Memory.md`
+- 변경 내용:
+  - 자산 배분 트리맵의 하단 범례를 기존 `낮은 비중/높은 비중` 정적 바에서 `현재 종목 수익률 기준` 바와 선택 마커 구조로 교체
+  - 트리맵 타일 색상을 보유 종목 `수익률 %` 기준으로 다시 계산하고, 선택된 종목은 테두리/그림자로 강조되도록 보강
+  - 우측 `보유 종목 수익률` 차트를 Altair 기본 막대에서 ECharts 막대로 전환하고, 클릭 시 동일 종목 selection state를 공유하도록 연결
+  - 트리맵이나 막대 중 하나를 클릭하면 같은 종목이 다른 차트에서도 하이라이트되고, 범례 마커 라벨이 해당 종목 수익률 위치로 이동하도록 구현
+  - `src.analytics.holdings_overview_frame()`를 추가해 선택 종목이 top 10 밖이어도 개요 막대차트에 유지되도록 정리
+  - ECharts 미사용 환경에서는 Altair fallback 차트가 selection opacity만 반영하도록 유지
+- 검증:
+  - `python -m compileall app.py src scripts tests`
+  - `python -m unittest discover -s tests -p "test_*.py"`
+  - 결과: 테스트 39건 통과
+- 브라우저 확인:
+  - 로컬 Streamlit에서 새 범례 문구 `현재 종목 수익률 기준`과 수익률 min/max 텍스트가 렌더링되는 것까지는 확인
+  - headless Playwright 기준 Streamlit 재렌더 타이밍과 canvas click 재현성이 낮아 `트리맵 클릭 -> 선택 종목 캡션 변경` E2E는 부분 확인으로 남김
+- 참고:
+  - 구현 방식은 `streamlit-echarts` 이벤트 반환 예시와 Apache ECharts 이벤트/visual mapping 개념을 참고해, 이벤트는 심볼 문자열만 반환하는 단순 패턴으로 맞춤

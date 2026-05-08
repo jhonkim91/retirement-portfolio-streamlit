@@ -7,6 +7,7 @@ from src.analytics import (
     account_summary,
     allocation_treemap_nodes,
     cumulative_contribution_frame,
+    holdings_overview_frame,
     projected_today_interest,
     snapshot_trend_frame,
 )
@@ -105,6 +106,38 @@ class AccountSummaryTests(unittest.TestCase):
         self.assertEqual(nodes[1]["children"][0]["name"], "국고채 ETF")
         self.assertEqual(nodes[2]["children"][0]["name"], "예수금")
         self.assertEqual(nodes[2]["children"][0]["value"], 300_000.0)
+
+    def test_allocation_treemap_nodes_marks_selected_symbol(self) -> None:
+        account = {"cash_balance": 300_000}
+        holdings = [
+            {"product_name": "KODEX 200", "symbol": "069500", "quantity": 10, "avg_cost": 30_000, "current_price": 35_000, "asset_type": "risk"},
+            {"product_name": "국고채 ETF", "symbol": "148070", "quantity": 5, "avg_cost": 50_000, "current_price": 51_000, "asset_type": "safe"},
+        ]
+
+        summary = account_summary(account, holdings, trade_logs=[], interest_rows=[])
+        nodes = allocation_treemap_nodes(summary, holdings, selected_symbol="148070")
+
+        self.assertFalse(nodes[0]["children"][0]["is_selected"])
+        self.assertTrue(nodes[1]["children"][0]["is_selected"])
+
+    def test_holdings_overview_frame_keeps_selected_symbol_inside_limit(self) -> None:
+        holdings = [
+            {
+                "product_name": f"종목 {index}",
+                "symbol": f"{index:06d}",
+                "quantity": 1,
+                "avg_cost": 100 + index,
+                "current_price": 100 + index,
+                "asset_type": "risk" if index % 2 else "safe",
+            }
+            for index in range(1, 13)
+        ]
+        overview = holdings_overview_frame(holdings, selected_symbol="000001", limit=10)
+
+        self.assertEqual(len(overview), 10)
+        self.assertIn("000001", overview["selection_symbol"].tolist())
+        selected_row = overview.loc[overview["selection_symbol"] == "000001"].iloc[0]
+        self.assertTrue(bool(selected_row["is_selected"]))
 
 
 class SnapshotTrendFrameTests(unittest.TestCase):

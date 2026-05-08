@@ -22,6 +22,7 @@ from src.analytics import (
     build_portfolio_trend,
     cumulative_contribution_frame,
     holdings_frame,
+    holdings_overview_frame,
     projected_today_interest,
     realized_summary,
     snapshot_trend_frame,
@@ -425,22 +426,86 @@ def inject_app_styles() -> None:
 
         .dashboard-treemap-legend {
             display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 0.8rem;
-            margin-top: 0.15rem;
+            flex-direction: column;
+            gap: 0.42rem;
+            margin-top: 0.2rem;
             color: #607285;
             font-size: 0.82rem;
             font-weight: 700;
         }
 
+        .dashboard-treemap-legend__range {
+            width: min(360px, 52vw);
+            display: flex;
+            flex-direction: column;
+            gap: 0.4rem;
+            align-items: stretch;
+            margin: 0 auto;
+        }
+
         .dashboard-treemap-legend__bar {
-            width: min(320px, 48vw);
+            position: relative;
+            width: 100%;
             height: 14px;
             border-radius: 999px;
             border: 1px solid rgba(15, 23, 42, 0.08);
             background: linear-gradient(90deg, #f1646c 0%, #f2b85b 32%, #d6de6b 62%, #82cc80 100%);
             box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+        }
+
+        .dashboard-treemap-legend__labels {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.8rem;
+            color: #607285;
+            font-size: 0.79rem;
+            font-weight: 700;
+        }
+
+        .dashboard-treemap-legend__hint {
+            color: #607285;
+            font-size: 0.78rem;
+            font-weight: 600;
+            text-align: center;
+            line-height: 1.35;
+        }
+
+        .dashboard-treemap-legend__marker {
+            position: absolute;
+            top: -6px;
+            width: 18px;
+            height: 26px;
+            border-radius: 999px;
+            background: rgba(15, 118, 110, 0.96);
+            border: 2px solid rgba(255, 255, 255, 0.92);
+            box-shadow: 0 10px 20px rgba(15, 23, 42, 0.18);
+        }
+
+        .dashboard-treemap-legend__marker::after {
+            content: "";
+            position: absolute;
+            left: 50%;
+            bottom: -7px;
+            width: 2px;
+            height: 7px;
+            transform: translateX(-50%);
+            background: rgba(15, 118, 110, 0.92);
+        }
+
+        .dashboard-treemap-legend__marker-label {
+            position: absolute;
+            left: 50%;
+            bottom: calc(100% + 10px);
+            transform: translateX(-50%);
+            white-space: nowrap;
+            background: rgba(15, 23, 42, 0.92);
+            color: #F8FAFC;
+            border-radius: 999px;
+            padding: 0.28rem 0.62rem;
+            font-size: 0.74rem;
+            font-weight: 700;
+            box-shadow: 0 10px 24px rgba(15, 23, 42, 0.14);
         }
 
         .dashboard-metric-strip {
@@ -576,12 +641,8 @@ def inject_app_styles() -> None:
                 grid-template-columns: repeat(2, minmax(0, 1fr));
             }
 
-            .dashboard-treemap-legend {
-                gap: 0.55rem;
-            }
-
-            .dashboard-treemap-legend__bar {
-                width: min(240px, 44vw);
+            .dashboard-treemap-legend__range {
+                width: min(300px, 48vw);
             }
         }
 
@@ -590,12 +651,19 @@ def inject_app_styles() -> None:
                 grid-template-columns: 1fr;
             }
 
-            .dashboard-treemap-legend {
-                flex-direction: column;
+            .dashboard-treemap-legend__range {
+                width: min(320px, 82vw);
             }
 
-            .dashboard-treemap-legend__bar {
-                width: min(280px, 78vw);
+            .dashboard-treemap-legend__labels {
+                gap: 0.45rem;
+                font-size: 0.72rem;
+            }
+
+            .dashboard-treemap-legend__marker-label {
+                max-width: min(220px, 74vw);
+                overflow: hidden;
+                text-overflow: ellipsis;
             }
         }
         </style>
@@ -787,15 +855,124 @@ def render_dashboard_section_header(title: str, description: str, *, compact: bo
     )
 
 
-def render_dashboard_treemap_legend() -> None:
-    """트리맵 하단 범례를 커스텀 HTML로 렌더링한다."""
+def normalize_holding_symbol(value: Any) -> str:
+    """보유 종목 선택에 쓸 심볼 키를 정규화한다."""
+
+    return str(value or "").strip().upper()
+
+
+def dashboard_holding_selection_key(account_id: int) -> str:
+    """계좌별 대시보드 선택 종목 세션 키를 반환한다."""
+
+    return f"dashboard-selected-holding:{int(account_id)}"
+
+
+def interpolate_hex_color(start_hex: str, end_hex: str, ratio: float) -> str:
+    """두 색상 사이를 0~1 비율로 보간한다."""
+
+    ratio = max(0.0, min(1.0, float(ratio)))
+    start = start_hex.lstrip("#")
+    end = end_hex.lstrip("#")
+    start_rgb = tuple(int(start[index : index + 2], 16) for index in (0, 2, 4))
+    end_rgb = tuple(int(end[index : index + 2], 16) for index in (0, 2, 4))
+    mixed = tuple(round(source + (target - source) * ratio) for source, target in zip(start_rgb, end_rgb))
+    return "#{:02X}{:02X}{:02X}".format(*mixed)
+
+
+def profit_rate_color(rate: float, minimum: float, maximum: float) -> str:
+    """수익률 구간에 따라 트리맵 타일 색상을 계산한다."""
+
+    rate = float(rate or 0)
+    minimum = float(minimum or 0)
+    maximum = float(maximum or 0)
+    if rate <= 0:
+        if minimum >= 0:
+            return "#F2D675"
+        ratio = (rate - minimum) / (0 - minimum) if minimum != 0 else 1.0
+        return interpolate_hex_color("#F1646C", "#F2D675", ratio)
+    if maximum <= 0:
+        return "#F2D675"
+    ratio = rate / maximum if maximum != 0 else 0.0
+    return interpolate_hex_color("#F2D675", "#78CB84", ratio)
+
+
+def holdings_profit_rate_stats(frame: pd.DataFrame, selected_symbol: str | None = None) -> dict[str, Any]:
+    """범례와 하이라이트에 필요한 수익률 범위와 선택 종목 정보를 계산한다."""
+
+    if frame.empty:
+        return {
+            "minimum": 0.0,
+            "maximum": 0.0,
+            "selected_name": "",
+            "selected_symbol": "",
+            "selected_rate": None,
+            "selected_position": None,
+        }
+
+    working = frame.copy()
+    working["selection_symbol"] = working["symbol"].astype(str).str.strip().str.upper()
+    minimum = float(working["profit_rate"].min() or 0)
+    maximum = float(working["profit_rate"].max() or 0)
+    selected_key = normalize_holding_symbol(selected_symbol)
+    selected_row = working.loc[working["selection_symbol"] == selected_key].head(1) if selected_key else pd.DataFrame()
+    if selected_row.empty:
+        return {
+            "minimum": minimum,
+            "maximum": maximum,
+            "selected_name": "",
+            "selected_symbol": "",
+            "selected_rate": None,
+            "selected_position": None,
+        }
+
+    selected_rate = float(selected_row.iloc[0]["profit_rate"] or 0)
+    if maximum == minimum:
+        position = 50.0
+    else:
+        position = (selected_rate - minimum) / (maximum - minimum) * 100
+    return {
+        "minimum": minimum,
+        "maximum": maximum,
+        "selected_name": str(selected_row.iloc[0]["product_name"] or selected_row.iloc[0]["symbol"] or "선택 종목"),
+        "selected_symbol": selected_key,
+        "selected_rate": selected_rate,
+        "selected_position": max(0.0, min(100.0, position)),
+    }
+
+
+def render_dashboard_treemap_legend(stats: dict[str, Any]) -> None:
+    """트리맵 하단 범례를 수익률 기준 커스텀 HTML로 렌더링한다."""
+
+    minimum = float(stats.get("minimum") or 0)
+    maximum = float(stats.get("maximum") or 0)
+    selected_name = str(stats.get("selected_name") or "").strip()
+    selected_rate = stats.get("selected_rate")
+    selected_position = stats.get("selected_position")
+    marker_html = ""
+    selected_caption = "종목을 클릭하면 같은 종목을 강조하고 수익률 위치를 표시합니다."
+    if selected_name and selected_rate is not None and selected_position is not None:
+        marker_html = (
+            '<div class="dashboard-treemap-legend__marker" '
+            f'style="left: calc({float(selected_position):.2f}% - 9px);">'
+            f'<div class="dashboard-treemap-legend__marker-label">{html.escape(selected_name)} {html.escape(format_pct(float(selected_rate)))}</div>'
+            "</div>"
+        )
+        selected_caption = f"선택 종목: {selected_name} {format_pct(float(selected_rate))}"
 
     st.markdown(
         (
             '<div class="dashboard-treemap-legend">'
-            '<span>낮은 비중</span>'
-            '<div class="dashboard-treemap-legend__bar"></div>'
-            '<span>높은 비중</span>'
+            '<div class="dashboard-treemap-legend__range">'
+            '<div class="dashboard-treemap-legend__bar">'
+            f"{marker_html}"
+            "</div>"
+            '<div class="dashboard-treemap-legend__labels">'
+            f'<span>{html.escape(format_pct(minimum))}</span>'
+            '<span>현재 종목 수익률 기준</span>'
+            f'<span>{html.escape(format_pct(maximum))}</span>'
+            "</div>"
+            "</div>"
+            f'<div class="dashboard-treemap-legend__hint">{html.escape(selected_caption)}</div>'
             "</div>"
         ),
         unsafe_allow_html=True,
@@ -857,26 +1034,43 @@ def allocation_chart(summary: dict[str, Any]) -> alt.Chart | None:
     )
 
 
-def allocation_treemap_options(summary: dict[str, Any], holdings: list[dict[str, Any]]) -> dict[str, Any] | None:
+def allocation_treemap_options(
+    summary: dict[str, Any],
+    holdings: list[dict[str, Any]],
+    *,
+    selected_symbol: str | None = None,
+) -> dict[str, Any] | None:
     """자산 배분 트리맵용 ECharts 옵션을 만든다."""
 
-    nodes = allocation_treemap_nodes(summary, holdings)
+    nodes = allocation_treemap_nodes(summary, holdings, selected_symbol=selected_symbol)
     if not nodes:
         return None
 
-    leaf_values = [
-        float(child.get("value") or 0)
+    leaf_rates = [
+        float(child.get("profit_rate") or 0)
         for node in nodes
         for child in (node.get("children") or [])
-        if float(child.get("value") or 0) > 0
+        if child.get("profit_rate") is not None
     ]
-    if not leaf_values:
-        return None
-
-    visual_min = min(leaf_values)
-    visual_max = max(leaf_values)
-    if visual_min == visual_max:
-        visual_min = 0.0
+    rate_min = min(leaf_rates) if leaf_rates else 0.0
+    rate_max = max(leaf_rates) if leaf_rates else 0.0
+    for node in nodes:
+        for child in node.get("children") or []:
+            if child.get("profit_rate") is None:
+                child["itemStyle"] = {
+                    "color": "#D5E3D4",
+                    "borderColor": "#F8FAFC",
+                    "borderWidth": 1,
+                }
+                continue
+            is_selected = bool(child.get("is_selected"))
+            child["itemStyle"] = {
+                "color": profit_rate_color(float(child.get("profit_rate") or 0), rate_min, rate_max),
+                "borderColor": "#0F766E" if is_selected else "#F8FAFC",
+                "borderWidth": 3 if is_selected else 1,
+                "shadowBlur": 20 if is_selected else 0,
+                "shadowColor": "rgba(15, 118, 110, 0.22)" if is_selected else "transparent",
+            }
 
     tooltip_formatter = None
     if JsCode is not None:
@@ -934,7 +1128,7 @@ def allocation_treemap_options(summary: dict[str, Any], holdings: list[dict[str,
                 "nodeClick": False,
                 "sort": "desc",
                 "breadcrumb": {"show": False},
-                "visibleMin": max(round(visual_max * 0.01, 4), 1),
+                "visibleMin": 1,
                 "label": {
                     "show": True,
                     "formatter": label_formatter,
@@ -961,9 +1155,10 @@ def allocation_treemap_options(summary: dict[str, Any], holdings: list[dict[str,
                     "borderRadius": 2,
                 },
                 "emphasis": {
+                    "focus": "self",
                     "itemStyle": {
                         "borderColor": "#173F46",
-                        "borderWidth": 2,
+                        "borderWidth": 3,
                         "shadowBlur": 16,
                         "shadowColor": "rgba(15, 23, 42, 0.12)",
                     }
@@ -998,13 +1193,148 @@ def allocation_treemap_options(summary: dict[str, Any], holdings: list[dict[str,
     }
 
 
-def holdings_bar_chart(frame: pd.DataFrame) -> alt.Chart | None:
+def holdings_bar_options(frame: pd.DataFrame, *, selected_symbol: str | None = None) -> dict[str, Any] | None:
+    """보유 종목 수익률 ECharts 막대 옵션을 만든다."""
+
     if frame.empty:
         return None
-    chart_frame = frame.sort_values("current_value", ascending=False).head(10).copy()
+    chart_frame = frame.copy()
+    chart_frame["display_name"] = chart_frame["product_name"].astype(str).apply(
+        lambda value: value if len(value) <= 14 else f"{value[:13]}…"
+    )
+    selected_key = normalize_holding_symbol(selected_symbol)
+    data: list[dict[str, Any]] = []
+    rates: list[float] = []
+    for row in chart_frame.to_dict(orient="records"):
+        symbol = normalize_holding_symbol(row.get("selection_symbol") or row.get("symbol"))
+        rate = float(row.get("profit_rate") or 0)
+        rates.append(rate)
+        is_selected = bool(symbol and symbol == selected_key)
+        data.append(
+            {
+                "value": round(rate, 2),
+                "symbol": symbol,
+                "product_name": str(row.get("product_name") or symbol or "종목"),
+                "display_name": str(row.get("display_name") or row.get("product_name") or symbol or "종목"),
+                "current_value": round(float(row.get("current_value") or 0), 4),
+                "profit_rate": round(rate, 2),
+                "itemStyle": {
+                    "color": "#1D7F78" if rate >= 0 else "#D14D57",
+                    "borderColor": "#0F766E" if is_selected else "#FFFFFF",
+                    "borderWidth": 3 if is_selected else 0,
+                    "shadowBlur": 18 if is_selected else 0,
+                    "shadowColor": "rgba(15, 118, 110, 0.22)" if is_selected else "transparent",
+                    "opacity": 1 if is_selected else 0.92,
+                },
+                "label": {
+                    "show": is_selected,
+                    "position": "top" if rate >= 0 else "bottom",
+                    "formatter": format_pct(rate),
+                    "color": "#0D3559",
+                    "fontWeight": 700,
+                },
+            }
+        )
+
+    if not data:
+        return None
+
+    minimum = min(rates)
+    maximum = max(rates)
+    if minimum == maximum:
+        minimum -= 2
+        maximum += 2
+    else:
+        minimum = min(minimum, 0)
+        maximum = max(maximum, 0)
+        padding = max((maximum - minimum) * 0.14, 1.5)
+        minimum -= padding
+        maximum += padding
+
+    tooltip_formatter = None
+    if JsCode is not None:
+        tooltip_formatter = JsCode(
+            """
+            function(params) {
+                var currentValue = Number(params.data.current_value || 0).toLocaleString('ko-KR');
+                var profitRate = Number(params.data.profit_rate || 0).toFixed(2);
+                return [
+                    '<strong>' + params.data.product_name + '</strong>',
+                    '평가금액: ₩' + currentValue,
+                    '수익률: ' + profitRate + '%'
+                ].join('<br/>');
+            }
+            """
+        )
+
+    return {
+        "backgroundColor": "transparent",
+        "animationDuration": 260,
+        "animationDurationUpdate": 320,
+        "grid": {"top": 24, "right": 12, "bottom": 92, "left": 56},
+        "tooltip": {
+            "trigger": "item",
+            "backgroundColor": "rgba(21, 40, 31, 0.92)",
+            "borderWidth": 0,
+            "textStyle": {"color": "#F8FAFC", "fontSize": 12},
+            **({"formatter": tooltip_formatter} if tooltip_formatter is not None else {}),
+        },
+        "xAxis": {
+            "type": "category",
+            "data": [item["display_name"] for item in data],
+            "axisLabel": {
+                "interval": 0,
+                "rotate": 32,
+                "color": "#607285",
+                "fontSize": 11,
+                "margin": 14,
+            },
+            "axisLine": {"lineStyle": {"color": "#C8D4DA"}},
+            "axisTick": {"show": False},
+        },
+        "yAxis": {
+            "type": "value",
+            "min": round(minimum, 2),
+            "max": round(maximum, 2),
+            "name": "수익률 (%)",
+            "nameTextStyle": {"color": "#607285", "fontWeight": 700},
+            "axisLabel": {"color": "#607285", "formatter": "{value}%"},
+            "axisLine": {"show": False},
+            "splitLine": {"lineStyle": {"color": "#D7E2E7"}},
+        },
+        "series": [
+            {
+                "name": "수익률",
+                "type": "bar",
+                "barWidth": "52%",
+                "data": data,
+                "itemStyle": {"borderRadius": [10, 10, 0, 0]},
+                "emphasis": {
+                    "focus": "self",
+                    "itemStyle": {
+                        "shadowBlur": 22,
+                        "shadowColor": "rgba(15, 23, 42, 0.16)",
+                    },
+                },
+            }
+        ],
+    }
+
+
+def holdings_bar_fallback_chart(frame: pd.DataFrame, *, selected_symbol: str | None = None) -> alt.Chart | None:
+    """ECharts 미사용 환경에서 보유 종목 수익률 막대차트를 Altair로 대체한다."""
+
+    if frame.empty:
+        return None
+    chart_frame = frame.copy()
     chart_frame["tone"] = chart_frame["profit_rate"].apply(lambda value: "수익" if float(value or 0) >= 0 else "손실")
     chart_frame["display_name"] = chart_frame["product_name"].astype(str).apply(
         lambda value: value if len(value) <= 14 else f"{value[:13]}…"
+    )
+    selected_key = normalize_holding_symbol(selected_symbol)
+    chart_frame["selection_symbol"] = chart_frame["selection_symbol"].astype(str).str.strip().str.upper()
+    chart_frame["selected_opacity"] = chart_frame["selection_symbol"].apply(
+        lambda value: 1.0 if value == selected_key else (0.92 if not selected_key else 0.48)
     )
     display_order = chart_frame["display_name"].tolist()
     chart = (
@@ -1037,6 +1367,7 @@ def holdings_bar_chart(frame: pd.DataFrame) -> alt.Chart | None:
                 ),
             ),
             color=alt.Color("tone:N", legend=None, scale=alt.Scale(domain=["수익", "손실"], range=["#1D7F78", "#D14D57"])),
+            opacity=alt.Opacity("selected_opacity:Q", legend=None),
             tooltip=[
                 alt.Tooltip("product_name:N", title="종목"),
                 alt.Tooltip("current_value:Q", title="평가금액", format=",.0f"),
@@ -1295,6 +1626,14 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]], roll
         if float(summary["net_flow"] or 0)
         else 0.0
     )
+    selection_state_key = dashboard_holding_selection_key(int(account["id"]))
+    available_symbols = {normalize_holding_symbol(item.get("symbol")) for item in holdings if normalize_holding_symbol(item.get("symbol"))}
+    selected_symbol = normalize_holding_symbol(st.session_state.get(selection_state_key))
+    if selected_symbol and selected_symbol not in available_symbols:
+        st.session_state.pop(selection_state_key, None)
+        selected_symbol = ""
+    overview_frame = holdings_overview_frame(holdings, selected_symbol=selected_symbol or None, limit=10)
+    legend_stats = holdings_profit_rate_stats(frame, selected_symbol or None)
     cash_edit_state_key = f"dashboard-cash-editing:{account['id']}"
     cash_edit_amount_key = f"dashboard-cash-edit-amount:{account['id']}"
     summary_cols = st.columns(5, gap="small", vertical_alignment="top")
@@ -1375,7 +1714,7 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]], roll
     with overview_left:
         with st.container(border=True, height=DASHBOARD_OVERVIEW_PANEL_HEIGHT, key="dashboard-panel-allocation"):
             render_dashboard_section_header("자산 배분", "자산군에서 보유 종목까지 한 번에 보는 트리맵입니다.")
-            treemap_options = allocation_treemap_options(summary, holdings)
+            treemap_options = allocation_treemap_options(summary, holdings, selected_symbol=selected_symbol or None)
             if treemap_options is None:
                 st.info("배분을 그릴 데이터가 아직 없습니다.")
             elif st_echarts is None:
@@ -1384,23 +1723,48 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]], roll
                     st.info("배분을 그릴 데이터가 아직 없습니다.")
                 else:
                     st.altair_chart(style_dashboard_altair_chart(chart, height=DASHBOARD_OVERVIEW_CHART_HEIGHT), width="stretch")
+                    render_dashboard_treemap_legend(legend_stats)
                     st.caption("`streamlit-echarts`가 없는 환경이라 기본 차트로 표시했습니다.")
             else:
-                st_echarts(
+                treemap_event = st_echarts(
                     options=treemap_options,
+                    events={
+                        "click": "function(params){ return (params.data && params.data.symbol) ? params.data.symbol : ''; }"
+                    },
                     height=f"{DASHBOARD_OVERVIEW_CHART_HEIGHT}px",
                     key=f"allocation-treemap:{account['id']}",
                 )
-                render_dashboard_treemap_legend()
+                clicked_symbol = normalize_holding_symbol(treemap_event)
+                if clicked_symbol and clicked_symbol != selected_symbol:
+                    st.session_state[selection_state_key] = clicked_symbol
+                    st.rerun()
+                render_dashboard_treemap_legend(legend_stats)
 
     with overview_right:
         with st.container(border=True, height=DASHBOARD_OVERVIEW_PANEL_HEIGHT, key="dashboard-panel-holdings"):
             render_dashboard_section_header("보유 종목 수익률", "현재 보유 상위 종목의 수익률 흐름을 우선 확인합니다.")
-            chart = holdings_bar_chart(frame)
-            if chart is None:
+            if overview_frame.empty:
                 st.info("보유 종목이 없어 수익률 차트를 그릴 수 없습니다.")
+            elif st_echarts is None:
+                chart = holdings_bar_fallback_chart(overview_frame, selected_symbol=selected_symbol or None)
+                if chart is None:
+                    st.info("보유 종목이 없어 수익률 차트를 그릴 수 없습니다.")
+                else:
+                    st.altair_chart(chart, width="stretch")
             else:
-                st.altair_chart(chart, width="stretch")
+                bar_options = holdings_bar_options(overview_frame, selected_symbol=selected_symbol or None)
+                bar_event = st_echarts(
+                    options=bar_options,
+                    events={
+                        "click": "function(params){ return (params.data && params.data.symbol) ? params.data.symbol : ''; }"
+                    },
+                    height=f"{DASHBOARD_OVERVIEW_CHART_HEIGHT}px",
+                    key=f"holdings-profit-bar:{account['id']}",
+                )
+                clicked_symbol = normalize_holding_symbol(bar_event)
+                if clicked_symbol and clicked_symbol != selected_symbol:
+                    st.session_state[selection_state_key] = clicked_symbol
+                    st.rerun()
 
     with st.container(border=True, key="dashboard-panel-market"):
         render_dashboard_section_header("시장 업데이트", "가격 갱신과 코드 입력 규칙을 한 영역에서 정리했습니다.", compact=True)

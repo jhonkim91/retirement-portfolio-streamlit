@@ -45,6 +45,34 @@ def holdings_frame(holdings: list[dict[str, Any]]) -> pd.DataFrame:
     return frame.sort_values("current_value", ascending=False)
 
 
+def holdings_overview_frame(
+    holdings: list[dict[str, Any]],
+    *,
+    selected_symbol: str | None = None,
+    limit: int = 10,
+) -> pd.DataFrame:
+    """상단 개요 차트에 표시할 보유 종목 프레임을 선택 상태와 함께 만든다."""
+
+    frame = holdings_frame(holdings)
+    if frame.empty:
+        return frame
+
+    selected_key = str(selected_symbol or "").strip().upper()
+    working = frame.copy()
+    working["selection_symbol"] = working["symbol"].astype(str).str.strip().str.upper()
+    working = working.sort_values("current_value", ascending=False)
+
+    if selected_key and selected_key in set(working["selection_symbol"]):
+        selected_rows = working.loc[working["selection_symbol"] == selected_key].head(1)
+        other_rows = working.loc[working["selection_symbol"] != selected_key]
+        working = pd.concat([other_rows.head(max(limit - 1, 0)), selected_rows], ignore_index=True)
+    else:
+        working = working.head(limit).copy()
+
+    working["is_selected"] = working["selection_symbol"] == selected_key
+    return working
+
+
 def _amount_from_log(log: dict[str, Any]) -> float:
     total_amount = abs(float(log.get("total_amount") or 0))
     if total_amount > 0:
@@ -180,11 +208,14 @@ def account_summary(
 def allocation_treemap_nodes(
     summary: dict[str, Any],
     holdings: list[dict[str, Any]],
+    *,
+    selected_symbol: str | None = None,
 ) -> list[dict[str, Any]]:
     """ECharts 트리맵용 자산 배분 계층 데이터를 만든다."""
 
     frame = holdings_frame(holdings)
     allocation = summary.get("allocation") or {}
+    selected_key = str(selected_symbol or "").strip().upper()
     bucket_specs = (
         ("risk", "위험자산", "#E7D36F"),
         ("safe", "안전자산", "#BFD26A"),
@@ -207,6 +238,8 @@ def allocation_treemap_nodes(
                             "name": "예수금",
                             "value": round(cash_value, 4),
                             "bucket": bucket_label,
+                            "selection_symbol": "CASH",
+                            "is_selected": selected_key == "CASH",
                             "profit_rate": None,
                         }
                     ],
@@ -223,12 +256,15 @@ def allocation_treemap_nodes(
             current_value = float(row.get("current_value") or 0)
             if current_value <= 0:
                 continue
+            symbol = str(row.get("symbol") or "").strip().upper()
             bucket_children.append(
                 {
                     "name": str(row.get("product_name") or row.get("symbol") or "종목"),
                     "value": round(current_value, 4),
                     "bucket": bucket_label,
-                    "symbol": str(row.get("symbol") or "").strip().upper(),
+                    "symbol": symbol,
+                    "selection_symbol": symbol,
+                    "is_selected": bool(symbol and symbol == selected_key),
                     "profit_rate": round(float(row.get("profit_rate") or 0), 4),
                 }
             )
