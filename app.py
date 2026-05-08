@@ -625,6 +625,53 @@ def render_auth_feedback() -> None:
     renderer(message)
 
 
+def render_demo_access_entry() -> None:
+    """초기 인증 화면의 데모 접속 패널을 렌더링한다."""
+
+    credentials_ready = app_auth.has_demo_credentials()
+    with st.container(border=True):
+        info_col, action_col = st.columns((1.5, 1), gap="large")
+        with info_col:
+            st.subheader("데모 접속")
+            st.caption("로그인 화면에서 바로 테스트용 작업공간으로 들어갈 수 있습니다.")
+            st.write("전용 데모 계정으로 로그인한 뒤 테스트 계좌, 입금, 매수, 이자, 계좌 이동, 스냅샷 데이터를 자동으로 준비합니다.")
+        with action_col:
+            demo_submitted = st.button(
+                "데모 접속",
+                key="auth-demo-entry",
+                icon=":material/rocket_launch:",
+                width="stretch",
+                type="primary",
+                disabled=not credentials_ready,
+            )
+            if not credentials_ready:
+                st.caption("`DEMO_LOGIN_EMAIL`/`DEMO_LOGIN_PASSWORD`를 설정하면 이 버튼으로 바로 데모 계정에 들어갈 수 있습니다.")
+
+    if not demo_submitted:
+        return
+
+    demo_identity: dict[str, str] | None = None
+    try:
+        with st.spinner("데모 계정으로 접속하고 테스트 데이터를 준비하는 중입니다..."):
+            demo_identity = app_auth.sign_in_demo_user()
+            initialize_database()
+            result = seed_demo_workspace()
+    except Exception as exc:  # noqa: BLE001
+        if demo_identity:
+            set_auth_feedback("error", f"데모 계정 로그인 후 테스트 데이터 준비에 실패했습니다: {exc}")
+            st.rerun()
+        st.error(f"데모 접속에 실패했습니다: {exc}")
+        return
+
+    st.session_state[PENDING_CONFIRMATION_EMAIL_KEY] = ""
+    st.session_state["selected_account_id"] = int(result["selected_account_id"])
+    st.session_state["active_page"] = PAGES[0]
+    demo_email = str(demo_identity.get("email") or "데모 계정").strip()
+    result_message = str(result.get("message") or "데모 데이터를 준비했습니다.").strip()
+    set_auth_feedback("success", f"`{demo_email}` 계정으로 접속했습니다. {result_message}")
+    st.rerun()
+
+
 def clear_query_params() -> None:
     for key in list(st.query_params.keys()):
         del st.query_params[key]
@@ -1055,6 +1102,7 @@ def auth_page() -> None:
                 else:
                     st.success(f"{pending_email} 주소로 새 확인 메일을 보냈습니다.")
 
+    render_demo_access_entry()
     sign_in_tab, sign_up_tab = st.tabs(["로그인", "계정 만들기"])
 
     with sign_in_tab:

@@ -25,6 +25,7 @@
 - [ ] `docs/progress-memory.md` 최신 상태 동기화
 - [x] 자산 배분 트리맵 전환
 - [x] 대시보드 전체 스타일 정리
+- [x] 초기 화면 데모 접속 및 테스트 데이터 자동 준비
 
 ## 프로젝트 유형
 - Python 프로젝트
@@ -677,3 +678,30 @@ python -m unittest discover -s tests -p "test_*.py"
   - 임시 Streamlit 미리보기 스크립트와 Playwright로 로컬 렌더 확인을 시도했지만 `streamlit-echarts` 포함 화면은 임시 미리보기에서 신뢰도 있게 재현되지 않아 시각 판정은 보류
 - 비고:
   - 이번 커밋은 `app.py`, `Memory.md`만 선택 반영하고 `data/portfolio.db`와 로컬 산출물은 제외 유지
+
+## 2026-05-09 초기 화면 데모 접속 추가
+- 변경 파일:
+  - `app.py`
+  - `src/auth.py`
+  - `tests/test_auth.py`
+  - `.env.example`
+  - `.streamlit/secrets.example.toml`
+  - `.streamlit/secrets.toml.example`
+  - `Memory.md`
+- 변경 내용:
+  - 로그인 전 초기 화면에 `데모 접속` 패널과 버튼을 추가
+  - 버튼 클릭 시 `DEMO_LOGIN_EMAIL`/`DEMO_LOGIN_PASSWORD`를 우선 사용하고, 없으면 `STREAMLIT_VERIFY_EMAIL`/`STREAMLIT_VERIFY_PASSWORD`로 fallback 하도록 `src/auth.py` helper 추가
+  - 데모 계정 로그인 후 `seed_demo_workspace()`를 바로 실행해 테스트용 계좌/입금/매수/이자/이체/스냅샷 데이터를 자동 준비하도록 연결
+  - 데모 로그인 성공 후 시드 실패 시에도 다음 화면에서 상태 메시지를 볼 수 있도록 auth feedback 경로를 보강
+  - 설정 예제 파일에 데모 로그인용 환경 변수/시크릿 예시를 추가
+  - `tests/test_auth.py`로 데모 자격 증명 우선순위, fallback, 오류 메시지 회귀 테스트 4건 추가
+- 검증:
+  - `python -m compileall app.py src scripts tests`
+  - `python -m unittest discover -s tests -p "test_*.py"`
+  - `python -m streamlit run app.py --server.port 8512 --server.headless true` 후 Playwright로 초기 화면 텍스트/버튼 노출 확인
+  - 결과: 테스트 35건 통과
+- 추가 확인:
+  - 로컬 초기 화면에서 `데모 접속`, `로그인`, `계정 만들기` 버튼과 안내 문구 노출 확인
+- 미완료/다음 확인:
+  - 실제 배포 또는 로컬 브라우저에서 초기 화면 `데모 접속` 버튼 클릭 후 곧바로 데모 계정 대시보드로 진입하는지 시각 검증 필요
+  - 운영 배포에서 이 기능을 쓰려면 `DEMO_LOGIN_EMAIL`/`DEMO_LOGIN_PASSWORD` 또는 `STREAMLIT_VERIFY_EMAIL`/`STREAMLIT_VERIFY_PASSWORD`가 실제 시크릿에 설정되어 있어야 함

@@ -48,6 +48,21 @@ def _email_redirect_to() -> str:
     return _get_config_value("SUPABASE_EMAIL_REDIRECT_TO", DEFAULT_EMAIL_REDIRECT_TO)
 
 
+def get_demo_credentials() -> tuple[str, str]:
+    """초기 화면 데모 접속에 사용할 이메일과 비밀번호를 반환한다."""
+
+    email = _get_config_value("DEMO_LOGIN_EMAIL") or _get_config_value("STREAMLIT_VERIFY_EMAIL")
+    password = _get_config_value("DEMO_LOGIN_PASSWORD") or _get_config_value("STREAMLIT_VERIFY_PASSWORD")
+    return str(email).strip(), str(password)
+
+
+def has_demo_credentials() -> bool:
+    """데모 자동 로그인 자격 증명 존재 여부를 반환한다."""
+
+    email, password = get_demo_credentials()
+    return bool(email and password)
+
+
 def is_enabled() -> bool:
     """현재 실행 환경에 Supabase 인증 설정이 있는지 확인한다."""
 
@@ -126,6 +141,20 @@ def sign_in(email: str, password: str) -> Any:
     if response.session:
         _save_session(response.session)
     return response
+
+
+def sign_in_demo_user() -> dict[str, str]:
+    """초기 화면의 데모 접속 버튼용 자동 로그인을 수행한다."""
+
+    email, password = get_demo_credentials()
+    if not email or not password:
+        raise RuntimeError(
+            "데모 접속 계정이 설정되지 않았습니다. "
+            "DEMO_LOGIN_EMAIL/DEMO_LOGIN_PASSWORD 또는 STREAMLIT_VERIFY_EMAIL/STREAMLIT_VERIFY_PASSWORD를 설정해 주세요."
+        )
+
+    sign_in(email=email, password=password)
+    return {"email": email}
 
 
 def sign_up(email: str, password: str) -> Any:
