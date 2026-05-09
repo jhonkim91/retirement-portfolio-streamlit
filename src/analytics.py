@@ -60,7 +60,7 @@ def holdings_overview_frame(
     selected_key = str(selected_symbol or "").strip().upper()
     working = frame.copy()
     working["selection_symbol"] = working["symbol"].astype(str).str.strip().str.upper()
-    working = working.sort_values("current_value", ascending=False)
+    working = working.sort_values(["profit_rate", "current_value"], ascending=[False, False])
 
     if selected_key and selected_key in set(working["selection_symbol"]):
         selected_rows = working.loc[working["selection_symbol"] == selected_key].head(1)
@@ -228,15 +228,16 @@ def allocation_treemap_nodes(
             cash_value = float(allocation.get("cash") or summary.get("cash") or 0)
             if cash_value <= 0:
                 continue
+            rounded_cash_value = round(cash_value)
             nodes.append(
                 {
                     "name": bucket_label,
-                    "value": round(cash_value, 4),
+                    "value": rounded_cash_value,
                     "itemStyle": {"color": bucket_color},
                     "children": [
                         {
                             "name": "예수금",
-                            "value": round(cash_value, 4),
+                            "value": rounded_cash_value,
                             "bucket": bucket_label,
                             "selection_symbol": "CASH",
                             "is_selected": selected_key == "CASH",

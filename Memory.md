@@ -1170,3 +1170,111 @@ python -m unittest discover -s tests -p "test_*.py"
 - 다음 작업 후보:
   - 사용자 요청 시 현재 `app.py` 중심 변경을 정리해 선택 커밋/푸시 범위 확정
   - 푸시 후 Streamlit 재배포 완료 시점에 검증 계정으로 `scripts/verify_streamlit_deployment.py` 재실행
+
+## 2026-05-08 예수금 표시/수익률 차트/데모 시드 확장
+- [x] 예수금 표시를 정수 원 기준으로 정리
+- [x] 보유 종목 수익률 차트 정렬 기준을 수익률 우선으로 변경
+- [x] 데모 시드를 5년 투자 이력 형태로 확장
+- [x] 회귀 테스트 추가 및 실행
+- 변경 파일:
+  - `app.py`
+  - `src/analytics.py`
+  - `src/db.py`
+  - `tests/test_analytics.py`
+  - `tests/test_db.py`
+  - `Memory.md`
+- 변경 내용:
+  - 대시보드 `목표 현금 잔액`, 시작 현금, 현금 흐름 금액, 이체 금액 입력을 정수 원 단위 입력 흐름으로 정리
+  - treemap/막대차트 tooltip의 금액 표시는 `Math.round(...)` 기준으로 맞춰 `예수금`에 소수점이 노출되지 않도록 조정
+  - `holdings_overview_frame()`와 대시보드 수익률 차트 입력 프레임을 `profit_rate DESC, current_value DESC` 기준으로 재정렬해 수익률이 높은 종목이 왼쪽에 오도록 변경
+  - 데모 워크스페이스 블루프린트를 오늘 기준 약 5년 전부터 이어지는 장기 투자 이력으로 확장
+  - 데모 계좌에 부분 매도, 전량 매도, 국내주식, 해외주식, 지수 ETF, 배당 ETF, 채권 ETF, 금 ETF, 계좌 간 이체, 과거 이자 기록을 함께 포함
+- 검증:
+  - `python -m compileall app.py src scripts tests`
+  - `python -m unittest discover -s tests -p "test_*.py"`
+  - `python -m streamlit run app.py --server.port 8528 --server.headless true`
+  - `curl -I http://127.0.0.1:8528`
+- 결과:
+  - 문법 컴파일 성공
+  - 단위 테스트 41건 통과
+  - 로컬 Streamlit 서버 HTTP `200 OK` 확인
+- 설치 메모:
+  - 이번 턴은 추가 프로그램 설치 없이 기존 환경으로 처리
+- 미완료/다음 확인:
+  - 실제 브라우저에서 데모 계좌 진입 후 확장된 5년 거래 히스토리가 사용성 측면에서 과하지 않은지 시각 확인 필요
+  - 필요 시 데모 계좌의 거래 건수와 최근 1년 활동 밀도를 한 번 더 조절할 수 있음
+
+## 2026-05-09 계좌 이체 박스 정렬 및 ECharts 기본값 조정
+- [x] `계좌 간 이체` 박스 크기/리듬 보정
+- [x] `보유 현금` 카드 입력 높이와 이체 입력 높이 공통화
+- [x] ECharts 기본값을 상시 사용 쪽으로 조정
+- [x] 검증 및 기록 업데이트
+- 변경 파일:
+  - `app.py`
+  - `Memory.md`
+- 변경 내용:
+  - `계좌 간 이체` 섹션을 별도 `border=True` 컨테이너로 감싸 `보유 현금` 카드와 비슷한 박스 리듬으로 정리
+  - `보유 현금` 카드와 `계좌 간 이체` 섹션의 `number_input`, 버튼, 셀렉트 박스 높이를 공통 CSS로 보정
+  - 대시보드 `고급 차트 사용`은 첫 진입 시 기본값을 `True`로 바꿔 ECharts가 기본적으로 켜진 상태에서 시작하도록 변경
+  - ECharts가 없는 환경에서는 기존 fallback 차트 경로를 그대로 유지
+- 검증:
+  - `python -m compileall app.py src scripts tests`
+  - `python -m unittest discover -s tests -p "test_*.py"`
+- 결과:
+  - 문법 컴파일 성공
+  - 단위 테스트 41건 통과
+- 미완료/다음 확인:
+  - 사용자가 말한 `echart가 항시 ...` 요청은 문장이 중간에 끊겨 있어, 이번 턴에서는 `기본값 상시 켜짐`으로 해석해 반영
+  - 사용자가 원한 의미가 `항시 켜짐`이 아니라 다른 동작이었다면 그 기준에 맞춰 후속 미세조정 필요
+
+## 2026-05-09 대시보드 차트 ECharts 전용 고정
+- [x] 대시보드 차트 토글 제거
+- [x] Altair fallback 차트 노출 제거
+- [x] 문법/단위 테스트 재검증
+- 변경 파일:
+  - `app.py`
+  - `Memory.md`
+- 변경 내용:
+  - 대시보드 `고급 차트 사용` 토글과 상태 키를 제거
+  - `자산 배분`, `보유 종목 수익률` 패널은 ECharts만 렌더링하도록 정리
+  - `streamlit-echarts`를 불러오지 못하는 환경에서는 기본 차트로 대체하지 않고 안내 문구만 표시하도록 변경
+- 검증:
+  - `python -m compileall app.py src scripts tests`
+  - `python -m unittest discover -s tests -p "test_*.py"`
+- 결과:
+  - 문법 컴파일 성공
+  - 단위 테스트 41건 통과
+- 미완료/다음 확인:
+  - 실제 브라우저에서 대시보드 첫 진입 시 토글이 사라지고 ECharts만 보이는지 시각 확인 필요
+  - 웹 반영이 필요하면 현재 로컬 변경 범위를 정리해 커밋/푸시 진행
+
+## 2026-05-09 랜딩 페이지 디자인 개편
+- [x] 인증 진입 랜딩 히어로/기능 카드 추가
+- [x] 로그인/계정 만들기/데모 체험 탭형 레이아웃으로 재구성
+- [x] 로컬 문법/테스트 재검증
+- [x] 로컬 브라우저 검증 환경 설치 시도
+- 변경 파일:
+  - `app.py`
+  - `Memory.md`
+- 변경 내용:
+  - 전역 스타일에 Pretendard 웹폰트와 인증 랜딩 전용 CSS를 추가
+  - 초기 인증 화면을 히어로, 3개 기능 카드, 탭형 진입 패널 구조로 변경
+  - 기존 로그인/회원가입/데모 접속 동작은 유지하고 배치와 문구만 랜딩 화면 흐름에 맞게 재정리
+  - 데모 진입 패널을 `auth-demo-panel` 카드형 레이아웃으로 바꾸고 5년 예시 데이터 설명을 강화
+- 검증:
+  - `python -m compileall app.py src scripts tests`
+  - `python -m unittest discover -s tests -p "test_*.py"`
+  - `python -m streamlit run app.py --server.port 8530 --server.headless true`
+  - `curl -I http://127.0.0.1:8530`
+- 결과:
+  - 문법 컴파일 성공
+  - 단위 테스트 41건 통과
+  - 로컬 Streamlit 서버 HTTP `200 OK` 확인
+- 설치 메모:
+  - 로컬 `.venv`를 정상화하고 `playwright` 패키지 및 Chromium 런타임을 설치함
+- 검증 제약:
+  - Playwright 브라우저 실행은 시스템 라이브러리 `libatk-1.0.so.0` 부재로 실패
+  - 따라서 랜딩 화면 스크린샷/실브라우저 시각 검증은 이 환경에서 완료하지 못함
+- 미완료/다음 확인:
+  - `libatk-1.0.so.0` 등 Linux GUI 런타임이 있는 환경에서 랜딩 화면 시각 검증 재실행
+  - 필요 시 웹 배포 반영 후 실제 Streamlit Cloud 랜딩 화면 기준 미세 여백 조정

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date
 import unittest
 from unittest.mock import patch
 
@@ -8,6 +9,7 @@ import requests
 from src.db import (
     BACKEND_SQLITE,
     BACKEND_SUPABASE,
+    _demo_workspace_blueprint,
     _select_initial_backend,
     _run_with_fallback,
     _should_fallback,
@@ -274,6 +276,39 @@ class DemoWorkspaceSeedTests(unittest.TestCase):
         self.assertEqual(result["selected_account_id"], 21)
         self.assertEqual(create_account_mock.call_count, 2)
         self.assertEqual(record_snapshot_mock.call_count, 2)
+
+    def test_demo_workspace_blueprint_spans_five_years_with_diverse_activity(self) -> None:
+        """기본 데모 블루프린트가 장기 투자 히스토리와 다양한 이벤트를 포함하는지 확인한다."""
+
+        blueprint = _demo_workspace_blueprint()
+        accounts = list(blueprint["accounts"])
+
+        self.assertEqual(len(accounts), 2)
+
+        trade_dates: list[str] = []
+        trade_types: set[str] = set()
+        asset_types: set[str] = set()
+        flow_types: set[str] = set()
+        traded_symbols: set[str] = set()
+
+        for account_spec in accounts:
+            trade_dates.extend(str(item["trade_date"]) for item in account_spec["cash_flows"])
+            trade_dates.extend(str(item["trade_date"]) for item in account_spec["trades"])
+            trade_dates.extend(str(item["interest_date"]) for item in account_spec["interest"])
+            trade_types.update(str(item["trade_type"]) for item in account_spec["trades"])
+            asset_types.update(str(item["asset_type"]) for item in account_spec["trades"])
+            flow_types.update(str(item["flow_type"]) for item in account_spec["cash_flows"])
+            traded_symbols.update(str(item["symbol"]) for item in account_spec["trades"])
+
+        earliest_date = min(date.fromisoformat(item) for item in trade_dates)
+        latest_date = max(date.fromisoformat(item) for item in trade_dates)
+
+        self.assertGreaterEqual((latest_date - earliest_date).days, 365 * 4 + 180)
+        self.assertIn("sell", trade_types)
+        self.assertIn("withdraw", flow_types)
+        self.assertEqual(asset_types, {"risk", "safe"})
+        self.assertGreaterEqual(len(traded_symbols), 8)
+        self.assertGreaterEqual(len(blueprint["transfers"]), 2)
 
 
 class SyncAccountRollupTests(unittest.TestCase):

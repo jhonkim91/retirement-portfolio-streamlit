@@ -73,7 +73,7 @@ def holdings_overview_frame(
     selected_key = str(selected_symbol or "").strip().upper()
     working = frame.copy()
     working["selection_symbol"] = working["symbol"].astype(str).str.strip().str.upper()
-    working = working.sort_values("current_value", ascending=False)
+    working = working.sort_values(["profit_rate", "current_value"], ascending=[False, False])
 
     if selected_key and selected_key in set(working["selection_symbol"]):
         selected_rows = working.loc[working["selection_symbol"] == selected_key].head(1)
@@ -331,11 +331,11 @@ def init_state() -> None:
     st.session_state.setdefault(TRADE_NOTES_KEY, "")
     st.session_state.setdefault(TRADE_PREFILL_MARKER_KEY, "")
     st.session_state.setdefault(CASH_FLOW_TYPE_KEY, "personal_deposit")
-    st.session_state.setdefault(CASH_FLOW_AMOUNT_KEY, 0.0)
+    st.session_state.setdefault(CASH_FLOW_AMOUNT_KEY, 0)
     st.session_state.setdefault(CASH_FLOW_DATE_KEY, date.today())
     st.session_state.setdefault(CASH_FLOW_NOTES_KEY, "")
     st.session_state.setdefault(TRANSFER_TARGET_ACCOUNT_KEY, None)
-    st.session_state.setdefault(TRANSFER_AMOUNT_KEY, 0.0)
+    st.session_state.setdefault(TRANSFER_AMOUNT_KEY, 0)
     st.session_state.setdefault(TRANSFER_DATE_KEY, date.today())
     st.session_state.setdefault(TRANSFER_NOTES_KEY, "")
 
@@ -373,6 +373,8 @@ def inject_app_styles() -> None:
     st.markdown(
         """
         <style>
+        @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
+
         :root {
             --surface: rgba(255, 255, 255, 0.88);
             --surface-strong: rgba(255, 255, 255, 0.96);
@@ -387,6 +389,10 @@ def inject_app_styles() -> None:
             --panel-padding: 1.05rem 1.1rem 1.15rem;
             --section-gap: 1rem;
             --chart-gap: 0.85rem;
+        }
+
+        html, body, [class*="css"] {
+            font-family: 'Pretendard', sans-serif;
         }
 
         .stApp {
@@ -440,6 +446,217 @@ def inject_app_styles() -> None:
         .dashboard-note {
             color: var(--text-muted);
             font-size: 0.9rem;
+        }
+
+        .auth-hero {
+            position: relative;
+            overflow: hidden;
+            padding: 2.5rem 2rem 2rem;
+            border-radius: 28px;
+            background:
+                radial-gradient(circle at 18% 18%, rgba(255, 255, 255, 0.24), transparent 16rem),
+                radial-gradient(circle at 88% 22%, rgba(245, 158, 11, 0.24), transparent 15rem),
+                linear-gradient(135deg, #103b42 0%, #195d67 54%, #0f766e 100%);
+            border: 1px solid rgba(255, 255, 255, 0.14);
+            box-shadow: 0 24px 60px rgba(16, 59, 66, 0.18);
+            margin-bottom: 1rem;
+        }
+
+        .auth-hero__eyebrow {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.45rem;
+            padding: 0.38rem 0.78rem;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.14);
+            color: rgba(248, 250, 252, 0.88);
+            font-size: 0.78rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .auth-hero__title {
+            max-width: 52rem;
+            color: #f8fafc;
+            font-size: clamp(2.15rem, 4vw, 3.45rem);
+            line-height: 1.02;
+            letter-spacing: -0.05em;
+            margin: 1rem 0 0.8rem;
+        }
+
+        .auth-hero__caption {
+            max-width: 44rem;
+            color: rgba(241, 245, 249, 0.88);
+            font-size: 1.02rem;
+            line-height: 1.65;
+            margin: 0;
+        }
+
+        .auth-hero__metrics {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 0.9rem;
+            margin-top: 1.5rem;
+        }
+
+        .auth-hero__metric {
+            padding: 1rem 1rem 0.95rem;
+            border-radius: 18px;
+            background: rgba(255, 255, 255, 0.12);
+            border: 1px solid rgba(255, 255, 255, 0.16);
+            backdrop-filter: blur(12px);
+        }
+
+        .auth-hero__metric-label {
+            color: rgba(226, 232, 240, 0.82);
+            font-size: 0.8rem;
+            font-weight: 700;
+            letter-spacing: 0.03em;
+            margin-bottom: 0.45rem;
+        }
+
+        .auth-hero__metric-value {
+            color: #ffffff;
+            font-size: 1.05rem;
+            font-weight: 700;
+            line-height: 1.3;
+        }
+
+        .auth-feature-card {
+            height: 100%;
+            padding: 1.2rem 1.15rem 1.15rem;
+            border-radius: 22px;
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(246, 249, 248, 0.94));
+            border: 1px solid rgba(16, 59, 66, 0.1);
+            box-shadow: 0 16px 38px rgba(15, 23, 42, 0.05);
+        }
+
+        .auth-feature-card__index {
+            color: #0f766e;
+            font-size: 0.78rem;
+            font-weight: 800;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .auth-feature-card__title {
+            color: #103b42;
+            font-size: 1.05rem;
+            font-weight: 800;
+            line-height: 1.3;
+            margin-top: 0.55rem;
+        }
+
+        .auth-feature-card__desc {
+            color: #607285;
+            font-size: 0.92rem;
+            line-height: 1.55;
+            margin-top: 0.45rem;
+        }
+
+        .auth-entry-intro {
+            color: #607285;
+            font-size: 0.95rem;
+            line-height: 1.55;
+            margin: 1rem 0 0.8rem;
+        }
+
+        [data-testid="stTabs"] [data-baseweb="tab-list"] {
+            gap: 0.45rem;
+            padding: 0.2rem;
+            background: rgba(255, 255, 255, 0.72);
+            border: 1px solid rgba(15, 23, 42, 0.08);
+            border-radius: 18px;
+        }
+
+        [data-testid="stTabs"] [data-baseweb="tab"] {
+            height: 2.9rem;
+            border-radius: 14px;
+            padding: 0 1rem;
+            color: #526072;
+            font-weight: 700;
+        }
+
+        [data-testid="stTabs"] [aria-selected="true"] {
+            background: linear-gradient(135deg, rgba(15, 118, 110, 0.14), rgba(217, 119, 6, 0.14));
+            color: #103b42;
+        }
+
+        .auth-panel-eyebrow {
+            color: #0f766e;
+            font-size: 0.76rem;
+            font-weight: 800;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            margin-bottom: 0.55rem;
+        }
+
+        .auth-panel-title {
+            color: #103b42;
+            font-size: clamp(1.3rem, 2vw, 1.6rem);
+            font-weight: 800;
+            line-height: 1.15;
+            letter-spacing: -0.03em;
+            margin: 0;
+        }
+
+        .auth-panel-caption {
+            color: #607285;
+            font-size: 0.94rem;
+            line-height: 1.55;
+            margin: 0.4rem 0 1rem;
+        }
+
+        .auth-demo-points {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 0.7rem;
+            margin: 1rem 0 1rem;
+        }
+
+        .auth-demo-point {
+            height: 100%;
+            padding: 0.9rem 0.95rem;
+            border-radius: 16px;
+            background: rgba(255, 255, 255, 0.72);
+            border: 1px solid rgba(16, 59, 66, 0.09);
+        }
+
+        .auth-demo-point__title {
+            color: #103b42;
+            font-size: 0.86rem;
+            font-weight: 800;
+            margin-bottom: 0.28rem;
+        }
+
+        .auth-demo-point__desc {
+            color: #607285;
+            font-size: 0.82rem;
+            line-height: 1.45;
+        }
+
+        .st-key-auth-panel-login,
+        .st-key-auth-panel-sign-up,
+        .st-key-auth-demo-panel {
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(250, 251, 250, 0.94));
+            border-radius: 22px;
+            box-shadow: 0 16px 44px rgba(15, 23, 42, 0.05);
+        }
+
+        .st-key-auth-panel-login [data-testid="stTextInput"] input,
+        .st-key-auth-panel-sign-up [data-testid="stTextInput"] input {
+            min-height: 2.9rem;
+            border-radius: 14px;
+        }
+
+        .st-key-auth-panel-login [data-testid="stButton"] > button,
+        .st-key-auth-panel-sign-up [data-testid="stButton"] > button,
+        .st-key-auth-demo-panel [data-testid="stButton"] > button,
+        .st-key-auth-panel-login [data-testid="stFormSubmitButton"] > button,
+        .st-key-auth-panel-sign-up [data-testid="stFormSubmitButton"] > button {
+            min-height: 2.85rem;
+            font-weight: 700;
         }
 
         .dashboard-section-header {
@@ -680,6 +897,11 @@ def inject_app_styles() -> None:
             white-space: nowrap;
         }
 
+        .st-key-dashboard-card-cash [data-testid="stNumberInput"] input,
+        .st-key-trade-panel-transfer [data-testid="stNumberInput"] input {
+            min-height: 2.6rem;
+        }
+
         .st-key-dashboard-card-cash [data-testid="stHorizontalBlock"] {
             align-items: flex-start;
         }
@@ -691,11 +913,30 @@ def inject_app_styles() -> None:
             font-weight: 700;
         }
 
+        .st-key-trade-panel-transfer [data-testid="stButton"] > button {
+            min-height: 2.65rem;
+            font-weight: 700;
+        }
+
+        .st-key-trade-panel-transfer [data-baseweb="select"] > div,
+        .st-key-trade-panel-transfer [data-baseweb="input"] > div {
+            min-height: 2.65rem;
+        }
+
         .st-key-dashboard-panel-market [data-testid="stButton"] > button {
             min-height: 2.65rem;
         }
 
         @media (max-width: 860px) {
+            .auth-hero {
+                padding: 2rem 1.35rem 1.5rem;
+            }
+
+            .auth-hero__metrics,
+            .auth-demo-points {
+                grid-template-columns: 1fr;
+            }
+
             .dashboard-metric-strip {
                 grid-template-columns: repeat(2, minmax(0, 1fr));
             }
@@ -706,6 +947,10 @@ def inject_app_styles() -> None:
         }
 
         @media (max-width: 560px) {
+            .auth-hero__title {
+                font-size: 2rem;
+            }
+
             .dashboard-metric-strip {
                 grid-template-columns: 1fr;
             }
@@ -752,27 +997,109 @@ def render_auth_feedback() -> None:
     renderer(message)
 
 
+def render_auth_landing_header() -> None:
+    """초기 인증 화면의 히어로와 핵심 기능 소개를 렌더링한다."""
+
+    st.markdown(
+        """
+        <section class="auth-hero">
+            <div class="auth-hero__eyebrow">Retirement Portfolio</div>
+            <h1 class="auth-hero__title">흩어진 계좌를 한 화면으로 묶고, 은퇴 준비는 흐름으로 관리합니다.</h1>
+            <p class="auth-hero__caption">
+                연금 계좌와 일반 계좌의 원금, 현금, 손익, 일별 스냅샷을 한곳에서 보고
+                로그인하거나 데모 작업공간으로 바로 진입할 수 있습니다.
+            </p>
+            <div class="auth-hero__metrics">
+                <div class="auth-hero__metric">
+                    <div class="auth-hero__metric-label">계좌 통합</div>
+                    <div class="auth-hero__metric-value">연금 · 일반 계좌를 하나의 대시보드로 정리</div>
+                </div>
+                <div class="auth-hero__metric">
+                    <div class="auth-hero__metric-label">일별 기록</div>
+                    <div class="auth-hero__metric-value">이자와 자산 스냅샷을 날짜 기준으로 누적</div>
+                </div>
+                <div class="auth-hero__metric">
+                    <div class="auth-hero__metric-label">즉시 체험</div>
+                    <div class="auth-hero__metric-value">5년치 예시 투자 이력으로 바로 테스트 가능</div>
+                </div>
+            </div>
+        </section>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    feature_cards = [
+        {
+            "index": "01",
+            "title": "통합 대시보드",
+            "description": "보유 현금, 원금, 평가손익, 자산 배분을 계좌 단위로 빠르게 확인합니다.",
+        },
+        {
+            "index": "02",
+            "title": "스냅샷 추적",
+            "description": "일별 스냅샷과 이자 롤업이 쌓여 자산 변화 흐름을 시점별로 따라갈 수 있습니다.",
+        },
+        {
+            "index": "03",
+            "title": "데모 작업공간",
+            "description": "실제 계정이 없어도 장기 투자 예시 데이터로 거래, 이체, 차트 화면을 바로 테스트할 수 있습니다.",
+        },
+    ]
+    columns = st.columns(3, gap="small")
+    for column, feature in zip(columns, feature_cards):
+        with column:
+            st.markdown(
+                (
+                    '<div class="auth-feature-card">'
+                    f'<div class="auth-feature-card__index">{html.escape(feature["index"])}</div>'
+                    f'<div class="auth-feature-card__title">{html.escape(feature["title"])}</div>'
+                    f'<div class="auth-feature-card__desc">{html.escape(feature["description"])}</div>'
+                    "</div>"
+                ),
+                unsafe_allow_html=True,
+            )
+
+
 def render_demo_access_entry() -> None:
     """초기 인증 화면의 데모 접속 패널을 렌더링한다."""
 
-    with st.container(border=True):
-        info_col, action_col = st.columns((1.5, 1), gap="large")
-        with info_col:
-            st.subheader("데모 접속")
-            st.caption("아이디 입력 없이 버튼만 눌러 테스트용 작업공간으로 바로 들어갈 수 있습니다.")
-            st.write("임의의 테스트 계좌, 입금, 매수, 계좌 이동, 스냅샷 데이터를 자동으로 준비합니다.")
-        with action_col:
-            demo_submitted = st.button(
-                "데모 접속",
-                key="auth-demo-entry",
-                icon=":material/rocket_launch:",
-                width="stretch",
-                type="primary",
-            )
-            if app_auth.has_demo_credentials():
-                st.caption("설정된 데모 계정이 있으면 그 계정으로, 없으면 로컬 데모 작업공간으로 바로 연결됩니다.")
-            else:
-                st.caption("현재는 로컬 데모 작업공간으로 바로 연결됩니다.")
+    with st.container(border=True, key="auth-demo-panel"):
+        st.markdown('<div class="auth-panel-eyebrow">로그인 없이 바로 확인</div>', unsafe_allow_html=True)
+        st.markdown('<h3 class="auth-panel-title">데모 작업공간 시작</h3>', unsafe_allow_html=True)
+        st.markdown(
+            '<p class="auth-panel-caption">약 5년치 예시 투자 이력, 계좌 간 이체, 현금 흐름, 스냅샷 데이터가 준비된 작업공간으로 즉시 들어갑니다.</p>',
+            unsafe_allow_html=True,
+        )
+        st.markdown(
+            """
+            <div class="auth-demo-points">
+                <div class="auth-demo-point">
+                    <div class="auth-demo-point__title">장기 투자 예시</div>
+                    <div class="auth-demo-point__desc">여러 자산군과 부분 매도 기록이 이미 들어 있습니다.</div>
+                </div>
+                <div class="auth-demo-point">
+                    <div class="auth-demo-point__title">화면 흐름 점검</div>
+                    <div class="auth-demo-point__desc">대시보드, 거래, 데이터 탭을 바로 열어볼 수 있습니다.</div>
+                </div>
+                <div class="auth-demo-point">
+                    <div class="auth-demo-point__title">계정 없이 테스트</div>
+                    <div class="auth-demo-point__desc">데모 계정이 있으면 그 계정으로, 없으면 로컬 작업공간으로 연결됩니다.</div>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        demo_submitted = st.button(
+            "데모 작업공간 시작하기",
+            key="auth-demo-entry",
+            icon=":material/rocket_launch:",
+            width="stretch",
+            type="primary",
+        )
+        if app_auth.has_demo_credentials():
+            st.caption("설정된 데모 계정이 우선 사용되며, 없으면 로컬 데모 작업공간으로 연결됩니다.")
+        else:
+            st.caption("현재는 로컬 데모 작업공간으로 바로 연결됩니다.")
 
     if not demo_submitted:
         return
@@ -1228,7 +1555,7 @@ def allocation_treemap_options(
             """
             function(info) {
                 var rawValue = Array.isArray(info.value) ? info.value[0] : info.value;
-                var revenue = Number(rawValue || 0).toLocaleString('ko-KR');
+                var revenue = Math.round(Number(rawValue || 0)).toLocaleString('ko-KR');
                 var path = [];
                 if (info.treePathInfo) {
                     for (var i = 1; i < info.treePathInfo.length; i += 1) {
@@ -1403,7 +1730,7 @@ def holdings_bar_options(frame: pd.DataFrame, *, selected_symbol: str | None = N
 
     if frame.empty:
         return None
-    chart_frame = frame.copy()
+    chart_frame = frame.copy().sort_values(["profit_rate", "current_value"], ascending=[False, False]).reset_index(drop=True)
     chart_frame["display_name"] = chart_frame["product_name"].astype(str).apply(
         lambda value: value if len(value) <= 14 else f"{value[:13]}…"
     )
@@ -1461,7 +1788,7 @@ def holdings_bar_options(frame: pd.DataFrame, *, selected_symbol: str | None = N
         tooltip_formatter = JsCode(
             """
             function(params) {
-                var currentValue = Number(params.data.current_value || 0).toLocaleString('ko-KR');
+                var currentValue = Math.round(Number(params.data.current_value || 0)).toLocaleString('ko-KR');
                 var profitRate = Number(params.data.profit_rate || 0).toFixed(2);
                 return [
                     '<strong>' + params.data.product_name + '</strong>',
@@ -1531,7 +1858,7 @@ def holdings_bar_fallback_chart(frame: pd.DataFrame, *, selected_symbol: str | N
 
     if frame.empty:
         return None
-    chart_frame = frame.copy()
+    chart_frame = frame.copy().sort_values(["profit_rate", "current_value"], ascending=[False, False]).reset_index(drop=True)
     chart_frame["tone"] = chart_frame["profit_rate"].apply(lambda value: "수익" if float(value or 0) >= 0 else "손실")
     chart_frame["display_name"] = chart_frame["product_name"].astype(str).apply(
         lambda value: value if len(value) <= 14 else f"{value[:13]}…"
@@ -1625,8 +1952,7 @@ def show_holdings_table(frame: pd.DataFrame, *, height: int = 420) -> None:
 
 
 def auth_page(auth_enabled: bool = True) -> None:
-    st.title("은퇴 포트폴리오")
-    st.caption("사용자별로 분리된 포트폴리오를 관리하려면 로그인해 주세요.")
+    render_auth_landing_header()
     render_auth_feedback()
 
     pending_email = str(st.session_state.get(PENDING_CONFIRMATION_EMAIL_KEY) or "").strip()
@@ -1642,16 +1968,26 @@ def auth_page(auth_enabled: bool = True) -> None:
                 else:
                     st.success(f"{pending_email} 주소로 새 확인 메일을 보냈습니다.")
 
-    render_demo_access_entry()
-    sign_in_tab, sign_up_tab = st.tabs(["로그인", "계정 만들기"])
+    st.markdown(
+        '<div class="auth-entry-intro">계정이 있다면 바로 로그인하고, 처음이라면 계정을 만든 뒤 같은 화면에서 이어서 진입할 수 있습니다.</div>',
+        unsafe_allow_html=True,
+    )
+    sign_in_tab, sign_up_tab, demo_tab = st.tabs(["로그인", "계정 만들기", "데모 체험"])
 
     with sign_in_tab:
-        with st.form("sign-in-form", clear_on_submit=False):
-            email = st.text_input("이메일", key="sign-in-email")
-            password = st.text_input("비밀번호", type="password", key="sign-in-password")
-            submitted = st.form_submit_button("로그인", width="stretch", disabled=not auth_enabled)
+        with st.container(border=True, key="auth-panel-login"):
+            st.markdown('<div class="auth-panel-eyebrow">기존 사용자</div>', unsafe_allow_html=True)
+            st.markdown('<h3 class="auth-panel-title">로그인</h3>', unsafe_allow_html=True)
+            st.markdown(
+                '<p class="auth-panel-caption">사용자별로 분리된 포트폴리오를 그대로 이어서 확인합니다.</p>',
+                unsafe_allow_html=True,
+            )
             if not auth_enabled:
-                st.caption("Supabase 인증 설정이 없어 실제 로그인은 잠시 비활성 상태입니다.")
+                st.info("Supabase 인증 설정이 없어 실제 로그인은 잠시 비활성 상태입니다. 데모 체험은 바로 사용할 수 있습니다.")
+            with st.form("sign-in-form", clear_on_submit=False):
+                email = st.text_input("이메일", key="sign-in-email")
+                password = st.text_input("비밀번호", type="password", key="sign-in-password")
+                submitted = st.form_submit_button("로그인", width="stretch", disabled=not auth_enabled)
         if submitted:
             try:
                 app_auth.sign_in(email=email, password=password)
@@ -1668,13 +2004,20 @@ def auth_page(auth_enabled: bool = True) -> None:
                 st.rerun()
 
     with sign_up_tab:
-        with st.form("sign-up-form", clear_on_submit=False):
-            email = st.text_input("이메일", key="sign-up-email")
-            password = st.text_input("비밀번호", type="password", key="sign-up-password")
-            confirm_password = st.text_input("비밀번호 확인", type="password", key="sign-up-password-confirm")
-            submitted = st.form_submit_button("계정 만들기", width="stretch", disabled=not auth_enabled)
+        with st.container(border=True, key="auth-panel-sign-up"):
+            st.markdown('<div class="auth-panel-eyebrow">처음 시작한다면</div>', unsafe_allow_html=True)
+            st.markdown('<h3 class="auth-panel-title">계정 만들기</h3>', unsafe_allow_html=True)
+            st.markdown(
+                '<p class="auth-panel-caption">확인 메일을 거쳐 개인 작업공간을 만들고, 이후에는 같은 계정으로 계속 이어서 사용합니다.</p>',
+                unsafe_allow_html=True,
+            )
             if not auth_enabled:
-                st.caption("Supabase 인증 설정이 없어 실제 계정 만들기는 잠시 비활성 상태입니다.")
+                st.info("Supabase 인증 설정이 없어 실제 계정 만들기는 잠시 비활성 상태입니다. 설정 전에는 데모 체험만 사용할 수 있습니다.")
+            with st.form("sign-up-form", clear_on_submit=False):
+                email = st.text_input("이메일", key="sign-up-email")
+                password = st.text_input("비밀번호", type="password", key="sign-up-password")
+                confirm_password = st.text_input("비밀번호 확인", type="password", key="sign-up-password-confirm")
+                submitted = st.form_submit_button("계정 만들기", width="stretch", disabled=not auth_enabled)
         if submitted:
             if password != confirm_password:
                 st.error("비밀번호가 서로 다릅니다.")
@@ -1696,6 +2039,9 @@ def auth_page(auth_enabled: bool = True) -> None:
                         )
                         st.rerun()
 
+    with demo_tab:
+        render_demo_access_entry()
+
 
 def empty_state() -> None:
     st.title("은퇴 포트폴리오")
@@ -1706,7 +2052,7 @@ def empty_state() -> None:
         with st.form("create-first-account", clear_on_submit=True):
             name = st.text_input("계좌 이름", placeholder="예: IRP, ISA, 미국주식")
             account_type = st.selectbox("계좌 유형", ["retirement", "brokerage"], format_func=label_account_type)
-            opening_cash = st.number_input("시작 현금", min_value=0.0, value=0.0, step=100000.0)
+            opening_cash = st.number_input("시작 현금", min_value=0, value=0, step=100000)
             submitted = st.form_submit_button("첫 계좌 만들기", width="stretch")
     if submitted:
         try:
@@ -1793,7 +2139,7 @@ def sidebar(accounts: list[dict[str, Any]], selected_account_id: int | None, use
                 with st.form("new-account-form", clear_on_submit=True):
                     name = st.text_input("계좌 이름")
                     account_type = st.selectbox("유형", ["retirement", "brokerage"], format_func=label_account_type, key="new-account-type")
-                    opening_cash = st.number_input("시작 현금", min_value=0.0, value=0.0, step=100000.0, key="new-account-cash")
+                    opening_cash = st.number_input("시작 현금", min_value=0, value=0, step=100000, key="new-account-cash")
                     submitted = st.form_submit_button("계좌 추가", width="stretch")
                 if submitted:
                     try:
@@ -1820,10 +2166,7 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]], roll
         if float(summary["total_principal"] or 0)
         else 0.0
     )
-    chart_mode_key = f"dashboard-interactive-charts:{account['id']}"
-    if chart_mode_key not in st.session_state:
-        st.session_state[chart_mode_key] = bool(app_auth.is_demo_user())
-    use_interactive_charts = bool(st.session_state.get(chart_mode_key)) and st_echarts is not None
+    echarts_available = st_echarts is not None
     selected_symbol = None
     overview_frame = holdings_overview_frame(holdings, selected_symbol=None, limit=10)
     cash_edit_state_key = f"dashboard-cash-editing:{account['id']}"
@@ -1850,7 +2193,7 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]], roll
                 ):
                     st.session_state[cash_edit_state_key] = not bool(st.session_state.get(cash_edit_state_key, False))
                     if st.session_state[cash_edit_state_key]:
-                        st.session_state[cash_edit_amount_key] = float(display_cash)
+                        st.session_state[cash_edit_amount_key] = int(round(display_cash))
                     st.rerun()
             st.markdown(
                 (
@@ -1864,9 +2207,9 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]], roll
             if st.session_state.get(cash_edit_state_key, False):
                 st.number_input(
                     "목표 현금 잔액",
-                    min_value=0.0,
-                    value=float(st.session_state.get(cash_edit_amount_key, display_cash) or 0.0),
-                    step=100000.0,
+                    min_value=0,
+                    value=int(round(float(st.session_state.get(cash_edit_amount_key, display_cash) or 0.0))),
+                    step=100000,
                     key=cash_edit_amount_key,
                 )
                 save_col, cancel_col = st.columns(2, gap="small")
@@ -1875,7 +2218,7 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]], roll
                         try:
                             adjust_cash_balance(
                                 int(account["id"]),
-                                target_amount=float(st.session_state.get(cash_edit_amount_key, display_cash) or 0.0),
+                                target_amount=float(int(st.session_state.get(cash_edit_amount_key, round(display_cash)) or 0)),
                                 trade_date=date.today().isoformat(),
                                 notes="대시보드 현금 카드 조정",
                             )
@@ -1903,20 +2246,8 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]], roll
         with st.container(border=True, key="dashboard-card-profit-rate"):
             render_dashboard_summary_card("원금 대비 수익률", format_pct(display_principal_profit_rate), tone="accent")
 
-    chart_mode_col, chart_mode_note_col = st.columns((0.9, 1.6), gap="large", vertical_alignment="center")
-    with chart_mode_col:
-        st.toggle(
-            "고급 차트 사용",
-            key=chart_mode_key,
-            help="켜면 ECharts 기반 트리맵/막대차트를 사용합니다. 대시보드가 멈추면 꺼 두고 기본 차트를 사용하세요.",
-        )
-    with chart_mode_note_col:
-        if use_interactive_charts:
-            st.caption("현재는 ECharts 기반 고급 차트 모드입니다.")
-        elif st_echarts is None:
-            st.caption("현재 환경에서는 `streamlit-echarts`를 사용할 수 없어 기본 차트로 표시합니다.")
-        else:
-            st.caption("안정 모드로 기본 차트를 표시합니다. 로그인 계정에서 대시보드 멈춤이 있을 때 권장됩니다.")
+    if not echarts_available:
+        st.warning("현재 환경에서는 ECharts 모듈을 불러오지 못해 대시보드 차트를 표시할 수 없습니다.")
 
     overview_left, overview_right = st.columns((1, 1), gap="large", vertical_alignment="top")
     with overview_left:
@@ -1925,12 +2256,8 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]], roll
             treemap_options = allocation_treemap_options(summary, holdings, selected_symbol=selected_symbol or None)
             if treemap_options is None:
                 st.info("배분을 그릴 데이터가 아직 없습니다.")
-            elif not use_interactive_charts:
-                chart = allocation_chart(summary)
-                if chart is None:
-                    st.info("배분을 그릴 데이터가 아직 없습니다.")
-                else:
-                    st.altair_chart(style_dashboard_altair_chart(chart, height=DASHBOARD_OVERVIEW_CHART_HEIGHT), width="stretch")
+            elif not echarts_available:
+                st.info("현재 환경에서는 자산 배분 차트를 표시할 수 없습니다.")
             else:
                 st_echarts(
                     options=treemap_options,
@@ -1943,12 +2270,8 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]], roll
             render_dashboard_section_header("보유 종목 수익률", "현재 보유 상위 종목의 수익률 흐름을 우선 확인합니다.")
             if overview_frame.empty:
                 st.info("보유 종목이 없어 수익률 차트를 그릴 수 없습니다.")
-            elif not use_interactive_charts:
-                chart = holdings_bar_fallback_chart(overview_frame, selected_symbol=None)
-                if chart is None:
-                    st.info("보유 종목이 없어 수익률 차트를 그릴 수 없습니다.")
-                else:
-                    st.altair_chart(chart, width="stretch")
+            elif not echarts_available:
+                st.info("현재 환경에서는 보유 종목 수익률 차트를 표시할 수 없습니다.")
             else:
                 bar_options = holdings_bar_options(overview_frame, selected_symbol=None)
                 st_echarts(
@@ -2210,7 +2533,7 @@ def trade_entry_page(account: dict[str, Any], holdings: list[dict[str, Any]], ac
             format_func=label_cash_flow_type,
             key=CASH_FLOW_TYPE_KEY,
         )
-        amount = st.number_input("금액", min_value=0.0, step=100000.0, key=CASH_FLOW_AMOUNT_KEY)
+        amount = st.number_input("금액", min_value=0, step=100000, key=CASH_FLOW_AMOUNT_KEY)
         trade_date = st.date_input("처리일", key=CASH_FLOW_DATE_KEY)
         notes = st.text_area("사유", height=90, key=CASH_FLOW_NOTES_KEY)
         submitted = st.button("현금 기록", width="stretch", key=f"cash-flow-save:{account['id']}")
@@ -2228,54 +2551,55 @@ def trade_entry_page(account: dict[str, Any], holdings: list[dict[str, Any]], ac
             else:
                 mark_rollup_dirty()
                 st.success("현금 흐름을 기록했습니다.")
-                st.session_state[CASH_FLOW_AMOUNT_KEY] = 0.0
+                st.session_state[CASH_FLOW_AMOUNT_KEY] = 0
                 st.session_state[CASH_FLOW_NOTES_KEY] = ""
                 st.rerun()
 
         st.divider()
-        st.subheader("계좌 간 이체")
-        transfer_targets = [item for item in accounts if int(item["id"]) != int(account["id"])]
-        if not transfer_targets:
-            st.info("이체하려면 계좌를 하나 더 만들어 주세요.")
-        else:
-            target_account_options = [int(item["id"]) for item in transfer_targets]
-            saved_target_account_id = st.session_state.get(TRANSFER_TARGET_ACCOUNT_KEY)
-            default_target_account_id = (
-                saved_target_account_id
-                if saved_target_account_id in target_account_options
-                else target_account_options[0]
-            )
-            st.caption(f"출금 계좌: `{account_label(account)}`")
-            target_account_id = st.selectbox(
-                "입금 계좌",
-                options=target_account_options,
-                index=target_account_options.index(default_target_account_id),
-                format_func=lambda item_id: account_label(
-                    next(item for item in transfer_targets if int(item["id"]) == int(item_id))
-                ),
-                key=TRANSFER_TARGET_ACCOUNT_KEY,
-            )
-            transfer_amount = st.number_input("이체 금액", min_value=0.0, step=100000.0, key=TRANSFER_AMOUNT_KEY)
-            transfer_date = st.date_input("이체일", key=TRANSFER_DATE_KEY)
-            transfer_notes = st.text_area("이체 메모", height=90, key=TRANSFER_NOTES_KEY)
-            submitted = st.button("이체 기록", width="stretch", key=f"transfer-save:{account['id']}")
-            if submitted:
-                try:
-                    record_account_transfer(
-                        int(account["id"]),
-                        to_account_id=int(target_account_id),
-                        amount=transfer_amount,
-                        trade_date=transfer_date.isoformat(),
-                        notes=transfer_notes,
-                    )
-                except ValueError as exc:
-                    st.error(str(exc))
-                else:
-                    mark_rollup_dirty()
-                    st.success("계좌 이체를 기록했습니다.")
-                    st.session_state[TRANSFER_AMOUNT_KEY] = 0.0
-                    st.session_state[TRANSFER_NOTES_KEY] = ""
-                    st.rerun()
+        with st.container(border=True, key="trade-panel-transfer"):
+            st.subheader("계좌 간 이체")
+            transfer_targets = [item for item in accounts if int(item["id"]) != int(account["id"])]
+            if not transfer_targets:
+                st.info("이체하려면 계좌를 하나 더 만들어 주세요.")
+            else:
+                target_account_options = [int(item["id"]) for item in transfer_targets]
+                saved_target_account_id = st.session_state.get(TRANSFER_TARGET_ACCOUNT_KEY)
+                default_target_account_id = (
+                    saved_target_account_id
+                    if saved_target_account_id in target_account_options
+                    else target_account_options[0]
+                )
+                st.caption(f"출금 계좌: `{account_label(account)}`")
+                target_account_id = st.selectbox(
+                    "입금 계좌",
+                    options=target_account_options,
+                    index=target_account_options.index(default_target_account_id),
+                    format_func=lambda item_id: account_label(
+                        next(item for item in transfer_targets if int(item["id"]) == int(item_id))
+                    ),
+                    key=TRANSFER_TARGET_ACCOUNT_KEY,
+                )
+                transfer_amount = st.number_input("이체 금액", min_value=0, step=100000, key=TRANSFER_AMOUNT_KEY)
+                transfer_date = st.date_input("이체일", key=TRANSFER_DATE_KEY)
+                transfer_notes = st.text_area("이체 메모", height=90, key=TRANSFER_NOTES_KEY)
+                submitted = st.button("이체 기록", width="stretch", key=f"transfer-save:{account['id']}")
+                if submitted:
+                    try:
+                        record_account_transfer(
+                            int(account["id"]),
+                            to_account_id=int(target_account_id),
+                            amount=transfer_amount,
+                            trade_date=transfer_date.isoformat(),
+                            notes=transfer_notes,
+                        )
+                    except ValueError as exc:
+                        st.error(str(exc))
+                    else:
+                        mark_rollup_dirty()
+                        st.success("계좌 이체를 기록했습니다.")
+                        st.session_state[TRANSFER_AMOUNT_KEY] = 0
+                        st.session_state[TRANSFER_NOTES_KEY] = ""
+                        st.rerun()
 
     logs = list_trade_logs(int(account["id"]))
     realized = realized_summary(logs)

@@ -139,6 +139,38 @@ class AccountSummaryTests(unittest.TestCase):
         selected_row = overview.loc[overview["selection_symbol"] == "000001"].iloc[0]
         self.assertTrue(bool(selected_row["is_selected"]))
 
+    def test_holdings_overview_frame_orders_by_profit_rate_descending(self) -> None:
+        holdings = [
+            {
+                "product_name": "고수익",
+                "symbol": "HIGH",
+                "quantity": 1,
+                "avg_cost": 100,
+                "current_price": 180,
+                "asset_type": "risk",
+            },
+            {
+                "product_name": "중수익",
+                "symbol": "MID",
+                "quantity": 1,
+                "avg_cost": 100,
+                "current_price": 130,
+                "asset_type": "risk",
+            },
+            {
+                "product_name": "저수익",
+                "symbol": "LOW",
+                "quantity": 1,
+                "avg_cost": 100,
+                "current_price": 105,
+                "asset_type": "safe",
+            },
+        ]
+
+        overview = holdings_overview_frame(holdings, limit=10)
+
+        self.assertEqual(overview["selection_symbol"].tolist(), ["HIGH", "MID", "LOW"])
+
 
 class SnapshotTrendFrameTests(unittest.TestCase):
     """스냅샷 추이 보조 컬럼을 검증한다."""
