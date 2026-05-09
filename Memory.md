@@ -1278,3 +1278,32 @@ python -m unittest discover -s tests -p "test_*.py"
 - 미완료/다음 확인:
   - `libatk-1.0.so.0` 등 Linux GUI 런타임이 있는 환경에서 랜딩 화면 시각 검증 재실행
   - 필요 시 웹 배포 반영 후 실제 Streamlit Cloud 랜딩 화면 기준 미세 여백 조정
+
+## 2026-05-09 웹 배포 반영 및 의존성 고정
+- [x] 배포 의존성에 `streamlit-echarts` 버전 고정 추가
+- [x] 사용자 요청 범위 파일만 선택 커밋
+- [x] `main` 브랜치 원격 푸시로 Streamlit 배포 트리거
+- 변경 파일:
+  - `requirements.txt`
+  - `Memory.md`
+- 배포 커밋:
+  - `763d709` `Refresh landing page and dashboard charts`
+- 변경 내용:
+  - 배포 서버가 로컬 미추적 `streamlit_echarts/` 폴더에 의존하지 않도록 `requirements.txt`에 `streamlit-echarts==0.6.0`을 명시
+  - `app.py`, `src/analytics.py`, `src/db.py`, 테스트 2건, `Memory.md`, `requirements.txt`만 선택 스테이징 후 푸시
+- 검증:
+  - `python -m compileall app.py src scripts tests`
+  - `python -m unittest discover -s tests -p "test_*.py"`
+  - `git push origin main`
+  - `curl -I https://retirement-portfolio-app-nh2vq9ferqnpehsslbykbe.streamlit.app/`
+- 결과:
+  - 문법 컴파일 성공
+  - 단위 테스트 41건 통과
+  - `origin/main`이 `763d7098a89643b45de8f2428c78fe0151de39b4`로 갱신됨
+  - 배포 URL은 HTTP `303`으로 `https://share.streamlit.io/-/auth/app?...` 인증 리다이렉트를 반환해 앱 보호 상태는 확인됨
+- 검증 제약:
+  - 현재 환경에는 `STREAMLIT_VERIFY_EMAIL`, `STREAMLIT_VERIFY_PASSWORD`가 없어 보호된 배포 화면 내부까지 자동 검증하지 못함
+  - Playwright 브라우저는 여전히 시스템 라이브러리 `libatk-1.0.so.0` 부재로 실행 불가
+- 다음 작업 후보:
+  - 검증 계정이 준비되면 `python scripts/verify_streamlit_deployment.py --page dashboard --expect-backend supabase` 또는 `--click-demo`로 배포 화면 재검증
+  - 웹 화면에서 랜딩 레이아웃과 ECharts 대시보드가 기대대로 보이는지 수동 확인
