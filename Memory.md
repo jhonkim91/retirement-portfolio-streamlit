@@ -258,6 +258,20 @@ streamlit run app.py
   - 필요 시 실제 Streamlit 화면에서 데모 진입 시 사이드바 로그인 계정이 `test`로 보이는지 브라우저 실검증 가능
   - 필요 시 백데이트 매매/입금 입력 후 과거 추이 화면이 기대 범위로 갱신되는지 수동 점검 가능
 
+## 2026-05-10 배포 반영
+- 배포 원칙:
+  - `jhonkim2025@gmail.com` 관련 서버/운영 계정 데이터는 삭제하거나 변경하지 않음
+  - 로컬 `data/portfolio.db` 변경분과 로컬 산출물은 배포 커밋에서 제외
+- 배포 커밋:
+  - `a853be1` `Reset demo workspace and restore rollup integrity`
+- 배포 방법:
+  - `main` 브랜치에서 GitHub 원격 `origin`으로 `git push origin main`
+- 배포 검증:
+  - `PLAYWRIGHT_BROWSERS_PATH=/workspaces/retirement-portfolio-streamlit/.playwright-browsers .venv/bin/python scripts/verify_streamlit_deployment.py --page data --expect-backend supabase --wait-ms 12000 --text-output artifacts/deploy-verify-current-2.txt --screenshot artifacts/deploy-verify-current-2.png`
+  - 결과: 배포 앱 접속 성공, 로그인 성공, 작업공간 표시 확인, `status_panel_visible=true`, `backend_storage_code=supabase`
+- 비고:
+  - 검증 산출물: `artifacts/deploy-verify-current-2.txt`, `artifacts/deploy-verify-current-2.png`
+
 ## 다음 작업 후보
 - 로컬 `streamlit run app.py` 실사용 흐름에서 현금 조정 저장 후 데이터 반영 체감 속도 재확인
 - 배포 점검 스크립트 실행 여부 검토
