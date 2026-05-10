@@ -26,6 +26,7 @@
 - [x] 보유 종목 수익률 라벨 표시 및 선택 종목 트렌드 선택 payload 수정
 - [x] 자산 배분 수익률 바 실제 최대값 기준 및 범위 밖 투명 처리
 - [x] 선택 종목 트렌드 ECharts 디자인 전환 및 기능 확장
+- [x] 웹 배포 실행 및 원격 대시보드 검증
 
 ## 프로젝트 유형
 - Python 프로젝트
@@ -422,6 +423,33 @@ streamlit run app.py
 - 비고:
   - 구현 참고 방향은 사용자가 전달한 Streamlit ECharts 예시 스타일과 Apache ECharts의 smooth line, area chart, dataZoom/toolbox 상호작용 구성
   - 실브라우저 시각 확인은 이번 턴에서 자동화하지 않았고, 현재는 옵션/회귀 테스트 기준으로 검증 완료
+
+## 2026-05-10 웹 배포 실행 및 원격 대시보드 검증
+- 변경 파일: `Memory.md`
+- 배포 방법:
+  - `python scripts/verify_and_push_deploy.py --page dashboard --commit-message "Update dashboard trend and treemap visuals" --include-untracked scripts/verify_and_push_deploy.py tests/test_verify_and_push_deploy.py tests/test_app_dashboard.py`
+  - 위 실행으로 커밋 `a950908078d8e9b9bff3840c47d53eb8418a3606` 생성 및 `origin/main` 푸시 완료
+  - 원격 검증 단계는 시스템 Python에 `playwright`가 없어 실패했고, 규칙에 따라 프로젝트 로컬 `.venv` 환경을 사용해 수동 재검증
+  - `PLAYWRIGHT_BROWSERS_PATH=/workspaces/retirement-portfolio-streamlit/.playwright-browsers ./.venv/bin/python scripts/verify_streamlit_deployment.py --page dashboard --expect-backend supabase --wait-ms 20000 --text-output artifacts/deploy-verify-manual-dashboard.txt --screenshot artifacts/deploy-verify-manual-dashboard.png`
+- 검증:
+  - 자동 배포 스크립트 실행 전 로컬 검증 성공
+  - `python -m compileall app.py src scripts tests` 성공
+  - `python -m unittest discover -s tests -p "test_*.py"` 성공
+  - 결과: 단위 테스트 `52`건 통과
+  - 원격 대시보드 검증 결과:
+    - 앱 URL: `https://retirement-portfolio-app-nh2vq9ferqnpehsslbykbe.streamlit.app/`
+    - 로그인 성공
+    - 작업공간 표시 확인
+    - 저장소: `Supabase`
+    - 대상 페이지: `dashboard`
+    - 원격 검증 산출물:
+      - `artifacts/deploy-verify-manual-dashboard.txt`
+      - `artifacts/deploy-verify-manual-dashboard.png`
+- 설치:
+  - 추가 글로벌 설치 없음
+  - 원격 검증은 기존 프로젝트 로컬 `.venv`의 `playwright`와 `.playwright-browsers`를 사용
+- 비고:
+  - 자동 배포 스크립트의 원격 검증은 실행 Python 환경에 `playwright`가 없으면 실패하므로, 이후 배포 자동화를 안정화하려면 `.venv` 기준으로 스크립트를 실행하는 편이 안전함
 
 ## 다음 작업 후보
 - 로컬 `streamlit run app.py` 실사용 흐름에서 현금 조정 저장 후 데이터 반영 체감 속도 재확인
