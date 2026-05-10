@@ -862,6 +862,23 @@ streamlit run app.py
   - 다음 실제 작업은 운영 Supabase SQL Editor에서 새 hotfix SQL 또는 최신 `setup_supabase.sql`을 적용한 뒤 `python3 scripts/run_kis_quote_worker.py --backend supabase --preflight-only`로 `200` 전환을 확인하는 것
   - 이후 한국 장중(`KST 09:00~15:30`)에 `python3 scripts/run_kis_quote_worker.py --backend supabase`를 다시 실행해 quote 적재를 검증해야 함
 
+## 2026-05-10 커밋/푸시 및 배포 검증 완료
+- 변경 파일: `Memory.md`
+- 변경 내용:
+  - KIS realtime worker 관련 변경 일괄 커밋 후 `origin/main`에 푸시
+  - 배포된 Streamlit 앱을 로그인 기준으로 다시 검증하고 Supabase 백엔드, 운영 상태 패널, 작업공간 진입 여부를 재확인
+- 검증:
+  - 커밋: `5de488debf17d55161699c7e6abcf1022dd82988`
+  - `git push origin main` 성공
+  - `PLAYWRIGHT_BROWSERS_PATH=/workspaces/retirement-portfolio-streamlit/.playwright-browsers ./.venv/bin/python scripts/verify_streamlit_deployment.py --page data --expect-backend supabase --wait-ms 30000 --text-output artifacts/deploy-verify-postpush.txt --screenshot artifacts/deploy-verify-postpush.png`
+- 결과:
+  - 배포 앱 `https://retirement-portfolio-app-nh2vq9ferqnpehsslbykbe.streamlit.app/` 기준 로그인 성공
+  - `workspace_visible=true`, `status_panel_visible=true`, `backend_storage_code=supabase`, `hotfix_required=false` 확인
+  - 데이터 화면 기준 `거래 기록=9건`, `자산 스냅샷=3건`, `latest_snapshot_date=2026-05-10` 확인
+- 산출물:
+  - `artifacts/deploy-verify-postpush.txt`
+  - `artifacts/deploy-verify-postpush.png`
+
 ## 다음 작업 후보
 - 운영 Supabase SQL Editor에서 `docs/supabase-realtime-schema-hotfix.sql` 또는 최신 `setup_supabase.sql` 적용
 - `python3 scripts/run_kis_quote_worker.py --backend supabase --preflight-only`로 realtime 테이블 노출 재확인
