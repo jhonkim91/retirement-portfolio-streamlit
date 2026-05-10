@@ -112,6 +112,78 @@ class HoldingsBarLabelTests(unittest.TestCase):
         self.assertEqual(series_data[0]["label"]["formatter"], "+12.34%")
         self.assertEqual(series_data[1]["label"]["formatter"], "-5.67%")
 
+    def test_holdings_bar_options_keeps_positive_only_axis_above_zero(self) -> None:
+        """모든 종목 수익률이 플러스면 Y축 최소값은 0 아래로 내려가지 않는다."""
+
+        frame = pd.DataFrame(
+            [
+                {
+                    "product_name": "고배당 ETF",
+                    "symbol": "ETF1",
+                    "selection_symbol": "ETF1",
+                    "current_value": 1500000,
+                    "profit_rate": 69.75,
+                },
+                {
+                    "product_name": "월배당 ETF",
+                    "symbol": "ETF2",
+                    "selection_symbol": "ETF2",
+                    "current_value": 900000,
+                    "profit_rate": 8.51,
+                },
+                {
+                    "product_name": "채권 혼합",
+                    "symbol": "ETF3",
+                    "selection_symbol": "ETF3",
+                    "current_value": 600000,
+                    "profit_rate": 3.11,
+                },
+            ]
+        )
+
+        options = dashboard_app.holdings_bar_options(frame)
+
+        self.assertIsNotNone(options)
+        assert options is not None
+        self.assertEqual(options["yAxis"]["min"], 0.0)
+        self.assertNotIn("max", options["yAxis"])
+
+    def test_holdings_bar_options_uses_auto_bounds_for_mixed_rates(self) -> None:
+        """양수/음수가 섞이면 ECharts가 자연스러운 축 범위를 자동 계산한다."""
+
+        frame = pd.DataFrame(
+            [
+                {
+                    "product_name": "성장 ETF",
+                    "symbol": "ETF1",
+                    "selection_symbol": "ETF1",
+                    "current_value": 1500000,
+                    "profit_rate": 38.39,
+                },
+                {
+                    "product_name": "방어 ETF",
+                    "symbol": "ETF2",
+                    "selection_symbol": "ETF2",
+                    "current_value": 900000,
+                    "profit_rate": -7.00,
+                },
+                {
+                    "product_name": "혼합 ETF",
+                    "symbol": "ETF3",
+                    "selection_symbol": "ETF3",
+                    "current_value": 600000,
+                    "profit_rate": -4.46,
+                },
+            ]
+        )
+
+        options = dashboard_app.holdings_bar_options(frame)
+
+        self.assertIsNotNone(options)
+        assert options is not None
+        self.assertNotIn("min", options["yAxis"])
+        self.assertNotIn("max", options["yAxis"])
+
 
 class AllocationTreemapVisualMapTests(unittest.TestCase):
     """자산 배분 트리맵 수익률 바 기준과 범위 밖 표시를 검증한다."""
@@ -212,14 +284,16 @@ class SelectedHoldingTrendOptionTests(unittest.TestCase):
         options = dashboard_app.selected_holding_trend_options(
             frame,
             selected_holding_name="삼성전자",
+            selected_symbol_code="005930",
             measure="market_value",
             period_label="6개월",
         )
 
         self.assertIsNotNone(options)
         assert options is not None
-        self.assertEqual(options["title"]["text"], "선택 종목 트렌드")
-        self.assertIn("삼성전자", options["title"]["subtext"])
+        self.assertEqual(options["title"]["text"], "삼성전자")
+        self.assertIn("005930", options["title"]["subtext"])
+        self.assertNotIn("삼성전자", options["title"]["subtext"])
         self.assertIn("평가금액", options["title"]["subtext"])
         self.assertEqual(len(options["dataZoom"]), 2)
         self.assertIn("saveAsImage", options["toolbox"]["feature"])
@@ -256,6 +330,7 @@ class SelectedHoldingTrendOptionTests(unittest.TestCase):
         options = dashboard_app.selected_holding_trend_options(
             frame,
             selected_holding_name="애플",
+            selected_symbol_code="AAPL",
             measure="profit_rate",
             period_label="3개월",
         )

@@ -27,6 +27,11 @@
 - [x] 자산 배분 수익률 바 실제 최대값 기준 및 범위 밖 투명 처리
 - [x] 선택 종목 트렌드 ECharts 디자인 전환 및 기능 확장
 - [x] 웹 배포 실행 및 원격 대시보드 검증
+- [x] 보유 종목 수익률 차트 양수 전용 Y축 범위 보정
+- [x] 선택 종목 트렌드 상단 설명 제거 및 차트 위 데이터 정렬
+- [x] 보유 종목 수익률 차트 mixed 구간 Y축 자동 스케일 복원
+- [x] 선택 종목 트렌드 상단 데이터 텍스트 제거 및 컨트롤 박스 정리
+- [x] 선택 종목 트렌드 제목/종목코드 표기 및 컨트롤 일열 정리
 
 ## 프로젝트 유형
 - Python 프로젝트
@@ -450,6 +455,77 @@ streamlit run app.py
   - 원격 검증은 기존 프로젝트 로컬 `.venv`의 `playwright`와 `.playwright-browsers`를 사용
 - 비고:
   - 자동 배포 스크립트의 원격 검증은 실행 Python 환경에 `playwright`가 없으면 실패하므로, 이후 배포 자동화를 안정화하려면 `.venv` 기준으로 스크립트를 실행하는 편이 안전함
+
+## 2026-05-10 보유 종목 수익률 차트 양수 전용 Y축 범위 보정
+- 변경 파일: `app.py`, `tests/test_app_dashboard.py`, `Memory.md`
+- 변경 내용:
+  - `보유 종목 수익률` 차트의 Y축 범위 계산을 분기 처리로 수정
+  - 모든 종목 수익률이 양수인 경우 Y축 최소값을 `0`으로 고정하고 상단 여백만 추가하도록 변경
+  - 모든 종목 수익률이 음수인 경우 Y축 최대값을 `0`으로 고정하고 하단 여백만 추가하도록 정리
+  - 혼합 구간일 때만 기존처럼 상하 padding을 함께 적용
+  - 회귀 방지를 위해 양수 종목만 있을 때 Y축 최소값이 음수로 내려가지 않는 테스트 추가
+- 설치:
+  - 추가 설치 없음
+- 검증:
+  - `python -m compileall app.py src scripts tests` 성공
+  - `python -m unittest discover -s tests -p "test_*.py"` 성공
+  - 결과: 단위 테스트 `53`건 통과
+
+## 2026-05-10 선택 종목 트렌드 상단 설명 제거 및 차트 위 데이터 정렬
+- 변경 파일: `app.py`, `Memory.md`
+- 변경 내용:
+  - `선택 종목 트렌드` 패널의 좌측 설명형 헤더 블록을 제거
+  - 선택 종목명, 기간, 표시 지표, 선택 해제 버튼을 차트 바로 위 상단 행으로 재배치
+  - 기존 `선택 종목: ... · 기준 기간: ...` 캡션은 차트 데이터 기준 한 줄 메타 정보로 정리
+  - 차트 내부 제목은 기존 `선택 종목 트렌드`를 그대로 유지
+- 설치:
+  - 추가 설치 없음
+- 검증:
+  - `python -m compileall app.py src scripts tests` 성공
+  - `python -m unittest discover -s tests -p "test_*.py"` 성공
+  - 결과: 단위 테스트 `53`건 통과
+
+## 2026-05-10 보유 종목 수익률 차트 mixed 구간 Y축 자동 스케일 복원
+- 변경 파일: `app.py`, `tests/test_app_dashboard.py`, `Memory.md`
+- 변경 내용:
+  - `보유 종목 수익률` 차트에서 양수/음수가 섞인 경우 Y축 `min/max`를 직접 계산해 넣던 로직 제거
+  - mixed 구간은 ECharts 자동 스케일에 맡겨 자연스러운 축 값(예: `-10`, `40`)이 나오도록 정리
+  - 양수 전용일 때만 `min=0`, 음수 전용일 때만 `max=0`을 고정하도록 유지
+  - 회귀 방지를 위해 mixed 구간에서는 `yAxis.min/max`를 넘기지 않는 테스트 추가
+- 설치:
+  - 추가 설치 없음
+- 검증:
+  - `python -m compileall app.py src scripts tests` 성공
+  - `python -m unittest discover -s tests -p "test_*.py"` 성공
+  - 결과: 단위 테스트 `54`건 통과
+
+## 2026-05-10 선택 종목 트렌드 상단 데이터 텍스트 제거 및 컨트롤 박스 정리
+- 변경 파일: `app.py`, `Memory.md`
+- 변경 내용:
+  - 선택 종목 트렌드 패널 상단의 `선택 데이터`, `차트 데이터` 텍스트 제거
+  - 기간/표시 지표/선택 해제 영역을 별도 내부 컨트롤 박스로 묶어 상단 배치 정리
+  - `선택 해제` 버튼이 좁은 열에서 세로로 깨지지 않도록 열 비율과 버튼 CSS 보정
+  - 차트 식별 정보는 차트 자체 부제에서만 확인하도록 단순화
+- 설치:
+  - 추가 설치 없음
+- 검증:
+  - `python -m compileall app.py src scripts tests` 성공
+  - `python -m unittest discover -s tests -p "test_*.py"` 성공
+  - 결과: 단위 테스트 `54`건 통과
+
+## 2026-05-10 선택 종목 트렌드 제목/종목코드 표기 및 컨트롤 일열 정리
+- 변경 파일: `app.py`, `tests/test_app_dashboard.py`, `Memory.md`
+- 변경 내용:
+  - 선택 종목 트렌드 ECharts 제목을 고정 문구 대신 현재 선택 종목명으로 변경
+  - 차트 부제는 종목명 대신 실제 종목코드와 표시 지표, 기간을 표시하도록 정리
+  - Altair fallback 차트도 같은 제목/부제 규칙을 따르도록 맞춤
+  - 상단 컨트롤 박스의 기간/표시 지표 segmented control이 줄바꿈되지 않도록 열 비율과 CSS를 조정
+- 설치:
+  - 추가 설치 없음
+- 검증:
+  - `python -m compileall app.py src scripts tests` 성공
+  - `python -m unittest discover -s tests -p "test_*.py"` 성공
+  - 결과: 단위 테스트 `54`건 통과
 
 ## 다음 작업 후보
 - 로컬 `streamlit run app.py` 실사용 흐름에서 현금 조정 저장 후 데이터 반영 체감 속도 재확인

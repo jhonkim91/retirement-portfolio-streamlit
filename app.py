@@ -989,6 +989,25 @@ def inject_app_styles() -> None:
             font-weight: 700;
         }
 
+        .st-key-dashboard-trend-controls [data-testid="stButton"] > button {
+            min-height: 2.75rem;
+            white-space: nowrap;
+            font-weight: 700;
+        }
+
+        .st-key-dashboard-trend-controls [data-testid="stSegmentedControl"] {
+            padding-top: 0.1rem;
+        }
+
+        .st-key-dashboard-trend-controls [data-testid="stSegmentedControl"] [role="radiogroup"] {
+            flex-wrap: nowrap;
+            gap: 0.1rem;
+        }
+
+        .st-key-dashboard-trend-controls [data-testid="stSegmentedControl"] label p {
+            white-space: nowrap;
+        }
+
         .st-key-trade-panel-transfer [data-testid="stButton"] > button {
             min-height: 2.65rem;
             font-weight: 700;
@@ -1922,15 +1941,6 @@ def holdings_bar_options(frame: pd.DataFrame, *, selected_symbol: str | None = N
 
     minimum = min(rates)
     maximum = max(rates)
-    if minimum == maximum:
-        minimum -= 2
-        maximum += 2
-    else:
-        minimum = min(minimum, 0)
-        maximum = max(maximum, 0)
-        padding = max((maximum - minimum) * 0.14, 1.5)
-        minimum -= padding
-        maximum += padding
 
     tooltip_formatter = None
     if JsCode is not None:
@@ -1947,6 +1957,19 @@ def holdings_bar_options(frame: pd.DataFrame, *, selected_symbol: str | None = N
             }
             """
         )
+
+    y_axis_config: dict[str, Any] = {
+        "type": "value",
+        "name": "수익률 (%)",
+        "nameTextStyle": {"color": "#607285", "fontWeight": 700},
+        "axisLabel": {"color": "#607285", "formatter": "{value}%"},
+        "axisLine": {"show": False},
+        "splitLine": {"lineStyle": {"color": "#D7E2E7"}},
+    }
+    if minimum >= 0:
+        y_axis_config["min"] = 0.0
+    elif maximum <= 0:
+        y_axis_config["max"] = 0.0
 
     return {
         "backgroundColor": "transparent",
@@ -1973,16 +1996,7 @@ def holdings_bar_options(frame: pd.DataFrame, *, selected_symbol: str | None = N
             "axisLine": {"lineStyle": {"color": "#C8D4DA"}},
             "axisTick": {"show": False},
         },
-        "yAxis": {
-            "type": "value",
-            "min": round(minimum, 2),
-            "max": round(maximum, 2),
-            "name": "수익률 (%)",
-            "nameTextStyle": {"color": "#607285", "fontWeight": 700},
-            "axisLabel": {"color": "#607285", "formatter": "{value}%"},
-            "axisLine": {"show": False},
-            "splitLine": {"lineStyle": {"color": "#D7E2E7"}},
-        },
+        "yAxis": y_axis_config,
         "series": [
             {
                 "name": "수익률",
@@ -2070,7 +2084,14 @@ def holdings_bar_fallback_chart(frame: pd.DataFrame, *, selected_symbol: str | N
     return style_dashboard_altair_chart(bars + labels, height=DASHBOARD_OVERVIEW_CHART_HEIGHT)
 
 
-def selected_holding_trend_chart(frame: pd.DataFrame, *, measure: str) -> alt.Chart:
+def selected_holding_trend_chart(
+    frame: pd.DataFrame,
+    *,
+    measure: str,
+    selected_holding_name: str,
+    selected_symbol_code: str,
+    period_label: str,
+) -> alt.Chart:
     """선택 종목 단일 추이 차트를 만든다."""
 
     measure_key = str(measure or "market_value")
@@ -2091,6 +2112,12 @@ def selected_holding_trend_chart(frame: pd.DataFrame, *, measure: str) -> alt.Ch
                 alt.Tooltip("close:Q", title="종가", format=",.2f"),
             ],
         )
+        .properties(
+            title=alt.TitleParams(
+                text=selected_holding_name,
+                subtitle=[f"{selected_symbol_code} · {measure_title} · {period_label}"],
+            )
+        )
     )
 
 
@@ -2098,6 +2125,7 @@ def selected_holding_trend_options(
     frame: pd.DataFrame,
     *,
     selected_holding_name: str,
+    selected_symbol_code: str,
     measure: str,
     period_label: str,
 ) -> dict[str, Any] | None:
@@ -2210,8 +2238,8 @@ def selected_holding_trend_options(
         "animationDuration": 260,
         "animationDurationUpdate": 320,
         "title": {
-            "text": "선택 종목 트렌드",
-            "subtext": f"{selected_holding_name} · {measure_title} · {period_label}",
+            "text": selected_holding_name,
+            "subtext": f"{selected_symbol_code} · {measure_title} · {period_label}",
             "left": "center",
             "top": 6,
             "textStyle": {
@@ -2743,50 +2771,53 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]], roll
 
     with trend_col:
         with st.container(border=True, height=DASHBOARD_OVERVIEW_PANEL_HEIGHT, key="dashboard-panel-selected-trend"):
-            header_col, period_col, measure_col, action_col = st.columns((1.2, 0.78, 0.82, 0.36), gap="large", vertical_alignment="bottom")
-            with header_col:
-                render_dashboard_section_header(
-                    "선택 종목 트렌드",
-                    "자산 배분에서 선택한 종목의 가격과 수익률 흐름을 같은 화면에서 이어서 확인합니다.",
-                    compact=True,
-                )
-            with period_col:
-                period = st.segmented_control(
-                    "기간",
-                    options=["1mo", "3mo", "6mo", "1y"],
-                    format_func=label_period,
-                    default=period,
-                    key=trend_period_key,
-                )
             selected_trend_measure = "market_value"
-            if selected_symbol and selected_symbol != "CASH":
-                with measure_col:
-                    selected_trend_measure = st.segmented_control(
-                        "표시 지표",
-                        options=["market_value", "profit_rate", "close"],
-                        format_func=label_detail_measure,
-                        default="market_value",
-                        key=f"selected-trend-measure:{account_id}",
-                    )
-            if selected_symbol:
-                with action_col:
-                    if st.button("선택 해제", key=f"clear-selected-holding:{account_id}", width="stretch"):
-                        st.session_state[selection_key] = ""
-                        st.rerun()
+            st.markdown("### 선택 종목 트렌드")
 
             if not selected_symbol:
                 st.info("자산 배분 트리맵에서 종목 타일을 누르면 여기에서 해당 종목 트렌드가 표시됩니다.")
             elif selected_symbol == "CASH":
+                with st.container(border=True, key="dashboard-trend-controls"):
+                    _, action_col = st.columns((1, 0.36), gap="medium", vertical_alignment="bottom")
+                    with action_col:
+                        if st.button("선택 해제", key=f"clear-selected-holding:{account_id}", width="stretch"):
+                            st.session_state[selection_key] = ""
+                            st.rerun()
                 st.info("예수금은 시장 가격 추이가 없어서 개별 트렌드 차트를 표시하지 않습니다.")
             else:
                 selected_holding_name = dashboard_selected_holding_name(holdings, selected_symbol)
+                with st.container(border=True, key="dashboard-trend-controls"):
+                    period_col, measure_col, action_col = st.columns(
+                        (1.4, 1.2, 0.55),
+                        gap="small",
+                        vertical_alignment="bottom",
+                    )
+                    with period_col:
+                        period = st.segmented_control(
+                            "기간",
+                            options=["1mo", "3mo", "6mo", "1y"],
+                            format_func=label_period,
+                            default=period,
+                            key=trend_period_key,
+                        )
+                    with measure_col:
+                        selected_trend_measure = st.segmented_control(
+                            "표시 지표",
+                            options=["market_value", "profit_rate", "close"],
+                            format_func=label_detail_measure,
+                            default="market_value",
+                            key=f"selected-trend-measure:{account_id}",
+                        )
+                    with action_col:
+                        if st.button("선택 해제", key=f"clear-selected-holding:{account_id}", width="stretch"):
+                            st.session_state[selection_key] = ""
+                            st.rerun()
                 selected_holdings = [
                     holding for holding in holdings if normalize_holding_symbol(holding.get("symbol")) == selected_symbol
                 ]
                 if not selected_holdings:
                     st.info("선택한 종목을 현재 보유 목록에서 찾지 못했습니다.")
                 else:
-                    st.caption(f"선택 종목: `{selected_holding_name}` · 기준 기간: `{label_period(period)}`")
                     try:
                         with st.spinner(f"{selected_holding_name} 추이를 불러오는 중입니다..."):
                             _, selected_holding_trend = build_portfolio_trend(selected_holdings, period=period)
@@ -2798,10 +2829,12 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]], roll
                         else:
                             selected_frame = selected_holding_trend.sort_values("date").copy()
                             selected_measure = str(selected_trend_measure or "market_value")
+                            selected_symbol_code = str(selected_holdings[0].get("symbol") or selected_symbol).strip() or selected_symbol
                             if echarts_available:
                                 trend_options = selected_holding_trend_options(
                                     selected_frame,
                                     selected_holding_name=selected_holding_name,
+                                    selected_symbol_code=selected_symbol_code,
                                     measure=selected_measure,
                                     period_label=label_period(period),
                                 )
@@ -2817,6 +2850,9 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]], roll
                                 trend_chart = selected_holding_trend_chart(
                                     selected_frame,
                                     measure=selected_measure,
+                                    selected_holding_name=selected_holding_name,
+                                    selected_symbol_code=selected_symbol_code,
+                                    period_label=label_period(period),
                                 )
                                 st.altair_chart(
                                     style_dashboard_altair_chart(trend_chart, height=DASHBOARD_DETAIL_CHART_HEIGHT),
