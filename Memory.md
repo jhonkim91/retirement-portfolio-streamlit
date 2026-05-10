@@ -20,6 +20,12 @@
 - [x] 과거 스냅샷 재동기화와 레거시 이자 반영 복구
 - [x] 계좌 삭제 기능 추가
 - [x] 서버 일별 이자 거래 기록 점검 및 제거
+- [x] 저장소 기준 검증/자동 푸시 배포 스크립트 추가
+- [x] 대시보드 자산 배분/보유 종목 수익률 재배치 및 선택 종목 트렌드 추가
+- [x] 대시보드 수익률 바 원복 및 설치 원칙 기록
+- [x] 보유 종목 수익률 라벨 표시 및 선택 종목 트렌드 선택 payload 수정
+- [x] 자산 배분 수익률 바 실제 최대값 기준 및 범위 밖 투명 처리
+- [x] 선택 종목 트렌드 ECharts 디자인 전환 및 기능 확장
 
 ## 프로젝트 유형
 - Python 프로젝트
@@ -299,6 +305,123 @@ streamlit run app.py
 - 비고:
   - 이번 서버 정리는 계좌 자체나 다른 거래 유형은 건드리지 않고, 잔존 이자 기록만 제거
   - `jhonkim2025@gmail.com` 운영 계정 전체 삭제나 계좌 삭제는 수행하지 않음
+
+## 2026-05-10 저장소 검증/자동 푸시 배포 스크립트 추가
+- 변경 파일: `scripts/verify_and_push_deploy.py`, `tests/test_verify_and_push_deploy.py`, `Memory.md`
+- 변경 내용:
+  - 저장소 기준 로컬 검증(`compileall`, `unittest`) 통과 후 `git add`, `git commit`, `git push`, 배포 검증 스크립트 실행까지 한 번에 처리하는 `scripts/verify_and_push_deploy.py` 추가
+  - 로컬 DB, 배포 산출물, Playwright 캐시, 임시 이미지 등 자동 커밋에서 제외할 기본 패턴을 스크립트 내부에 반영
+  - 비추적 파일은 `--include-untracked`로 명시한 경우에만 자동 스테이징하도록 막아, 검토 없이 예상 밖 파일이 푸시되지 않도록 안전장치 추가
+  - `tests/test_verify_and_push_deploy.py`에서 Git 상태 파싱, 제외 경로 판별, 비추적 파일 분류 로직을 단위 테스트로 추가
+- 검증:
+  - `python -m compileall app.py src scripts tests` 성공
+  - `python -m unittest discover -s tests -p "test_*.py"` 성공
+  - 결과: 단위 테스트 `45`건 통과
+  - `python scripts/verify_and_push_deploy.py --dry-run --commit-message "Add deployment helper" --include-untracked scripts/verify_and_push_deploy.py tests/test_verify_and_push_deploy.py` 성공
+- 비고:
+  - 이번 요청에서는 스크립트만 추가했고 실제 커밋/푸시/배포는 실행하지 않음
+  - 사용자가 다음 대화에서 배포 문제를 별도로 언급하지 않으면 배포 성공으로 간주하기로 합의
+
+## 2026-05-10 대시보드 자산 배분/선택 종목 트렌드 정리
+- 변경 파일: `app.py`, `Memory.md`
+- 변경 내용:
+  - `자산 배분` 패널을 전체 폭으로 확장하고, `보유 종목 수익률` 패널을 그 아래 전체 폭 섹션으로 재배치
+  - 기존 하단 `추이` 섹션을 제거하고, 대신 `선택 종목 트렌드` 박스를 추가해 자산 배분과 같은 화면 흐름에서 개별 종목 가격/수익률 추이를 확인하도록 정리
+  - `선택 종목 트렌드` 박스 상단에 기간 선택과 지표 선택을 배치하고, 선택 해제 버튼으로 현재 선택 종목 상태를 지울 수 있도록 추가
+  - 트리맵 선택 결과를 대시보드 세션 상태에 반영하는 선택 보조 함수를 추가하고, 현재 보유 종목 표 설명을 새 레이아웃에 맞게 수정
+  - 후속 조정으로 `선택 종목 트렌드`와 `보유 종목 수익률`을 같은 행의 2열 50:50 레이아웃으로 변경
+  - `자산 배분` 수익률 바를 현재 보유 종목의 실제 수익률 최소/최대 기준으로 다시 계산하고, `select_slider`를 이용해 종목별 수익률 포인트 단위로 드래그되도록 변경
+  - 내부 ECharts `visualMap`은 표시를 숨긴 상태로 현재 선택 범위만 반영하고, 패널 하단에 실제 드래그용 수익률 바와 최소/최대 안내 캡션을 노출
+- 검증:
+  - `python -m compileall app.py src scripts tests` 성공
+  - `python -m unittest discover -s tests -p "test_*.py"` 성공
+  - 결과: 단위 테스트 `45`건 통과
+  - 로컬 SQLite 데모 모드 서버 `8513` 포트에서 Playwright headless 검증
+  - 결과:
+    - `자산 배분`, `선택 종목 트렌드`, `보유 종목 수익률` 섹션 노출 확인
+    - 기존 하단 `추이` 섹션 문구 미노출 확인
+  - 로컬 SQLite 데모 모드 서버 `8514` 포트에서 Playwright headless 재검증
+  - 결과:
+    - `수익률 바` 레이블 노출 확인
+    - `현재 보유 종목 기준 최소 ... 최대 ...` 캡션 노출 확인
+    - Streamlit 세션 상태 경고 문구 미노출 확인
+- 산출물:
+  - `artifacts/dashboard-allocation-selected-trend-layout.png`
+- 비고:
+  - 캔버스 기반 트리맵 클릭은 좌표 자동화로 선택 상태를 안정적으로 재현하기 어려워, 실제 타일 클릭 상호작용은 실화면 수동 확인이 한 번 더 필요할 수 있음
+
+## 2026-05-10 대시보드 수익률 바 원복 및 설치 원칙 기록
+- 변경 파일: `app.py`, `AGENTS.md`, `Memory.md`
+- 변경 내용:
+  - `자산 배분` 패널 하단의 외부 `select_slider` 수익률 바를 제거
+  - 트리맵 내부 ECharts `visualMap` 수익률 바가 다시 직접 보이도록 `calculable`, `realtime`, `dimension`, `visualDimension`, 하단 여백 계산을 이전 방식으로 복원
+  - 프로젝트 `AGENTS.md`에 "필요한 패키지/도구가 없으면 프로젝트 로컬 환경에 설치하면서 진행하고, 설치 내역과 이유를 `Memory.md`에 기록" 규칙 추가
+- 설치:
+  - 추가 설치 없음
+  - 브라우저 검증은 기존 프로젝트 로컬 `.venv`의 `playwright` 환경을 재사용
+- 검증:
+  - `python -m compileall app.py src scripts tests` 성공
+  - `python -m unittest discover -s tests -p "test_*.py"` 성공
+  - 결과: 단위 테스트 `45`건 통과
+  - 로컬 Streamlit 서버 `8516` 포트 기동 및 `/_stcore/health` 응답 `ok` 확인
+  - 코드 확인 결과 `app.py`에서 `select_slider("수익률 바", ...)` 제거, `visualMap.calculable=True`, `visualMap.realtime=True`, `visualMap.dimension=2`, `series.visualDimension=2` 상태 복원 확인
+- 미완료:
+  - Streamlit 리런 특성 때문에 Playwright 기반 실화면 자동 캡처는 이번 턴에서 안정적으로 끝내지 못함
+  - 사용자가 실화면에서 트리맵 하단 수익률 바 표시를 한 번 확인하면 최종 체감 검증이 완료됨
+
+## 2026-05-10 보유 종목 수익률 라벨 표시 및 선택 종목 트렌드 선택 payload 수정
+- 변경 파일: `app.py`, `tests/test_app_dashboard.py`, `Memory.md`
+- 변경 내용:
+  - `보유 종목 수익률` ECharts 막대차트의 모든 막대에 수익률 라벨이 항상 보이도록 수정
+  - 선택 종목이 있을 때만 라벨 강조도가 올라가고, 나머지 라벨은 약하게 유지되도록 조정
+  - Altair fallback 차트에도 수익률 텍스트 라벨을 함께 그리도록 보완
+  - `선택 종목 트렌드`가 안 뜨던 원인을 확인했고, `streamlit_echarts`가 selection state를 최상위가 아니라 `selection` 키 내부에 넣어 반환하는데 `app.py`가 이를 직접 해석하지 못하던 문제를 수정
+  - 회귀 방지를 위해 중첩 selection payload 해석과 막대 라벨 표시를 검증하는 테스트 추가
+- 설치:
+  - 추가 설치 없음
+- 검증:
+  - `python -m compileall app.py src scripts tests` 성공
+  - `python -m unittest discover -s tests -p "test_*.py"` 성공
+  - 결과: 단위 테스트 `48`건 통과
+- 비고:
+  - 선택 종목 트렌드의 차트 데이터 자체는 여전히 선택 종목의 시세 이력 조회 결과에 따라 비어 있을 수 있음
+  - 이번 수정으로는 "선택 이벤트가 세션 상태로 전달되지 않던 문제"를 우선 복구함
+
+## 2026-05-10 자산 배분 수익률 바 실제 최대값 기준 및 범위 밖 투명 처리
+- 변경 파일: `app.py`, `tests/test_app_dashboard.py`, `Memory.md`
+- 변경 내용:
+  - `자산 배분` 트리맵 `visualMap`의 고정 `-100 ~ 100` 스케일을 제거하고, 현재 보유 종목의 실제 최소/최대 수익률을 기준값으로 사용하도록 변경
+  - 트리맵 색상 필터 차원을 실제 `profit_rate` 값으로 맞춰, 막대바 드래그 범위와 타일 색상 판정 기준이 동일하게 동작하도록 정리
+  - 막대바 범위 밖 타일은 반투명이 아니라 fill이 완전히 사라지도록 `outOfRange.colorAlpha = 0.0`으로 조정
+  - 회귀 방지를 위해 `visualMap` 최소/최대가 실제 수익률을 따르는지, 범위 밖 타일이 투명 처리되는지 테스트 추가
+- 설치:
+  - 추가 설치 없음
+- 검증:
+  - `python -m compileall app.py src scripts tests` 성공
+  - `python -m unittest discover -s tests -p "test_*.py"` 성공
+  - 결과: 단위 테스트 `50`건 통과
+- 비고:
+  - 현재 구현은 수익률 바의 좌우 끝값을 현재 화면 보유 종목의 실제 최소/최대 수익률로 직접 사용함
+  - 수익률 범위 밖 타일은 배경 fill만 투명해지고, 트리맵 경계선 구조는 유지됨
+
+## 2026-05-10 선택 종목 트렌드 ECharts 디자인 전환 및 기능 확장
+- 변경 파일: `app.py`, `tests/test_app_dashboard.py`, `Memory.md`
+- 변경 내용:
+  - 기존 Altair 중심 `선택 종목 트렌드`를 ECharts 옵션 기반으로 확장하고, ECharts 사용 가능 시 스무스 라인 + area fill + 하단 dataZoom slider + toolbox UI로 렌더링하도록 변경
+  - 차트 제목은 현재 화면 제목인 `선택 종목 트렌드`로 유지하고, 부제에는 선택 종목명·현재 지표·기간을 표시하도록 구성
+  - tooltip에서 현재 지표뿐 아니라 평가금액, 수익률, 종가를 함께 확인할 수 있도록 보강
+  - toolbox에 `saveAsImage`, `dataView`, `dataZoom`, `restore`, `magicType(line/bar)` 기능 추가
+  - 수익률 지표 선택 시 0% 기준선을 함께 보여 주도록 `markLine` 추가
+  - ECharts 미사용 환경에서는 기존 Altair fallback을 유지
+- 설치:
+  - 추가 설치 없음
+- 검증:
+  - `python -m compileall app.py src scripts tests` 성공
+  - `python -m unittest discover -s tests -p "test_*.py"` 성공
+  - 결과: 단위 테스트 `52`건 통과
+- 비고:
+  - 구현 참고 방향은 사용자가 전달한 Streamlit ECharts 예시 스타일과 Apache ECharts의 smooth line, area chart, dataZoom/toolbox 상호작용 구성
+  - 실브라우저 시각 확인은 이번 턴에서 자동화하지 않았고, 현재는 옵션/회귀 테스트 기준으로 검증 완료
 
 ## 다음 작업 후보
 - 로컬 `streamlit run app.py` 실사용 흐름에서 현금 조정 저장 후 데이터 반영 체감 속도 재확인

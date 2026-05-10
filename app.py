@@ -23,7 +23,6 @@ from src.analytics import (
     cumulative_contribution_frame,
     holdings_frame,
     realized_summary,
-    snapshot_trend_frame,
 )
 
 import src.auth as app_auth
@@ -163,7 +162,6 @@ PERIOD_LABELS = {
 }
 DASHBOARD_OVERVIEW_PANEL_HEIGHT = 560
 DASHBOARD_OVERVIEW_CHART_HEIGHT = 400
-DASHBOARD_TREND_CHART_HEIGHT = 340
 DASHBOARD_DETAIL_CHART_HEIGHT = 300
 DASHBOARD_HOLDINGS_TABLE_HEIGHT = 380
 PRODUCT_TYPE_LABELS = {
@@ -986,8 +984,7 @@ def inject_app_styles() -> None:
         }
 
         .st-key-dashboard-card-cash [data-testid="stNumberInput"] label p,
-        .st-key-dashboard-panel-trend [data-testid="stSegmentedControl"] label p,
-        .st-key-dashboard-panel-trend [data-testid="stMultiSelect"] label p {
+        .st-key-dashboard-panel-selected-trend [data-testid="stSegmentedControl"] label p {
             color: #607285;
             font-weight: 700;
         }
@@ -1367,6 +1364,88 @@ def dashboard_holding_selection_key(account_id: int) -> str:
     return f"dashboard-selected-holding:{int(account_id)}"
 
 
+def dashboard_trend_period_key(account_id: int) -> str:
+    """계좌별 대시보드 추이 기간 세션 키를 반환한다."""
+
+    return f"trend-period:{int(account_id)}"
+
+
+def extract_dashboard_chart_symbol(event_payload: Any) -> str:
+    """ECharts 클릭/선택 payload에서 원시 선택 값을 추출한다."""
+
+    if not isinstance(event_payload, dict):
+        return ""
+    selection_payload = event_payload
+    nested_selection = event_payload.get("selection")
+    if isinstance(nested_selection, dict):
+        selection_payload = nested_selection
+    elif isinstance(event_payload.get("chart_event"), dict):
+        selection_payload = event_payload["chart_event"]
+
+    if isinstance(selection_payload.get("points"), list) and selection_payload["points"]:
+        first_point = selection_payload["points"][0]
+        if isinstance(first_point, dict):
+            return str(first_point.get("name") or "").strip()
+    return str(
+        selection_payload.get("selection_symbol")
+        or selection_payload.get("symbol")
+        or selection_payload.get("name")
+        or ""
+    ).strip()
+
+
+def resolve_dashboard_selected_symbol(holdings: list[dict[str, Any]], event_payload: Any) -> str:
+    """차트에서 선택한 이름/심볼을 현재 보유 종목 심볼로 해석한다."""
+
+    raw_value = extract_dashboard_chart_symbol(event_payload)
+    normalized_value = normalize_holding_symbol(raw_value)
+    if not normalized_value:
+        return ""
+    if normalized_value == "CASH" or raw_value == "예수금":
+        return "CASH"
+
+    for holding in holdings:
+        holding_symbol = normalize_holding_symbol(holding.get("symbol"))
+        holding_name = str(holding.get("product_name") or "").strip()
+        if holding_symbol == normalized_value or normalize_holding_symbol(holding_name) == normalized_value:
+            return holding_symbol
+    return ""
+
+
+def sync_dashboard_selected_holding(
+    account_id: int,
+    event_payload: Any,
+    *,
+    holdings: list[dict[str, Any]],
+) -> bool:
+    """차트 클릭 결과를 계좌별 선택 종목 세션 상태와 동기화한다."""
+
+    selected_symbol = resolve_dashboard_selected_symbol(holdings, event_payload)
+    if not selected_symbol:
+        return False
+
+    selection_key = dashboard_holding_selection_key(account_id)
+    current_symbol = normalize_holding_symbol(st.session_state.get(selection_key))
+    if current_symbol == selected_symbol:
+        return False
+
+    st.session_state[selection_key] = selected_symbol
+    return True
+
+
+def dashboard_selected_holding_name(holdings: list[dict[str, Any]], selected_symbol: str | None) -> str:
+    """현재 선택된 심볼에 대응하는 보유 종목 표시명을 반환한다."""
+
+    normalized_symbol = normalize_holding_symbol(selected_symbol)
+    if normalized_symbol == "CASH":
+        return "예수금"
+    for holding in holdings:
+        holding_symbol = normalize_holding_symbol(holding.get("symbol"))
+        if holding_symbol == normalized_symbol:
+            return str(holding.get("product_name") or holding.get("symbol") or normalized_symbol)
+    return normalized_symbol
+
+
 def interpolate_hex_color(start_hex: str, end_hex: str, ratio: float) -> str:
     """두 색상 사이를 0~1 비율로 보간한다."""
 
@@ -1559,31 +1638,6 @@ def allocation_chart(summary: dict[str, Any]) -> alt.Chart | None:
     )
 
 
-def scale_treemap_visual_value(
-    raw_rate: float | None,
-    *,
-    minimum: float,
-    maximum: float,
-    visual_min: float = -100,
-    visual_max: float = 100,
-    visual_min_bound: float = -40,
-    visual_max_bound: float = 40,
-) -> float:
-    """수익률 값을 treemap visualMap용 고정 구간으로 스케일링한다."""
-
-    if raw_rate is None:
-        return 0.0
-
-    rate = float(raw_rate or 0)
-    if rate > 0 and maximum > 0:
-        scaled = visual_max_bound + ((rate / maximum) * (visual_max - visual_max_bound))
-        return max(visual_max_bound, min(visual_max, scaled))
-    if rate < 0 and minimum < 0:
-        scaled = visual_min_bound + ((rate / minimum) * (visual_min - visual_min_bound))
-        return max(visual_min, min(visual_min_bound, scaled))
-    return 0.0
-
-
 def allocation_treemap_options(
     summary: dict[str, Any],
     holdings: list[dict[str, Any]],
@@ -1596,18 +1650,19 @@ def allocation_treemap_options(
     if not nodes:
         return None
 
-    visual_min = -100.0
-    visual_max = 100.0
-    visual_min_bound = -40.0
-    visual_max_bound = 40.0
     leaf_rates = [
-        float(child.get("profit_rate") or 0)
+        round(float(child.get("profit_rate") or 0), 2)
         for node in nodes
         for child in (node.get("children") or [])
         if child.get("profit_rate") is not None
     ]
     rate_min = min(leaf_rates) if leaf_rates else 0.0
     rate_max = max(leaf_rates) if leaf_rates else 0.0
+    visual_min = float(rate_min)
+    visual_max = float(rate_max)
+    if visual_min == visual_max:
+        visual_min -= 0.01
+        visual_max += 0.01
 
     for node in nodes:
         children = node.get("children") or []
@@ -1617,21 +1672,11 @@ def allocation_treemap_options(
         for child in children:
             revenue_value = float(child.get("value") or 0)
             profit_rate = child.get("profit_rate")
-            scaled_visual = scale_treemap_visual_value(
-                None if profit_rate is None else float(profit_rate),
-                minimum=rate_min,
-                maximum=rate_max,
-                visual_min=visual_min,
-                visual_max=visual_max,
-                visual_min_bound=visual_min_bound,
-                visual_max_bound=visual_max_bound,
-            )
             child["revenue_value"] = round(revenue_value, 4)
-            child["visual_rate"] = round(scaled_visual, 4)
+            child_rate = round(float(profit_rate or 0), 4)
             child["value"] = [
                 round(revenue_value, 4),
-                round(float(profit_rate or 0), 4),
-                round(scaled_visual, 4),
+                child_rate,
             ]
             child["itemStyle"] = {
                 "borderColor": "#F8FAFC",
@@ -1644,22 +1689,11 @@ def allocation_treemap_options(
                 weighted_rate_weight += revenue_value
 
         parent_rate = (weighted_rate_total / weighted_rate_weight) if weighted_rate_weight else 0.0
-        parent_scaled = scale_treemap_visual_value(
-            parent_rate,
-            minimum=rate_min,
-            maximum=rate_max,
-            visual_min=visual_min,
-            visual_max=visual_max,
-            visual_min_bound=visual_min_bound,
-            visual_max_bound=visual_max_bound,
-        )
         node["revenue_value"] = round(total_value, 4)
         node["profit_rate"] = round(parent_rate, 4)
-        node["visual_rate"] = round(parent_scaled, 4)
         node["value"] = [
             round(total_value, 4),
             round(parent_rate, 4),
-            round(parent_scaled, 4),
         ]
 
     tooltip_formatter = None
@@ -1731,7 +1765,7 @@ def allocation_treemap_options(
             "type": "continuous",
             "min": visual_min,
             "max": visual_max,
-            "dimension": 2,
+            "dimension": 1,
             "seriesIndex": 0,
             "calculable": True,
             "realtime": True,
@@ -1752,7 +1786,7 @@ def allocation_treemap_options(
                 "color": ["#F1646C", "#F2D675", "#9CCB6D"],
             },
             "outOfRange": {
-                "colorAlpha": 0.35,
+                "colorAlpha": 0.0,
             },
             "borderColor": "#D7DEE5",
             "padding": 0,
@@ -1770,7 +1804,7 @@ def allocation_treemap_options(
                 "sort": "desc",
                 "breadcrumb": {"show": False},
                 "visibleMin": 1,
-                "visualDimension": 2,
+                "visualDimension": 1,
                 "visualMin": visual_min,
                 "visualMax": visual_max,
                 "label": {
@@ -1872,11 +1906,13 @@ def holdings_bar_options(frame: pd.DataFrame, *, selected_symbol: str | None = N
                     "opacity": 1 if is_selected else 0.92,
                 },
                 "label": {
-                    "show": is_selected,
+                    "show": True,
                     "position": "top" if rate >= 0 else "bottom",
+                    "distance": 8,
                     "formatter": format_pct(rate),
-                    "color": "#0D3559",
-                    "fontWeight": 700,
+                    "color": "#0D3559" if is_selected else "#4B5D6B",
+                    "fontWeight": 700 if is_selected else 600,
+                    "opacity": 1 if is_selected or not selected_key else 0.78,
                 },
             }
         )
@@ -1916,7 +1952,7 @@ def holdings_bar_options(frame: pd.DataFrame, *, selected_symbol: str | None = N
         "backgroundColor": "transparent",
         "animationDuration": 260,
         "animationDurationUpdate": 320,
-        "grid": {"top": 24, "right": 12, "bottom": 92, "left": 56},
+        "grid": {"top": 56, "right": 12, "bottom": 96, "left": 56},
         "tooltip": {
             "trigger": "item",
             "backgroundColor": "rgba(21, 40, 31, 0.92)",
@@ -1981,8 +2017,9 @@ def holdings_bar_fallback_chart(frame: pd.DataFrame, *, selected_symbol: str | N
     chart_frame["selected_opacity"] = chart_frame["selection_symbol"].apply(
         lambda value: 1.0 if value == selected_key else (0.92 if not selected_key else 0.48)
     )
+    chart_frame["profit_rate_label"] = chart_frame["profit_rate"].apply(format_pct)
     display_order = chart_frame["display_name"].tolist()
-    chart = (
+    bars = (
         alt.Chart(chart_frame)
         .mark_bar(cornerRadiusTopLeft=8, cornerRadiusTopRight=8, size=52)
         .encode(
@@ -2020,7 +2057,352 @@ def holdings_bar_fallback_chart(frame: pd.DataFrame, *, selected_symbol: str | N
             ],
         )
     )
-    return style_dashboard_altair_chart(chart, height=DASHBOARD_OVERVIEW_CHART_HEIGHT)
+    labels = (
+        alt.Chart(chart_frame)
+        .mark_text(dy=-8, fontSize=11, fontWeight="bold", color="#0D3559")
+        .encode(
+            x=alt.X("display_name:N", sort=display_order),
+            y=alt.Y("profit_rate:Q"),
+            text=alt.Text("profit_rate_label:N"),
+            opacity=alt.Opacity("selected_opacity:Q", legend=None),
+        )
+    )
+    return style_dashboard_altair_chart(bars + labels, height=DASHBOARD_OVERVIEW_CHART_HEIGHT)
+
+
+def selected_holding_trend_chart(frame: pd.DataFrame, *, measure: str) -> alt.Chart:
+    """선택 종목 단일 추이 차트를 만든다."""
+
+    measure_key = str(measure or "market_value")
+    measure_title = label_detail_measure(measure_key)
+    measure_format = ",.2f" if measure_key == "close" else (".2f" if measure_key == "profit_rate" else ",.0f")
+    return (
+        alt.Chart(frame)
+        .mark_line(point=True, strokeWidth=3, color="#0F766E")
+        .encode(
+            x=alt.X("date:T", title="날짜"),
+            y=alt.Y(f"{measure_key}:Q", title=measure_title),
+            tooltip=[
+                alt.Tooltip("product_name:N", title="종목"),
+                alt.Tooltip("date:T", title="날짜"),
+                alt.Tooltip(f"{measure_key}:Q", title=measure_title, format=measure_format),
+                alt.Tooltip("market_value:Q", title="평가금액", format=",.0f"),
+                alt.Tooltip("profit_rate:Q", title="수익률 (%)", format=".2f"),
+                alt.Tooltip("close:Q", title="종가", format=",.2f"),
+            ],
+        )
+    )
+
+
+def selected_holding_trend_options(
+    frame: pd.DataFrame,
+    *,
+    selected_holding_name: str,
+    measure: str,
+    period_label: str,
+) -> dict[str, Any] | None:
+    """선택 종목 트렌드 ECharts 옵션을 만든다."""
+
+    if frame.empty:
+        return None
+
+    measure_key = str(measure or "market_value")
+    measure_title = label_detail_measure(measure_key)
+    working = frame.sort_values("date").copy()
+    working["date"] = pd.to_datetime(working["date"])
+    date_format = "%m-%d" if str(period_label) in {"1개월", "3개월"} else "%Y-%m"
+    x_labels = working["date"].dt.strftime(date_format).tolist()
+    full_dates = working["date"].dt.strftime("%Y-%m-%d").tolist()
+
+    series_data: list[dict[str, Any]] = []
+    for row, label_date, full_date in zip(working.to_dict(orient="records"), x_labels, full_dates):
+        series_data.append(
+            {
+                "value": round(float(row.get(measure_key) or 0), 4),
+                "date": full_date,
+                "axis_label": label_date,
+                "product_name": selected_holding_name,
+                "market_value": round(float(row.get("market_value") or 0), 4),
+                "profit_rate": round(float(row.get("profit_rate") or 0), 4),
+                "close": round(float(row.get("close") or 0), 4),
+            }
+        )
+
+    axis_label_formatter: Any = None
+    tooltip_formatter: Any = None
+    if JsCode is not None:
+        if measure_key == "profit_rate":
+            axis_label_formatter = JsCode(
+                """
+                function(value) {
+                    return Number(value || 0).toFixed(2) + '%';
+                }
+                """
+            )
+        elif measure_key == "close":
+            axis_label_formatter = JsCode(
+                """
+                function(value) {
+                    return Number(value || 0).toLocaleString('ko-KR', {
+                        minimumFractionDigits: 0,
+                        maximumFractionDigits: 2
+                    });
+                }
+                """
+            )
+        else:
+            axis_label_formatter = JsCode(
+                """
+                function(value) {
+                    return Number(value || 0).toLocaleString('ko-KR');
+                }
+                """
+            )
+
+        tooltip_formatter = JsCode(
+            f"""
+            function(params) {{
+                if (!params || !params.length) {{
+                    return '';
+                }}
+                var point = params[0].data || {{}};
+                var primaryValue = Number(point.value || 0);
+                var primaryText = '';
+                if ({measure_key!r} === 'profit_rate') {{
+                    primaryText = primaryValue.toFixed(2) + '%';
+                }} else if ({measure_key!r} === 'close') {{
+                    primaryText = primaryValue.toLocaleString('ko-KR', {{
+                        minimumFractionDigits: 0,
+                        maximumFractionDigits: 2
+                    }});
+                }} else {{
+                    primaryText = '₩' + Math.round(primaryValue).toLocaleString('ko-KR');
+                }}
+                return [
+                    '<div style="font-weight:700; margin-bottom:6px;">' + String(point.product_name || {selected_holding_name!r}) + '</div>',
+                    '날짜: ' + String(point.date || ''),
+                    {measure_title!r} + ': ' + primaryText,
+                    '평가금액: ₩' + Math.round(Number(point.market_value || 0)).toLocaleString('ko-KR'),
+                    '수익률: ' + Number(point.profit_rate || 0).toFixed(2) + '%',
+                    '종가: ' + Number(point.close || 0).toLocaleString('ko-KR', {{
+                        minimumFractionDigits: 0,
+                        maximumFractionDigits: 2
+                    }})
+                ].join('<br/>');
+            }}
+            """
+        )
+
+    y_axis_config: dict[str, Any] = {
+        "type": "value",
+        "name": measure_title,
+        "nameTextStyle": {"color": "#607285", "fontWeight": 700, "padding": [0, 0, 0, 4]},
+        "axisLine": {"show": False},
+        "axisTick": {"show": False},
+        "splitLine": {"lineStyle": {"color": "#D7E2E7"}},
+        "axisLabel": {"color": "#607285"},
+    }
+    if axis_label_formatter is not None:
+        y_axis_config["axisLabel"]["formatter"] = axis_label_formatter
+
+    return {
+        "backgroundColor": "transparent",
+        "animationDuration": 260,
+        "animationDurationUpdate": 320,
+        "title": {
+            "text": "선택 종목 트렌드",
+            "subtext": f"{selected_holding_name} · {measure_title} · {period_label}",
+            "left": "center",
+            "top": 6,
+            "textStyle": {
+                "fontSize": 16,
+                "fontWeight": 700,
+                "color": "#1E293B",
+            },
+            "subtextStyle": {
+                "fontSize": 11,
+                "color": "#64748B",
+            },
+        },
+        "legend": {
+            "show": True,
+            "bottom": 0,
+            "left": "center",
+            "itemWidth": 10,
+            "itemHeight": 10,
+            "icon": "circle",
+            "textStyle": {
+                "color": "#64748B",
+                "fontSize": 12,
+            },
+        },
+        "grid": {
+            "top": 76,
+            "right": 16,
+            "bottom": 92,
+            "left": 58,
+            "containLabel": False,
+        },
+        "tooltip": {
+            "trigger": "axis",
+            "axisPointer": {
+                "type": "line",
+                "lineStyle": {
+                    "color": "#94A3B8",
+                    "width": 1,
+                    "type": "dashed",
+                },
+            },
+            "backgroundColor": "#FFFFFF",
+            "borderColor": "#E2E8F0",
+            "borderWidth": 1,
+            "borderRadius": 12,
+            "padding": [10, 12],
+            "textStyle": {"color": "#1E293B", "fontSize": 12},
+            "extraCssText": "box-shadow: 0 8px 24px rgba(15, 23, 42, 0.14);",
+            **({"formatter": tooltip_formatter} if tooltip_formatter is not None else {}),
+        },
+        "toolbox": {
+            "show": True,
+            "top": 8,
+            "right": 0,
+            "itemSize": 16,
+            "iconStyle": {
+                "borderColor": "#6B7FC8",
+            },
+            "emphasis": {
+                "iconStyle": {
+                    "borderColor": "#0B6BDA",
+                }
+            },
+            "feature": {
+                "saveAsImage": {
+                    "show": True,
+                    "title": "이미지 저장",
+                    "name": f"{selected_holding_name}-{measure_title}-trend",
+                },
+                "dataView": {
+                    "show": True,
+                    "title": "데이터 보기",
+                    "readOnly": True,
+                    "lang": ["데이터 보기", "닫기", "새로고침"],
+                },
+                "dataZoom": {
+                    "show": True,
+                    "title": {
+                        "zoom": "확대",
+                        "back": "되돌리기",
+                    },
+                    "yAxisIndex": "none",
+                },
+                "restore": {
+                    "show": True,
+                    "title": "초기화",
+                },
+                "magicType": {
+                    "show": True,
+                    "type": ["line", "bar"],
+                    "title": {
+                        "line": "라인 차트",
+                        "bar": "막대 차트",
+                    },
+                },
+            },
+        },
+        "xAxis": {
+            "type": "category",
+            "boundaryGap": False,
+            "data": x_labels,
+            "axisLine": {"lineStyle": {"color": "#C8D4DA"}},
+            "axisTick": {"show": False},
+            "axisLabel": {
+                "color": "#607285",
+                "hideOverlap": True,
+                "margin": 12,
+            },
+        },
+        "yAxis": y_axis_config,
+        "dataZoom": [
+            {
+                "type": "inside",
+                "zoomOnMouseWheel": True,
+                "moveOnMouseMove": True,
+                "moveOnMouseWheel": True,
+            },
+            {
+                "type": "slider",
+                "height": 22,
+                "bottom": 30,
+                "borderColor": "#D7DEE5",
+                "backgroundColor": "#F8FAFC",
+                "fillerColor": "rgba(11, 107, 218, 0.12)",
+                "handleSize": 18,
+                "brushSelect": False,
+                "dataBackground": {
+                    "lineStyle": {"color": "rgba(11, 107, 218, 0.55)"},
+                    "areaStyle": {"color": "rgba(11, 107, 218, 0.08)"},
+                },
+                "selectedDataBackground": {
+                    "lineStyle": {"color": "#0B6BDA"},
+                    "areaStyle": {"color": "rgba(11, 107, 218, 0.16)"},
+                },
+            },
+        ],
+        "series": [
+            {
+                "name": measure_title,
+                "type": "line",
+                "smooth": True,
+                "showSymbol": True,
+                "symbol": "circle",
+                "symbolSize": 7,
+                "data": series_data,
+                "lineStyle": {
+                    "color": "#0B6BDA",
+                    "width": 3,
+                },
+                "itemStyle": {
+                    "color": "#FFFFFF",
+                    "borderColor": "#0B6BDA",
+                    "borderWidth": 2,
+                },
+                "areaStyle": {
+                    "color": {
+                        "type": "linear",
+                        "x": 0,
+                        "y": 0,
+                        "x2": 0,
+                        "y2": 1,
+                        "colorStops": [
+                            {"offset": 0, "color": "rgba(11, 107, 218, 0.22)"},
+                            {"offset": 1, "color": "rgba(11, 107, 218, 0.02)"},
+                        ],
+                    }
+                },
+                "emphasis": {
+                    "focus": "series",
+                },
+                **(
+                    {
+                        "markLine": {
+                            "symbol": "none",
+                            "silent": True,
+                            "lineStyle": {
+                                "color": "#94A3B8",
+                                "type": "dashed",
+                            },
+                            "data": [{"yAxis": 0}],
+                        }
+                    }
+                    if measure_key == "profit_rate"
+                    else {}
+                ),
+            }
+        ],
+        "aria": {
+            "enabled": True,
+        },
+    }
 
 
 def show_holdings_table(frame: pd.DataFrame, *, height: int = 420) -> None:
@@ -2297,9 +2679,21 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]], roll
         if float(summary["total_principal"] or 0)
         else 0.0
     )
+    account_id = int(account["id"])
     echarts_available = st_echarts is not None
-    selected_symbol = None
-    overview_frame = holdings_overview_frame(holdings, selected_symbol=None, limit=10)
+    selection_key = dashboard_holding_selection_key(account_id)
+    trend_period_key = dashboard_trend_period_key(account_id)
+    available_symbols = {
+        normalize_holding_symbol(holding.get("symbol"))
+        for holding in holdings
+        if normalize_holding_symbol(holding.get("symbol"))
+    }
+    selected_symbol = normalize_holding_symbol(st.session_state.get(selection_key))
+    if selected_symbol and selected_symbol not in available_symbols and selected_symbol != "CASH":
+        st.session_state[selection_key] = ""
+        selected_symbol = ""
+    period = str(st.session_state.get(trend_period_key, "6mo") or "6mo")
+    overview_frame = holdings_overview_frame(holdings, selected_symbol=selected_symbol or None, limit=10)
     summary_cols = st.columns(5, gap="small", vertical_alignment="top")
 
     with summary_cols[0]:
@@ -2323,173 +2717,134 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]], roll
     if not echarts_available:
         st.warning("현재 환경에서는 ECharts 모듈을 불러오지 못해 대시보드 차트를 표시할 수 없습니다.")
 
-    overview_left, overview_right = st.columns((1, 1), gap="large", vertical_alignment="top")
-    with overview_left:
-        with st.container(border=True, height=DASHBOARD_OVERVIEW_PANEL_HEIGHT, key="dashboard-panel-allocation"):
-            render_dashboard_section_header("자산 배분", "자산군에서 보유 종목까지 한 번에 보는 트리맵입니다.")
-            treemap_options = allocation_treemap_options(summary, holdings, selected_symbol=selected_symbol or None)
-            if treemap_options is None:
-                st.info("배분을 그릴 데이터가 아직 없습니다.")
-            elif not echarts_available:
-                st.info("현재 환경에서는 자산 배분 차트를 표시할 수 없습니다.")
-            else:
-                st_echarts(
-                    options=treemap_options,
-                    height=f"{DASHBOARD_OVERVIEW_CHART_HEIGHT}px",
-                    key=f"allocation-treemap:{account['id']}",
-                )
+    with st.container(border=True, height=DASHBOARD_OVERVIEW_PANEL_HEIGHT, key="dashboard-panel-allocation"):
+        render_dashboard_section_header("자산 배분", "자산군에서 보유 종목까지 한 번에 보고, 종목을 누르면 아래에서 개별 트렌드를 바로 확인합니다.")
+        treemap_options = allocation_treemap_options(
+            summary,
+            holdings,
+            selected_symbol=selected_symbol or None,
+        )
+        if treemap_options is None:
+            st.info("배분을 그릴 데이터가 아직 없습니다.")
+        elif not echarts_available:
+            st.info("현재 환경에서는 자산 배분 차트를 표시할 수 없습니다.")
+        else:
+            treemap_selection = st_echarts(
+                options=treemap_options,
+                height=f"{DASHBOARD_OVERVIEW_CHART_HEIGHT}px",
+                key=f"allocation-treemap:{account_id}",
+                on_select="rerun",
+                selection_mode="points",
+            )
+            if sync_dashboard_selected_holding(account_id, treemap_selection, holdings=holdings):
+                st.rerun()
 
-    with overview_right:
+    trend_col, holdings_col = st.columns((1, 1), gap="large", vertical_alignment="top")
+
+    with trend_col:
+        with st.container(border=True, height=DASHBOARD_OVERVIEW_PANEL_HEIGHT, key="dashboard-panel-selected-trend"):
+            header_col, period_col, measure_col, action_col = st.columns((1.2, 0.78, 0.82, 0.36), gap="large", vertical_alignment="bottom")
+            with header_col:
+                render_dashboard_section_header(
+                    "선택 종목 트렌드",
+                    "자산 배분에서 선택한 종목의 가격과 수익률 흐름을 같은 화면에서 이어서 확인합니다.",
+                    compact=True,
+                )
+            with period_col:
+                period = st.segmented_control(
+                    "기간",
+                    options=["1mo", "3mo", "6mo", "1y"],
+                    format_func=label_period,
+                    default=period,
+                    key=trend_period_key,
+                )
+            selected_trend_measure = "market_value"
+            if selected_symbol and selected_symbol != "CASH":
+                with measure_col:
+                    selected_trend_measure = st.segmented_control(
+                        "표시 지표",
+                        options=["market_value", "profit_rate", "close"],
+                        format_func=label_detail_measure,
+                        default="market_value",
+                        key=f"selected-trend-measure:{account_id}",
+                    )
+            if selected_symbol:
+                with action_col:
+                    if st.button("선택 해제", key=f"clear-selected-holding:{account_id}", width="stretch"):
+                        st.session_state[selection_key] = ""
+                        st.rerun()
+
+            if not selected_symbol:
+                st.info("자산 배분 트리맵에서 종목 타일을 누르면 여기에서 해당 종목 트렌드가 표시됩니다.")
+            elif selected_symbol == "CASH":
+                st.info("예수금은 시장 가격 추이가 없어서 개별 트렌드 차트를 표시하지 않습니다.")
+            else:
+                selected_holding_name = dashboard_selected_holding_name(holdings, selected_symbol)
+                selected_holdings = [
+                    holding for holding in holdings if normalize_holding_symbol(holding.get("symbol")) == selected_symbol
+                ]
+                if not selected_holdings:
+                    st.info("선택한 종목을 현재 보유 목록에서 찾지 못했습니다.")
+                else:
+                    st.caption(f"선택 종목: `{selected_holding_name}` · 기준 기간: `{label_period(period)}`")
+                    try:
+                        with st.spinner(f"{selected_holding_name} 추이를 불러오는 중입니다..."):
+                            _, selected_holding_trend = build_portfolio_trend(selected_holdings, period=period)
+                    except Exception as exc:  # noqa: BLE001
+                        st.warning(f"선택 종목 추이를 불러오지 못했습니다: {exc}")
+                    else:
+                        if selected_holding_trend.empty:
+                            st.info("선택 종목의 시세 이력이 아직 없어 트렌드 차트를 표시할 수 없습니다.")
+                        else:
+                            selected_frame = selected_holding_trend.sort_values("date").copy()
+                            selected_measure = str(selected_trend_measure or "market_value")
+                            if echarts_available:
+                                trend_options = selected_holding_trend_options(
+                                    selected_frame,
+                                    selected_holding_name=selected_holding_name,
+                                    measure=selected_measure,
+                                    period_label=label_period(period),
+                                )
+                                if trend_options is None:
+                                    st.info("선택 종목의 추이 옵션을 만들지 못했습니다.")
+                                else:
+                                    st_echarts(
+                                        options=trend_options,
+                                        height=f"{DASHBOARD_DETAIL_CHART_HEIGHT}px",
+                                        key=f"selected-holding-trend:{account_id}:{selected_symbol}:{selected_measure}:{period}",
+                                    )
+                            else:
+                                trend_chart = selected_holding_trend_chart(
+                                    selected_frame,
+                                    measure=selected_measure,
+                                )
+                                st.altair_chart(
+                                    style_dashboard_altair_chart(trend_chart, height=DASHBOARD_DETAIL_CHART_HEIGHT),
+                                    width="stretch",
+                                )
+
+    with holdings_col:
         with st.container(border=True, height=DASHBOARD_OVERVIEW_PANEL_HEIGHT, key="dashboard-panel-holdings"):
-            render_dashboard_section_header("보유 종목 수익률", "현재 보유 상위 종목의 수익률 흐름을 우선 확인합니다.")
+            render_dashboard_section_header("보유 종목 수익률", "현재 보유 상위 종목의 수익률 흐름을 같은 행에서 함께 비교합니다.")
             if overview_frame.empty:
                 st.info("보유 종목이 없어 수익률 차트를 그릴 수 없습니다.")
             elif not echarts_available:
-                st.info("현재 환경에서는 보유 종목 수익률 차트를 표시할 수 없습니다.")
+                fallback_chart = holdings_bar_fallback_chart(overview_frame, selected_symbol=selected_symbol or None)
+                if fallback_chart is None:
+                    st.info("현재 환경에서는 보유 종목 수익률 차트를 표시할 수 없습니다.")
+                else:
+                    st.altair_chart(fallback_chart, width="stretch")
             else:
-                bar_options = holdings_bar_options(overview_frame, selected_symbol=None)
+                bar_options = holdings_bar_options(overview_frame, selected_symbol=selected_symbol or None)
                 st_echarts(
                     options=bar_options,
                     height=f"{DASHBOARD_OVERVIEW_CHART_HEIGHT}px",
-                    key=f"holdings-profit-bar:{account['id']}",
+                    key=f"holdings-profit-bar:{account_id}",
                 )
 
     with st.container(border=True, key="dashboard-panel-holdings-table"):
-        render_dashboard_section_header("현재 보유 종목", "계좌 전체 포지션을 표로 읽고, 이후 아래 추이 차트와 이어서 확인합니다.", compact=True)
+        render_dashboard_section_header("현재 보유 종목", "계좌 전체 포지션을 표로 읽고 현재 선택 종목과 함께 확인합니다.", compact=True)
         show_holdings_table(frame, height=DASHBOARD_HOLDINGS_TABLE_HEIGHT)
-
-    with st.container(border=True, key="dashboard-panel-trend"):
-        trend_title_col, period_col = st.columns((1.2, 1), gap="large", vertical_alignment="bottom")
-        with trend_title_col:
-            render_dashboard_section_header("추이", "총자산 흐름을 먼저 보고, 이어서 종목별 비교를 같은 섹션에서 확인합니다.", compact=True)
-        with period_col:
-            period = st.segmented_control(
-                "기간",
-                options=["1mo", "3mo", "6mo", "1y"],
-                format_func=label_period,
-                default="6mo",
-                key=f"trend-period:{account['id']}",
-            )
-        snapshot_rows = list_account_snapshots(int(account["id"]), start_date=period_start_date(period).isoformat())
-        snapshot_frame = snapshot_trend_frame(snapshot_rows, trade_logs=trade_logs, interest_rows=interest_rows)
-        holding_trend = pd.DataFrame()
-        if snapshot_frame.empty:
-            st.warning("이 계좌는 아직 일별 스냅샷이 없어 대시보드 추이를 바로 계산하지 않습니다.")
-            load_external_history = st.toggle(
-                "외부 시세 기반 추이 불러오기",
-                value=False,
-                key=f"trend-load-empty-history:{account['id']}",
-                help="보유 종목 시세 이력을 외부에서 조회합니다. 종목 수나 심볼 상태에 따라 시간이 걸릴 수 있습니다.",
-            )
-            if not load_external_history:
-                st.caption("초기 로딩 멈춤을 막기 위해 스냅샷이 없는 계좌는 외부 추이를 자동으로 조회하지 않습니다.")
-                st.info("거래/현금 수정 후 다시 열어 당일 스냅샷을 쌓거나, 필요할 때만 외부 시세 기반 추이를 직접 불러오세요.")
-                return
-            portfolio_trend, holding_trend = build_portfolio_trend(holdings, period=period)
-            trend_source = portfolio_trend
-        else:
-            trend_source = snapshot_frame
-        if trend_source.empty:
-            st.info("추이 데이터가 아직 없습니다. 일별 스냅샷이 쌓이기 전에는 보유 종목 시세 이력도 함께 필요합니다.")
-            return
-
-        if not snapshot_frame.empty:
-            trend_chart = (
-                alt.Chart(trend_source)
-                .mark_line(point=True, strokeWidth=3)
-                .encode(
-                    x=alt.X("date:T", title="날짜"),
-                    y=alt.Y("total_value:Q", title="포트폴리오 총자산"),
-                    tooltip=[
-                        alt.Tooltip("date:T", title="날짜"),
-                        alt.Tooltip("total_value:Q", title="총자산", format=",.0f"),
-                        alt.Tooltip("market_value:Q", title="평가금액", format=",.0f"),
-                        alt.Tooltip("cash_balance:Q", title="현금", format=",.0f"),
-                        alt.Tooltip("total_principal:Q", title="누적 납입 원금", format=",.0f"),
-                        alt.Tooltip("principal_profit_loss:Q", title="원금 대비 손익", format=",.0f"),
-                        alt.Tooltip("principal_profit_rate:Q", title="원금 대비 수익률 (%)", format=".2f"),
-                        alt.Tooltip("net_flow:Q", title="순유입", format=",.0f"),
-                        alt.Tooltip("actual_profit_loss:Q", title="실제 성과", format=",.0f"),
-                    ],
-                )
-            )
-        else:
-            trend_chart = (
-                alt.Chart(trend_source)
-                .mark_line(point=True, strokeWidth=3)
-                .encode(
-                    x=alt.X("date:T", title="날짜"),
-                    y=alt.Y("market_value:Q", title="포트폴리오 평가액"),
-                    tooltip=[
-                        alt.Tooltip("date:T", title="날짜"),
-                        alt.Tooltip("market_value:Q", title="평가금액", format=",.0f"),
-                        alt.Tooltip("profit_rate:Q", title="수익률 (%)", format=".2f"),
-                    ],
-                )
-            )
-        st.altair_chart(style_dashboard_altair_chart(trend_chart, height=DASHBOARD_TREND_CHART_HEIGHT), width="stretch")
-
-        if not snapshot_frame.empty:
-            st.caption("일별 스냅샷에 순유입과 실제 성과 기준을 함께 반영해 추이를 보여주고 있습니다.")
-            load_detail_history = st.toggle(
-                "종목별 비교 추이 불러오기",
-                value=False,
-                key=f"trend-load-detail:{account['id']}",
-                help="이 비교 차트는 외부 시세 이력을 조회하므로 첫 로딩에 시간이 걸릴 수 있습니다.",
-            )
-            if not load_detail_history:
-                st.caption("초기 접속 속도를 위해 종목별 비교 추이는 필요할 때만 불러옵니다.")
-                return
-            _, holding_trend = build_portfolio_trend(holdings, period=period)
-
-        if holding_trend.empty:
-            st.info("종목별 비교 추이는 아직 준비되지 않았습니다.")
-            return
-
-        latest_names = (
-            holding_trend.sort_values(["date", "market_value"], ascending=[True, False])
-            .groupby("product_name", as_index=False)
-            .tail(1)["product_name"]
-            .tolist()
-        )
-        if not latest_names:
-            st.info("종목별 비교 추이는 아직 준비되지 않았습니다.")
-            return
-
-        st.divider()
-        selection_col, measure_col = st.columns((1.45, 1), gap="large")
-        with selection_col:
-            selected_names = st.multiselect(
-                "비교할 종목",
-                options=latest_names,
-                default=latest_names[:3],
-                key=f"trend-selection:{account['id']}",
-            )
-        with measure_col:
-            detail_measure = st.segmented_control(
-                "비교 지표",
-                options=["market_value", "profit_rate", "close"],
-                format_func=label_detail_measure,
-                default="market_value",
-                key=f"detail-measure:{account['id']}",
-            )
-        if selected_names:
-            detail_frame = holding_trend[holding_trend["product_name"].isin(selected_names)].copy()
-            detail_chart = (
-                alt.Chart(detail_frame)
-                .mark_line(strokeWidth=2.5)
-                .encode(
-                    x=alt.X("date:T", title="날짜"),
-                    y=alt.Y(f"{detail_measure}:Q", title=label_detail_measure(detail_measure)),
-                    color=alt.Color("product_name:N", title="종목"),
-                    tooltip=[
-                        alt.Tooltip("product_name:N", title="종목"),
-                        alt.Tooltip("date:T", title="날짜"),
-                        alt.Tooltip(f"{detail_measure}:Q", title=label_detail_measure(detail_measure), format=",.2f"),
-                    ],
-                )
-            )
-            st.altair_chart(style_dashboard_altair_chart(detail_chart, height=DASHBOARD_DETAIL_CHART_HEIGHT), width="stretch")
 
 
 def trade_entry_page(account: dict[str, Any], holdings: list[dict[str, Any]], accounts: list[dict[str, Any]]) -> None:

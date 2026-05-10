@@ -43,6 +43,10 @@ python -m pip install -r requirements.txt
 streamlit run app.py
 ```
 
+## 설치 원칙
+- 작업 중 필요한 패키지나 도구가 없으면 중단하지 말고 프로젝트 로컬 환경에 설치하면서 진행한다.
+- 설치는 글로벌이 아닌 현재 저장소 기준으로 수행하고, 설치한 항목과 이유는 `Memory.md`에 기록한다.
+
 ## 권장 검증 명령
 ```powershell
 python -m compileall app.py src scripts tests
