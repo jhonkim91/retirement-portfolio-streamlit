@@ -36,6 +36,7 @@ fetch_latest_price = market_module.fetch_latest_price
 search_products = getattr(market_module, "search_products", lambda query, limit=8: [])
 
 create_account = _db.create_account
+delete_account = _db.delete_account
 adjust_cash_balance = _db.adjust_cash_balance
 export_dataframe_rows = _db.export_dataframe_rows
 get_account = _db.get_account
@@ -2229,6 +2230,27 @@ def sidebar(accounts: list[dict[str, Any]], selected_account_id: int | None, use
             selected_account = next(account for account in accounts if int(account["id"]) == int(selected_account_id))
             st.caption(f"선택 계좌: `{selected_account['name']}`")
             st.caption(f"계좌 유형: `{label_account_type(selected_account['account_type'])}`")
+            with st.expander("현재 계좌 삭제", expanded=False):
+                st.warning("이 계좌를 삭제하면 보유 종목, 거래 기록, 자산 스냅샷도 함께 삭제됩니다.")
+                confirm_delete_account = st.checkbox(
+                    "삭제 내용을 확인했습니다.",
+                    key=f"confirm-delete-account:{selected_account_id}",
+                )
+                if st.button(
+                    "선택 계좌 삭제",
+                    key=f"delete-account:{selected_account_id}",
+                    width="stretch",
+                    disabled=not confirm_delete_account,
+                ):
+                    try:
+                        delete_account(int(selected_account_id))
+                    except Exception as exc:  # noqa: BLE001
+                        render_operation_error(exc)
+                    else:
+                        remaining_account_ids = [account_id for account_id in account_ids if account_id != int(selected_account_id)]
+                        st.session_state["selected_account_id"] = remaining_account_ids[0] if remaining_account_ids else None
+                        mark_rollup_dirty()
+                        st.rerun()
 
         with st.container(border=True):
             st.caption("페이지 이동")

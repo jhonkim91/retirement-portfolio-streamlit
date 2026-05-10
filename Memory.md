@@ -18,6 +18,8 @@
 - [x] Memory.md 기준 변경분 리뷰
 - [x] 데모 계정 `test` 고정 및 데모 내부 계좌 리셋 재시드
 - [x] 과거 스냅샷 재동기화와 레거시 이자 반영 복구
+- [x] 계좌 삭제 기능 추가
+- [x] 서버 일별 이자 거래 기록 점검 및 제거
 
 ## 프로젝트 유형
 - Python 프로젝트
@@ -271,6 +273,32 @@ streamlit run app.py
   - 결과: 배포 앱 접속 성공, 로그인 성공, 작업공간 표시 확인, `status_panel_visible=true`, `backend_storage_code=supabase`
 - 비고:
   - 검증 산출물: `artifacts/deploy-verify-current-2.txt`, `artifacts/deploy-verify-current-2.png`
+
+## 2026-05-10 계좌 삭제 기능 및 서버 이자 기록 정리
+- 변경 파일: `app.py`, `src/db.py`, `tests/test_db.py`, `Memory.md`
+- 변경 내용:
+  - 사이드바의 현재 선택 계좌 영역에 `현재 계좌 삭제` 확장 섹션을 추가하고, 삭제 확인 체크박스를 켠 뒤에만 선택 계좌 삭제 버튼이 활성화되도록 구성
+  - 선택 계좌 삭제 버튼에서 계좌/보유종목/거래기록/스냅샷 삭제를 실행하도록 연결
+  - 공개 DB wrapper `delete_account()`를 추가해 Supabase/SQLite 공통 삭제 경로를 UI에서 직접 호출할 수 있게 정리
+  - 계좌 삭제 후 사이드바 선택 계좌를 남아 있는 첫 계좌로 재설정하고, 계좌가 더 없으면 `None`으로 비운 뒤 롤업 dirty 플래그를 세우도록 처리
+  - `tests/test_db.py`에 공개 `delete_account()`가 내부 fallback 경로를 타는지 검증하는 단위 테스트 추가
+- 서버 정리:
+  - Supabase 실서버에서 현재 사용자 작업공간의 `trade_logs.trade_type='interest'`와 `daily_interest` 잔존 레코드를 조회 후 제거
+  - 삭제 전 확인:
+    - 계좌 `미래에셋증권`(`id=23`): `interest` 거래 `233`건, `daily_interest` `234`건
+    - 계좌 `IRP (신한)`(`id=24`): `interest` 거래 `66`건, `daily_interest` `66`건
+    - 계좌 `카카오증권`(`id=26`): `interest` 거래 `57`건, `daily_interest` `57`건
+    - 합계: `interest` 거래 `356`건, `daily_interest` `357`건
+  - 삭제 후 확인:
+    - `trade_logs.trade_type='interest'` `0`건
+    - `daily_interest` `0`건
+- 검증:
+  - `python -m compileall app.py src scripts tests` 성공
+  - `python -m unittest discover -s tests -p "test_*.py"` 성공
+  - 결과: 단위 테스트 `40`건 통과
+- 비고:
+  - 이번 서버 정리는 계좌 자체나 다른 거래 유형은 건드리지 않고, 잔존 이자 기록만 제거
+  - `jhonkim2025@gmail.com` 운영 계정 전체 삭제나 계좌 삭제는 수행하지 않음
 
 ## 다음 작업 후보
 - 로컬 `streamlit run app.py` 실사용 흐름에서 현금 조정 저장 후 데이터 반영 체감 속도 재확인

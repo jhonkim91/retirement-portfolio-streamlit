@@ -2441,6 +2441,15 @@ def create_account(name: str, account_type: str = "retirement", opening_cash: fl
     )
 
 
+def delete_account(account_id: int) -> None:
+    """현재 저장소에서 계좌와 연관 데이터를 삭제한다."""
+
+    _run_with_fallback(
+        supabase_call=lambda: _supabase_delete_account(account_id),
+        sqlite_call=lambda: _sqlite_delete_account(account_id),
+    )
+
+
 def update_cash_balance(account_id: int, amount: float) -> None:
     _run_with_fallback(
         supabase_call=lambda: _supabase_update_cash_balance(account_id, amount),

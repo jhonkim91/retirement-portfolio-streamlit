@@ -14,6 +14,7 @@ from src.db import (
     _run_with_fallback,
     _should_fallback,
     _supabase_create_account,
+    delete_account,
     is_accounts_hotfix_error,
     seed_demo_workspace,
     sync_account_rollup,
@@ -174,6 +175,21 @@ class BackendFallbackPolicyTests(unittest.TestCase):
         self.assertEqual(result, "sqlite-ok")
         self.assertTrue(sqlite_called["value"])
         activate_sqlite_mock.assert_called_once()
+
+
+class DeleteAccountTests(unittest.TestCase):
+    """공개 계좌 삭제 wrapper를 검증한다."""
+
+    @patch("src.db._run_with_fallback")
+    def test_delete_account_routes_to_storage_specific_delete(self, run_with_fallback_mock) -> None:
+        """계좌 삭제는 내부 fallback 경유로 저장소별 delete 구현을 호출한다."""
+
+        delete_account(77)
+
+        self.assertTrue(run_with_fallback_mock.called)
+        _, kwargs = run_with_fallback_mock.call_args
+        self.assertEqual(kwargs["supabase_call"].__name__, "<lambda>")
+        self.assertEqual(kwargs["sqlite_call"].__name__, "<lambda>")
 
 
 class DemoWorkspaceSeedTests(unittest.TestCase):
