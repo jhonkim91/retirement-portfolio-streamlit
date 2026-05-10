@@ -526,6 +526,15 @@ streamlit run app.py
   - `python -m compileall app.py src scripts tests` 성공
   - `python -m unittest discover -s tests -p "test_*.py"` 성공
   - 결과: 단위 테스트 `54`건 통과
+- 배포:
+  - `PLAYWRIGHT_BROWSERS_PATH=/workspaces/retirement-portfolio-streamlit/.playwright-browsers ./.venv/bin/python scripts/verify_and_push_deploy.py --page dashboard --expect-backend supabase --wait-ms 20000 --commit-message "Refine selected holding trend header"`
+  - 코드 커밋: `1ac0b008e4f8c51003f7d67a576c82c0451b0e6d`
+  - 원격 앱 URL: `https://retirement-portfolio-app-nh2vq9ferqnpehsslbykbe.streamlit.app/`
+  - 원격 검증 산출물:
+    - `artifacts/deploy-verify-20260510-062641.txt`
+    - `artifacts/deploy-verify-20260510-062641.png`
+- 비고:
+  - 원격 대시보드 검증은 로그인 성공, 작업공간 표시 확인, 저장소 `Supabase`, 대상 페이지 `dashboard` 기준으로 통과
 
 ## 다음 작업 후보
 - 로컬 `streamlit run app.py` 실사용 흐름에서 현금 조정 저장 후 데이터 반영 체감 속도 재확인
