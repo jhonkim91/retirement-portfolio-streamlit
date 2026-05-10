@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date, timedelta
 import html
 import re
 import urllib.parse
@@ -13,6 +14,17 @@ try:
     import yfinance as yf
 except ImportError:
     yf = None
+
+from .kis import (
+    KisApiClient,
+    get_master_record,
+    is_kis_domestic_symbol,
+    is_kis_enabled,
+    kis_runtime_status,
+    normalize_domestic_code,
+    resolve_sector_name as resolve_kis_sector_name,
+    search_master_products,
+)
 
 
 NAVER_HEADERS = {
@@ -42,6 +54,12 @@ PREFERRED_DOMESTIC_BRANDS = {
     "TREX",
 }
 KRX_LISTED_CODE_PATTERN = r"(?:[0-9]{6}|[0-9]{4}[A-Z][0-9])"
+
+
+def quote_provider_status() -> dict[str, Any]:
+    """운영 상태 패널에 표시할 시세 provider 정보를 반환한다."""
+
+    return kis_runtime_status()
 
 
 def clean_code(code: str) -> str:
@@ -89,6 +107,27 @@ def is_fund_code(code: str) -> bool:
 def is_global_symbol_query(query: str) -> bool:
     cleaned = clean_code(query)
     return bool(re.fullmatch(r"[A-Z][A-Z0-9.-]{0,9}", cleaned)) and not is_krx_code(cleaned) and not is_fund_code(cleaned)
+
+
+def prefers_kis_quote(symbol: str) -> bool:
+    """현재 심볼이 KIS REST 우선 조회 대상인지 판별한다."""
+
+    return is_kis_enabled() and is_kis_domestic_symbol(symbol)
+
+
+def supports_kis_history(symbol: str, period: str) -> bool:
+    """기간 제한을 고려해 KIS 일봉을 우선 적용할지 판별한다."""
+
+    return prefers_kis_quote(symbol) and period in {"1mo", "3mo"}
+
+
+def resolve_kis_sector_label(symbol: Any) -> str | None:
+    """국내 종목이면 KIS 마스터 기준 섹터명을 반환한다."""
+
+    try:
+        return resolve_kis_sector_name(symbol)
+    except Exception:
+        return None
 
 
 def matches_search_query(query: str, *, code: str, name: str) -> bool:
@@ -432,6 +471,14 @@ def search_products(query: str, limit: int = 8) -> list[dict[str, Any]]:
             return (3, name)
         return (4, name)
 
+    try:
+        for item in search_master_products(cleaned_query, limit=limit):
+            add_result(item)
+        if has_exact_search_match(results, cleaned_query):
+            return sorted(results, key=rank)[:limit]
+    except Exception:
+        pass
+
     if is_krx_code(cleaned_query):
         add_result(get_naver_product_by_code(cleaned_query))
         if results:
@@ -479,8 +526,24 @@ def search_products(query: str, limit: int = 8) -> list[dict[str, Any]]:
     return sorted(results, key=rank)[:limit]
 
 
-@st.cache_data(ttl=900, show_spinner=False)
-def fetch_latest_price(symbol: str) -> dict[str, Any]:
+def _empty_intraday_snapshot(normalized: str) -> dict[str, Any]:
+    """비어 있는 intraday 스냅샷 기본값을 반환한다."""
+
+    return {
+        "symbol": normalized,
+        "series": [],
+        "current_price": None,
+        "previous_close": None,
+        "day_change_rate": None,
+        "as_of": "",
+        "currency": "KRW" if re.fullmatch(rf"{KRX_LISTED_CODE_PATTERN}\.(KS|KQ)", normalized) else "USD",
+        "source": "",
+    }
+
+
+def _fetch_latest_price_from_yfinance(symbol: str) -> dict[str, Any]:
+    """기존 yfinance 경로로 최신 종가를 조회한다."""
+
     normalized = normalize_symbol(symbol)
     if not normalized:
         raise ValueError("종목 코드를 입력해 주세요.")
@@ -498,15 +561,64 @@ def fetch_latest_price(symbol: str) -> dict[str, Any]:
         "symbol": normalized,
         "price": float(last_value),
         "as_of": pd.Timestamp(last_date).date().isoformat(),
+        "source": "Yahoo",
     }
 
 
-@st.cache_data(ttl=3600, show_spinner=False)
-def fetch_price_history(symbol: str, period: str = "6mo") -> pd.DataFrame:
+def _fetch_intraday_price_snapshot_from_yfinance(symbol: str, interval: str = "5m") -> dict[str, Any]:
+    """기존 yfinance 경로로 intraday 스냅샷을 조회한다."""
+
     normalized = normalize_symbol(symbol)
-    if not normalized:
-        return pd.DataFrame(columns=["date", "close", "symbol"])
-    if yf is None:
+    if not normalized or yf is None:
+        return _empty_intraday_snapshot(normalized)
+
+    try:
+        history = yf.Ticker(normalized).history(period="2d", interval=interval, auto_adjust=False)
+    except Exception:
+        return _empty_intraday_snapshot(normalized)
+
+    closes = history.get("Close")
+    if closes is None or closes.dropna().empty:
+        return _empty_intraday_snapshot(normalized)
+
+    frame = closes.dropna().reset_index()
+    frame.columns = ["datetime", "close"]
+    frame["datetime"] = pd.to_datetime(frame["datetime"])
+    frame["session_date"] = frame["datetime"].apply(lambda value: pd.Timestamp(value).date())
+    latest_session_date = frame["session_date"].max()
+
+    latest_session = frame.loc[frame["session_date"] == latest_session_date].copy()
+    previous_session = frame.loc[frame["session_date"] < latest_session_date].copy()
+    if latest_session.empty:
+        return _empty_intraday_snapshot(normalized)
+
+    latest_prices = latest_session["close"].astype(float)
+    current_price = float(latest_prices.iloc[-1])
+    previous_close = float(previous_session["close"].astype(float).iloc[-1]) if not previous_session.empty else None
+    if previous_close and previous_close != 0:
+        day_change_rate = ((current_price - previous_close) / previous_close) * 100
+    else:
+        first_price = float(latest_prices.iloc[0]) if not latest_prices.empty else 0.0
+        day_change_rate = ((current_price - first_price) / first_price * 100) if first_price else 0.0
+
+    as_of = pd.Timestamp(latest_session["datetime"].iloc[-1]).isoformat()
+    return {
+        "symbol": normalized,
+        "series": [round(float(value), 4) for value in latest_prices.tolist()],
+        "current_price": round(current_price, 4),
+        "previous_close": round(previous_close, 4) if previous_close is not None else None,
+        "day_change_rate": round(float(day_change_rate), 4) if day_change_rate is not None else None,
+        "as_of": as_of,
+        "currency": "KRW" if re.fullmatch(rf"{KRX_LISTED_CODE_PATTERN}\.(KS|KQ)", normalized) else "USD",
+        "source": "Yahoo",
+    }
+
+
+def _fetch_price_history_from_yfinance(symbol: str, period: str = "6mo") -> pd.DataFrame:
+    """기존 yfinance 경로로 기간별 종가를 조회한다."""
+
+    normalized = normalize_symbol(symbol)
+    if not normalized or yf is None:
         return pd.DataFrame(columns=["date", "close", "symbol"])
 
     history = yf.Ticker(normalized).history(period=period, auto_adjust=False)
@@ -519,3 +631,115 @@ def fetch_price_history(symbol: str, period: str = "6mo") -> pd.DataFrame:
     frame["date"] = pd.to_datetime(frame["date"]).dt.date
     frame["symbol"] = normalized
     return frame
+
+
+def _fetch_latest_price_from_kis(symbol: str) -> dict[str, Any]:
+    """KIS REST로 국내 현재가를 조회한다."""
+
+    client = KisApiClient()
+    payload = client.get_domestic_latest_price(symbol)
+    return {
+        "symbol": normalize_symbol(symbol),
+        "price": float(payload["price"]),
+        "as_of": str(payload["as_of"]),
+        "source": "KIS REST",
+    }
+
+
+def _fetch_intraday_price_snapshot_from_kis(symbol: str) -> dict[str, Any]:
+    """KIS REST로 국내 intraday 스냅샷을 조회한다."""
+
+    client = KisApiClient()
+    payload = client.get_domestic_intraday_snapshot(symbol)
+    return {
+        "symbol": normalize_symbol(symbol),
+        "series": payload.get("series") or [],
+        "current_price": payload.get("current_price"),
+        "previous_close": payload.get("previous_close"),
+        "day_change_rate": payload.get("day_change_rate"),
+        "as_of": payload.get("as_of") or "",
+        "currency": payload.get("currency") or "KRW",
+        "source": "KIS REST",
+    }
+
+
+def _history_period_range(period: str) -> tuple[date, date]:
+    """yfinance 스타일 기간 문자열을 시작/종료 날짜로 바꾼다."""
+
+    end_date = date.today()
+    days_by_period = {
+        "1mo": 31,
+        "3mo": 93,
+        "6mo": 186,
+        "1y": 366,
+        "2y": 732,
+        "5d": 7,
+    }
+    days = days_by_period.get(str(period or "").strip().lower(), 186)
+    return end_date - timedelta(days=days), end_date
+
+
+def _fetch_price_history_from_kis(symbol: str, period: str = "6mo") -> pd.DataFrame:
+    """KIS REST로 국내 일봉 종가를 조회한다."""
+
+    start_date, end_date = _history_period_range(period)
+    client = KisApiClient()
+    frame = client.get_domestic_daily_history(
+        symbol,
+        start_date=start_date.isoformat(),
+        end_date=end_date.isoformat(),
+    )
+    if frame.empty:
+        return frame
+    frame["symbol"] = normalize_symbol(symbol)
+    return frame
+
+
+@st.cache_data(ttl=900, show_spinner=False)
+def fetch_latest_price(symbol: str) -> dict[str, Any]:
+    """최신 가격을 KIS 우선 provider 구조로 조회한다."""
+
+    normalized = normalize_symbol(symbol)
+    if not normalized:
+        raise ValueError("종목 코드를 입력해 주세요.")
+
+    if prefers_kis_quote(normalized):
+        try:
+            return _fetch_latest_price_from_kis(normalized)
+        except Exception:
+            pass
+    return _fetch_latest_price_from_yfinance(normalized)
+
+
+@st.cache_data(ttl=120, show_spinner=False)
+def fetch_intraday_price_snapshot(symbol: str, interval: str = "5m") -> dict[str, Any]:
+    """가장 최근 거래일 intraday 가격 흐름과 요약 정보를 반환한다."""
+
+    normalized = normalize_symbol(symbol)
+    if not normalized:
+        return _empty_intraday_snapshot(normalized)
+
+    if prefers_kis_quote(normalized):
+        try:
+            return _fetch_intraday_price_snapshot_from_kis(normalized)
+        except Exception:
+            pass
+    return _fetch_intraday_price_snapshot_from_yfinance(normalized, interval=interval)
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def fetch_price_history(symbol: str, period: str = "6mo") -> pd.DataFrame:
+    """기간별 종가 이력을 KIS 우선 provider 구조로 조회한다."""
+
+    normalized = normalize_symbol(symbol)
+    if not normalized:
+        return pd.DataFrame(columns=["date", "close", "symbol"])
+
+    if supports_kis_history(normalized, period):
+        try:
+            frame = _fetch_price_history_from_kis(normalized, period=period)
+        except Exception:
+            frame = pd.DataFrame(columns=["date", "close", "symbol"])
+        if not frame.empty:
+            return frame
+    return _fetch_price_history_from_yfinance(normalized, period=period)

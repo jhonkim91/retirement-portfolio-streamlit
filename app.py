@@ -32,7 +32,9 @@ import src.market as market_module
 
 market_module = importlib.reload(market_module)
 fetch_latest_price = market_module.fetch_latest_price
+fetch_intraday_price_snapshot = getattr(market_module, "fetch_intraday_price_snapshot", lambda symbol, interval="5m": {})
 search_products = getattr(market_module, "search_products", lambda query, limit=8: [])
+quote_provider_status = getattr(market_module, "quote_provider_status", lambda: {})
 
 create_account = _db.create_account
 delete_account = _db.delete_account
@@ -44,7 +46,9 @@ list_accounts = _db.list_accounts
 list_account_snapshots = _db.list_account_snapshots
 list_daily_interest = _db.list_daily_interest
 list_holdings = _db.list_holdings
+latest_realtime_quote_time = _db.latest_realtime_quote_time
 list_trade_logs = _db.list_trade_logs
+get_realtime_worker_status = _db.get_realtime_worker_status
 record_account_snapshot = _db.record_account_snapshot
 record_account_transfer = _db.record_account_transfer
 record_cash_flow = _db.record_cash_flow
@@ -154,6 +158,7 @@ DETAIL_MEASURE_LABELS = {
     "profit_rate": "수익률",
     "close": "종가",
 }
+DEFAULT_SELECTED_TREND_MEASURE = "profit_rate"
 PERIOD_LABELS = {
     "1mo": "1개월",
     "3mo": "3개월",
@@ -164,6 +169,34 @@ DASHBOARD_OVERVIEW_PANEL_HEIGHT = 560
 DASHBOARD_OVERVIEW_CHART_HEIGHT = 400
 DASHBOARD_DETAIL_CHART_HEIGHT = 300
 DASHBOARD_HOLDINGS_TABLE_HEIGHT = 380
+FEARGREED_BG_COLOR = "#131722"
+FEARGREED_PANEL_COLOR = "#1E222D"
+FEARGREED_PANEL_ALT_COLOR = "#181C26"
+FEARGREED_BORDER_COLOR = "#2A2F3E"
+FEARGREED_DIM_TEXT_COLOR = "#555C6E"
+FEARGREED_MUTED_TEXT_COLOR = "#868993"
+FEARGREED_MID_TEXT_COLOR = "#9BA3B2"
+FEARGREED_BRIGHT_TEXT_COLOR = "#D1D4DC"
+FEARGREED_FULL_TEXT_COLOR = "#FFFFFF"
+FEARGREED_UP_COLOR = "#E22B2B"
+FEARGREED_DOWN_COLOR = "#1763B2"
+FEARGREED_FLAT_COLOR = "#2A2E39"
+FEARGREED_ACCENT_COLOR = "#2962FF"
+FEARGREED_LIVE_DOT_COLOR = "#26A69A"
+TREEMAP_CANVAS_BG_COLOR = "#EEF4F2"
+TREEMAP_CANVAS_BORDER_COLOR = "#D7E4DF"
+TREEMAP_TITLE_TEXT_COLOR = "#103B42"
+TREEMAP_TITLE_BG_COLOR = "rgba(255, 255, 255, 0.96)"
+TREEMAP_TITLE_BORDER_COLOR = "rgba(16, 59, 66, 0.14)"
+FEARGREED_TREEMAP_PALETTE = [
+    "#050F28",
+    "#0D3D7A",
+    "#80AAF0",
+    "#2A2E39",
+    "#FF8080",
+    "#E22B2B",
+    "#3A0000",
+]
 PRODUCT_TYPE_LABELS = {
     "stock": "주식",
     "stock/ETF": "주식/ETF",
@@ -191,6 +224,20 @@ def format_won(value: Any) -> str:
 
 def format_pct(value: Any) -> str:
     return f"{float(value or 0):+.2f}%"
+
+
+def _quote_currency_for_symbol(symbol: str, fallback: str = "KRW") -> str:
+    normalized = str(symbol or "").strip().upper()
+    if normalized.endswith(".KS") or normalized.endswith(".KQ") or normalized.isdigit():
+        return "KRW"
+    return str(fallback or "USD").strip().upper()
+
+
+def _format_quote_price(value: Any, *, currency: str) -> str:
+    numeric = float(value or 0)
+    if str(currency or "").strip().upper() == "USD":
+        return f"${numeric:,.2f}"
+    return f"₩{numeric:,.0f}"
 
 
 def metric_delta(value: Any) -> str:
@@ -375,6 +422,9 @@ def inject_app_styles() -> None:
         @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
 
         :root {
+            --bg: #f4f7f6;
+            --panel: #ffffff;
+            --panel-alt: #f6f9f8;
             --surface: rgba(255, 255, 255, 0.88);
             --surface-strong: rgba(255, 255, 255, 0.96);
             --line-soft: rgba(15, 23, 42, 0.08);
@@ -384,6 +434,10 @@ def inject_app_styles() -> None:
             --brand-accent: #d97706;
             --status-good: #0f766e;
             --status-warn: #b45309;
+            --border-strong: rgba(15, 23, 42, 0.08);
+            --dim-text: #94a3b8;
+            --mid-text: #607285;
+            --full: #ffffff;
             --panel-radius: 20px;
             --panel-padding: 1.05rem 1.1rem 1.15rem;
             --section-gap: 1rem;
@@ -394,10 +448,21 @@ def inject_app_styles() -> None:
             font-family: 'Pretendard', sans-serif;
         }
 
+        h1, h2, h3, h4, h5, h6 {
+            color: var(--brand-deep);
+        }
+
+        [data-testid="stMarkdownContainer"] p,
+        [data-testid="stCaptionContainer"],
+        [data-testid="stText"] {
+            color: var(--ink-strong);
+        }
+
         .stApp {
             background:
                 radial-gradient(circle at top left, rgba(214, 232, 231, 0.65), transparent 24rem),
                 linear-gradient(180deg, #f4f7f6 0%, #eef3f2 45%, #f7f8f7 100%);
+            color: var(--ink-strong);
         }
 
         .block-container {
@@ -409,6 +474,12 @@ def inject_app_styles() -> None:
         [data-testid="stSidebar"] {
             background: linear-gradient(180deg, #ecf5f2 0%, #e4eeea 100%);
             border-right: 1px solid rgba(15, 23, 42, 0.08);
+        }
+
+        [data-testid="stVerticalBlockBorderWrapper"] {
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 251, 250, 0.96));
+            border: 1px solid rgba(15, 23, 42, 0.08);
+            box-shadow: 0 16px 38px rgba(15, 23, 42, 0.05);
         }
 
         [data-testid="stSidebar"] [data-testid="stVerticalBlock"] > div:has(> [data-testid="stMarkdownContainer"]) {
@@ -436,6 +507,8 @@ def inject_app_styles() -> None:
         [data-testid="stDownloadButton"] > button {
             border-radius: 999px;
             border: 1px solid rgba(16, 59, 66, 0.18);
+            background: rgba(255, 255, 255, 0.96);
+            color: #103b42;
         }
 
         [data-testid="stForm"] {
@@ -540,7 +613,7 @@ def inject_app_styles() -> None:
         }
 
         .auth-feature-card__title {
-            color: #103b42;
+            color: var(--brand-deep);
             font-size: 1.05rem;
             font-weight: 800;
             line-height: 1.3;
@@ -548,14 +621,14 @@ def inject_app_styles() -> None:
         }
 
         .auth-feature-card__desc {
-            color: #607285;
+            color: var(--mid-text);
             font-size: 0.92rem;
             line-height: 1.55;
             margin-top: 0.45rem;
         }
 
         .auth-entry-intro {
-            color: #607285;
+            color: var(--mid-text);
             font-size: 0.95rem;
             line-height: 1.55;
             margin: 1rem 0 0.8rem;
@@ -564,8 +637,8 @@ def inject_app_styles() -> None:
         [data-testid="stTabs"] [data-baseweb="tab-list"] {
             gap: 0.45rem;
             padding: 0.2rem;
-            background: rgba(255, 255, 255, 0.72);
-            border: 1px solid rgba(15, 23, 42, 0.08);
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--border-strong);
             border-radius: 18px;
         }
 
@@ -573,17 +646,17 @@ def inject_app_styles() -> None:
             height: 2.9rem;
             border-radius: 14px;
             padding: 0 1rem;
-            color: #526072;
+            color: var(--text-muted);
             font-weight: 700;
         }
 
         [data-testid="stTabs"] [aria-selected="true"] {
-            background: linear-gradient(135deg, rgba(15, 118, 110, 0.14), rgba(217, 119, 6, 0.14));
-            color: #103b42;
+            background: rgba(41, 98, 255, 0.22);
+            color: var(--full);
         }
 
         .auth-panel-eyebrow {
-            color: #0f766e;
+            color: var(--brand-accent);
             font-size: 0.76rem;
             font-weight: 800;
             letter-spacing: 0.08em;
@@ -592,7 +665,7 @@ def inject_app_styles() -> None:
         }
 
         .auth-panel-title {
-            color: #103b42;
+            color: var(--brand-deep);
             font-size: clamp(1.3rem, 2vw, 1.6rem);
             font-weight: 800;
             line-height: 1.15;
@@ -601,14 +674,14 @@ def inject_app_styles() -> None:
         }
 
         .auth-panel-caption {
-            color: #607285;
+            color: var(--mid-text);
             font-size: 0.94rem;
             line-height: 1.55;
             margin: 0.4rem 0 1rem;
         }
 
         .auth-simple-title {
-            color: #103b42;
+            color: var(--brand-deep);
             font-size: clamp(2rem, 3.2vw, 3rem);
             font-weight: 900;
             line-height: 1.05;
@@ -632,14 +705,14 @@ def inject_app_styles() -> None:
         }
 
         .auth-demo-point__title {
-            color: #103b42;
+            color: var(--brand-deep);
             font-size: 0.86rem;
             font-weight: 800;
             margin-bottom: 0.28rem;
         }
 
         .auth-demo-point__desc {
-            color: #607285;
+            color: var(--mid-text);
             font-size: 0.82rem;
             line-height: 1.45;
         }
@@ -674,6 +747,21 @@ def inject_app_styles() -> None:
             margin-bottom: var(--section-gap);
         }
 
+        .dashboard-section-header__top {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.9rem;
+        }
+
+        .dashboard-section-header__status-group {
+            display: inline-flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 0.45rem;
+            flex-wrap: wrap;
+        }
+
         .dashboard-section-header--compact {
             margin-bottom: 0.9rem;
         }
@@ -698,6 +786,80 @@ def inject_app_styles() -> None:
             margin: 0;
         }
 
+        .dashboard-load-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.45rem;
+            padding: 0.26rem 0.68rem;
+            min-height: 30px;
+            border-radius: 999px;
+            border: 1px solid rgba(15, 23, 42, 0.08);
+            background: rgba(255, 255, 255, 0.74);
+            color: #607285;
+            white-space: nowrap;
+            box-sizing: border-box;
+        }
+
+        .dashboard-load-status__dot {
+            width: 0.42rem;
+            height: 0.42rem;
+            border-radius: 999px;
+            background: var(--dim-text);
+        }
+
+        .dashboard-load-status__text {
+            font-size: 0.76rem;
+            font-weight: 700;
+            letter-spacing: 0.03em;
+        }
+
+        .dashboard-load-status--live .dashboard-load-status__dot {
+            background: #26a69a;
+            animation: dashboard-live-blink 2.4s ease-in-out infinite;
+        }
+
+        .dashboard-load-palette {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.3rem;
+            padding: 0.26rem 0.68rem;
+            border-radius: 999px;
+            border: 1px solid rgba(15, 23, 42, 0.08);
+            background: rgba(255, 255, 255, 0.74);
+            min-height: 30px;
+            box-sizing: border-box;
+        }
+
+        .dashboard-load-palette__label {
+            color: #607285;
+            font-size: 0.66rem;
+            font-weight: 800;
+            line-height: 1;
+        }
+
+        .dashboard-load-palette__bar {
+            display: flex;
+            width: 78px;
+            height: 0.42rem;
+            border-radius: 999px;
+            overflow: hidden;
+            box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+        }
+
+        .dashboard-load-palette__segment {
+            flex: 1;
+        }
+
+        .st-key-dashboard-panel-allocation {
+            background:
+                linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(244, 248, 247, 0.98));
+        }
+
+        @keyframes dashboard-live-blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.22; }
+        }
+
         .dashboard-chart-shell {
             display: flex;
             flex-direction: column;
@@ -713,7 +875,7 @@ def inject_app_styles() -> None:
             flex-direction: column;
             gap: 0.42rem;
             margin-top: 0.2rem;
-            color: #607285;
+            color: var(--mid-text);
             font-size: 0.82rem;
             font-weight: 700;
         }
@@ -732,9 +894,20 @@ def inject_app_styles() -> None:
             width: 100%;
             height: 14px;
             border-radius: 999px;
-            border: 1px solid rgba(15, 23, 42, 0.08);
-            background: linear-gradient(90deg, #f1646c 0%, #f2b85b 32%, #d6de6b 62%, #82cc80 100%);
-            box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+            border: 1px solid var(--border-strong);
+            background: rgba(255, 255, 255, 0.02);
+            box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+            overflow: hidden;
+        }
+
+        .dashboard-treemap-legend__segments {
+            display: flex;
+            width: 100%;
+            height: 100%;
+        }
+
+        .dashboard-treemap-legend__segment {
+            flex: 1;
         }
 
         .dashboard-treemap-legend__labels {
@@ -742,13 +915,13 @@ def inject_app_styles() -> None:
             align-items: center;
             justify-content: space-between;
             gap: 0.8rem;
-            color: #607285;
+            color: var(--mid-text);
             font-size: 0.79rem;
             font-weight: 700;
         }
 
         .dashboard-treemap-legend__hint {
-            color: #607285;
+            color: var(--text-muted);
             font-size: 0.78rem;
             font-weight: 600;
             text-align: center;
@@ -761,9 +934,9 @@ def inject_app_styles() -> None:
             width: 18px;
             height: 26px;
             border-radius: 999px;
-            background: rgba(15, 118, 110, 0.96);
+            background: rgba(41, 98, 255, 0.96);
             border: 2px solid rgba(255, 255, 255, 0.92);
-            box-shadow: 0 10px 20px rgba(15, 23, 42, 0.18);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.28);
         }
 
         .dashboard-treemap-legend__marker::after {
@@ -774,7 +947,7 @@ def inject_app_styles() -> None:
             width: 2px;
             height: 7px;
             transform: translateX(-50%);
-            background: rgba(15, 118, 110, 0.92);
+            background: rgba(41, 98, 255, 0.92);
         }
 
         .dashboard-treemap-legend__marker-label {
@@ -783,13 +956,13 @@ def inject_app_styles() -> None:
             bottom: calc(100% + 10px);
             transform: translateX(-50%);
             white-space: nowrap;
-            background: rgba(15, 23, 42, 0.92);
+            background: rgba(30, 34, 45, 0.97);
             color: #F8FAFC;
             border-radius: 999px;
             padding: 0.28rem 0.62rem;
             font-size: 0.74rem;
             font-weight: 700;
-            box-shadow: 0 10px 24px rgba(15, 23, 42, 0.14);
+            box-shadow: 0 10px 24px rgba(0, 0, 0, 0.24);
         }
 
         .dashboard-metric-strip {
@@ -819,7 +992,7 @@ def inject_app_styles() -> None:
         }
 
         .dashboard-metric-card__label {
-            color: #58677b;
+            color: var(--mid-text);
             font-size: 0.86rem;
             font-weight: 700;
             letter-spacing: 0.01em;
@@ -851,13 +1024,13 @@ def inject_app_styles() -> None:
 
         .dashboard-metric-card__note {
             margin-top: 0.75rem;
-            color: #64748b;
+            color: var(--text-muted);
             font-size: 0.82rem;
             line-height: 1.45;
         }
 
         .dashboard-summary-card__label {
-            color: #58677b;
+            color: var(--mid-text);
             font-size: 0.86rem;
             font-weight: 700;
             letter-spacing: 0.01em;
@@ -892,7 +1065,7 @@ def inject_app_styles() -> None:
         }
 
         .dashboard-summary-card__action {
-            border: 1px solid rgba(15, 59, 102, 0.16);
+            border: 1px solid rgba(37, 99, 235, 0.22);
             border-radius: 999px;
             padding: 0.28rem 0.78rem;
             font-size: 0.82rem;
@@ -952,7 +1125,7 @@ def inject_app_styles() -> None:
         .st-key-dashboard-total-value-refresh-overlay button {
             min-height: 0;
             padding: 0.28rem 0.78rem;
-            border: 1px solid rgba(15, 59, 102, 0.16);
+            border: 1px solid rgba(37, 99, 235, 0.22);
             border-radius: 999px;
             background: rgba(255, 255, 255, 0.96);
             box-shadow: none;
@@ -968,8 +1141,8 @@ def inject_app_styles() -> None:
         .st-key-dashboard-total-value-refresh-overlay button:hover,
         .st-key-dashboard-total-value-refresh-overlay button:focus,
         .st-key-dashboard-total-value-refresh-overlay button:focus-visible {
-            border-color: rgba(15, 59, 102, 0.24);
-            background: rgba(248, 250, 252, 0.98);
+            border-color: rgba(37, 99, 235, 0.34);
+            background: rgba(255, 255, 255, 1);
             outline: none;
             box-shadow: none;
         }
@@ -985,7 +1158,7 @@ def inject_app_styles() -> None:
 
         .st-key-dashboard-card-cash [data-testid="stNumberInput"] label p,
         .st-key-dashboard-panel-selected-trend [data-testid="stSegmentedControl"] label p {
-            color: #607285;
+            color: var(--mid-text);
             font-weight: 700;
         }
 
@@ -1355,15 +1528,49 @@ def render_dashboard_total_value_card(account_id: int, display_total_value: floa
     st.rerun()
 
 
-def render_dashboard_section_header(title: str, description: str, *, compact: bool = False) -> None:
+def render_dashboard_section_header(
+    title: str,
+    description: str,
+    *,
+    compact: bool = False,
+    status_text: str = "",
+    status_tone: str = "live",
+    status_palette_colors: list[str] | tuple[str, ...] | None = None,
+) -> None:
     """대시보드 섹션 헤더를 동일한 타이포 체계로 렌더링한다."""
 
     wrapper_class = "dashboard-section-header dashboard-section-header--compact" if compact else "dashboard-section-header"
     title_class = "dashboard-section-header__title dashboard-section-header__title--compact" if compact else "dashboard-section-header__title"
+    status_items: list[str] = []
+    if status_text:
+        status_items.append(
+            f'<div class="dashboard-load-status dashboard-load-status--{html.escape(status_tone)}">'
+            '<span class="dashboard-load-status__dot"></span>'
+            f'<span class="dashboard-load-status__text">{html.escape(status_text)}</span>'
+            "</div>"
+        )
+    if status_palette_colors:
+        palette_segments = "".join(
+            f'<span class="dashboard-load-palette__segment" style="background:{html.escape(color)};"></span>'
+            for color in status_palette_colors
+        )
+        status_items.append(
+            '<div class="dashboard-load-palette" title="자산 배분 수익률 색상 팔레트">'
+            '<span class="dashboard-load-palette__label">-</span>'
+            f'<div class="dashboard-load-palette__bar">{palette_segments}</div>'
+            '<span class="dashboard-load-palette__label">+</span>'
+            "</div>"
+        )
+    status_group_html = ""
+    if status_items:
+        status_group_html = f'<div class="dashboard-section-header__status-group">{"".join(status_items)}</div>'
     st.markdown(
         (
             f'<div class="{wrapper_class}">'
+            '<div class="dashboard-section-header__top">'
             f'<div class="{title_class}">{html.escape(title)}</div>'
+            f"{status_group_html}"
+            "</div>"
             f'<p class="dashboard-section-header__caption">{html.escape(description)}</p>'
             "</div>"
         ),
@@ -1465,6 +1672,15 @@ def dashboard_selected_holding_name(holdings: list[dict[str, Any]], selected_sym
     return normalized_symbol
 
 
+def dashboard_live_refresh_interval(account_id: int) -> str | None:
+    """실시간 worker 연결 시 대시보드 자동 새로고침 간격을 반환한다."""
+
+    status = get_realtime_worker_status(account_id) or {}
+    if str(status.get("connection_state") or "").strip().lower() == "connected":
+        return "10s"
+    return None
+
+
 def interpolate_hex_color(start_hex: str, end_hex: str, ratio: float) -> str:
     """두 색상 사이를 0~1 비율로 보간한다."""
 
@@ -1556,12 +1772,17 @@ def render_dashboard_treemap_legend(stats: dict[str, Any]) -> None:
             "</div>"
         )
         selected_caption = f"선택 종목: {selected_name} {format_pct(float(selected_rate))}"
+    legend_segments_html = "".join(
+        f'<span class="dashboard-treemap-legend__segment" style="background:{color};"></span>'
+        for color in FEARGREED_TREEMAP_PALETTE
+    )
 
     st.markdown(
         (
             '<div class="dashboard-treemap-legend">'
             '<div class="dashboard-treemap-legend__range">'
             '<div class="dashboard-treemap-legend__bar">'
+            f'<div class="dashboard-treemap-legend__segments">{legend_segments_html}</div>'
             f"{marker_html}"
             "</div>"
             '<div class="dashboard-treemap-legend__labels">'
@@ -1609,11 +1830,11 @@ def style_dashboard_altair_chart(chart: alt.Chart, *, height: int) -> alt.Chart:
         chart.properties(height=height)
         .configure_view(stroke=None)
         .configure_axis(
-            gridColor="#D7E2E7",
-            domainColor="#C8D4DA",
-            tickColor="#C8D4DA",
-            labelColor="#607285",
-            titleColor="#607285",
+            gridColor=FEARGREED_BORDER_COLOR,
+            domainColor=FEARGREED_BORDER_COLOR,
+            tickColor=FEARGREED_BORDER_COLOR,
+            labelColor=FEARGREED_MID_TEXT_COLOR,
+            titleColor=FEARGREED_MID_TEXT_COLOR,
             titleFontWeight=700,
             labelFontSize=12,
             titleFontSize=12,
@@ -1632,6 +1853,185 @@ def refresh_prices(holdings: list[dict[str, Any]]) -> tuple[int, list[str]]:
         except Exception as exc:  # noqa: BLE001
             errors.append(f"{holding['product_name']} ({holding['symbol']}): {exc}")
     return updated, errors
+
+
+def _format_intraday_as_of(value: Any) -> str:
+    raw_value = str(value or "").strip()
+    if not raw_value:
+        return "당일 데이터 없음"
+    try:
+        timestamp = pd.Timestamp(raw_value)
+    except Exception:  # noqa: BLE001
+        return raw_value
+    return f"기준 {timestamp.strftime('%m-%d %H:%M')}"
+
+
+def _build_intraday_sparkline_svg(
+    values: list[float],
+    *,
+    positive: bool,
+    width: int = 188,
+    height: int = 40,
+) -> str:
+    if not values:
+        return (
+            '<div style="height:40px; display:flex; align-items:center; justify-content:center; '
+            'color:#868993; font-size:10px;">당일 데이터 없음</div>'
+        )
+
+    numeric_values = [float(value) for value in values]
+    minimum = min(numeric_values)
+    maximum = max(numeric_values)
+    stroke_color = "#E22B2B" if positive else "#1763B2"
+    fill_color = "rgba(226,43,43,0.16)" if positive else "rgba(23,99,178,0.18)"
+    left_pad = 4
+    top_pad = 3
+    usable_width = max(width - left_pad * 2, 1)
+    usable_height = max(height - top_pad * 2, 1)
+    point_count = max(len(numeric_values) - 1, 1)
+
+    points: list[str] = []
+    for index, value in enumerate(numeric_values):
+        x = left_pad + usable_width * (index / point_count)
+        if maximum == minimum:
+            y = top_pad + usable_height / 2
+        else:
+            y = top_pad + usable_height * (1 - ((value - minimum) / (maximum - minimum)))
+        points.append(f"{x:.1f},{y:.1f}")
+
+    line_points = " ".join(points)
+    baseline = height - top_pad
+    area_points = f"{left_pad:.1f},{baseline:.1f} {line_points} {width - left_pad:.1f},{baseline:.1f}"
+    last_point = points[-1]
+    return (
+        f'<svg viewBox="0 0 {width} {height}" width="{width}" height="{height}" '
+        'xmlns="http://www.w3.org/2000/svg" role="img" aria-label="당일 가격 추세">'
+        f'<polyline points="{area_points}" fill="{fill_color}" stroke="none"></polyline>'
+        f'<polyline points="{line_points}" fill="none" stroke="{stroke_color}" stroke-width="2.2" '
+        'stroke-linecap="round" stroke-linejoin="round"></polyline>'
+        f'<circle cx="{last_point.split(",")[0]}" cy="{last_point.split(",")[1]}" r="2.8" '
+        f'fill="{stroke_color}" stroke="#FFFFFF" stroke-width="1"></circle>'
+        "</svg>"
+    )
+
+
+def _build_treemap_market_snapshot_lookup(holdings: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """트리맵 tooltip에 사용할 종목별 당일 시세 요약 맵을 만든다."""
+
+    snapshots: dict[str, dict[str, Any]] = {}
+    seen: set[str] = set()
+    for holding in holdings:
+        symbol = normalize_holding_symbol(holding.get("symbol"))
+        if not symbol or symbol == "CASH" or symbol in seen:
+            continue
+        seen.add(symbol)
+        try:
+            snapshot = fetch_intraday_price_snapshot(symbol)
+        except Exception:  # noqa: BLE001
+            snapshot = {}
+        snapshots[symbol] = snapshot if isinstance(snapshot, dict) else {}
+    return snapshots
+
+
+def _attach_leaf_market_details(
+    leaf: dict[str, Any],
+    snapshot_lookup: dict[str, dict[str, Any]],
+) -> None:
+    symbol = normalize_holding_symbol(leaf.get("symbol") or leaf.get("selection_symbol"))
+    if symbol == "CASH":
+        revenue_value = float(leaf.get("revenue_value") or leaf.get("value") or 0)
+        leaf["node_kind"] = "holding"
+        leaf["quote_currency"] = "KRW"
+        leaf["current_price_value"] = round(revenue_value, 4)
+        leaf["current_price_text"] = format_won(revenue_value)
+        leaf["day_change_rate"] = None
+        leaf["day_change_text"] = "-"
+        leaf["holding_profit_text"] = "-"
+        leaf["sparkline_svg"] = (
+            '<div style="height:40px; display:flex; align-items:center; justify-content:center; '
+            'color:#868993; font-size:10px;">현금 자산은 장중 추세가 없습니다</div>'
+        )
+        leaf["intraday_as_of"] = "현금 잔액"
+        return
+
+    raw_snapshot = snapshot_lookup.get(symbol) or {}
+    prices = [float(value) for value in (raw_snapshot.get("series") or []) if value is not None]
+    quote_currency = _quote_currency_for_symbol(symbol, str(raw_snapshot.get("currency") or "KRW"))
+    fallback_current_price = float(leaf.get("current_price") or 0)
+    current_price = raw_snapshot.get("current_price")
+    current_price_value = float(current_price) if current_price not in (None, "") else fallback_current_price
+    day_change_rate = raw_snapshot.get("day_change_rate")
+    day_change_numeric = float(day_change_rate) if day_change_rate not in (None, "") else None
+    holding_profit_rate = leaf.get("profit_rate")
+    holding_profit_numeric = float(holding_profit_rate) if holding_profit_rate not in (None, "") else None
+    sparkline_positive = bool(day_change_numeric is None or day_change_numeric >= 0)
+    leaf["node_kind"] = "holding"
+    leaf["quote_currency"] = quote_currency
+    leaf["current_price_value"] = round(current_price_value, 4)
+    leaf["current_price_text"] = _format_quote_price(current_price_value, currency=quote_currency)
+    leaf["day_change_rate"] = round(day_change_numeric, 4) if day_change_numeric is not None else None
+    leaf["day_change_text"] = format_pct(day_change_numeric) if day_change_numeric is not None else "-"
+    leaf["holding_profit_text"] = format_pct(holding_profit_numeric) if holding_profit_numeric is not None else "-"
+    leaf["sparkline_svg"] = _build_intraday_sparkline_svg(prices, positive=sparkline_positive)
+    leaf["intraday_as_of"] = _format_intraday_as_of(raw_snapshot.get("as_of"))
+
+
+def _rollup_treemap_node_values(
+    node: dict[str, Any],
+    *,
+    snapshot_lookup: dict[str, dict[str, Any]],
+) -> tuple[float, float, float]:
+    children = node.get("children") or []
+    if not children:
+        revenue_value = float(node.get("value") or 0)
+        profit_rate = node.get("profit_rate")
+        node["revenue_value"] = round(revenue_value, 4)
+        child_rate = round(float(profit_rate or 0), 4)
+        node["value"] = [round(revenue_value, 4), child_rate]
+        node["itemStyle"] = {
+            "borderColor": "#F8FAFC",
+            "borderWidth": 1,
+            "gapWidth": 1,
+        }
+        _attach_leaf_market_details(node, snapshot_lookup)
+        if profit_rate is None:
+            return revenue_value, 0.0, 0.0
+        return revenue_value, revenue_value * float(profit_rate), revenue_value
+
+    node["node_kind"] = "group"
+    total_value = 0.0
+    weighted_rate_total = 0.0
+    weighted_rate_weight = 0.0
+    for child in children:
+        child_value, child_weighted_total, child_weight = _rollup_treemap_node_values(
+            child,
+            snapshot_lookup=snapshot_lookup,
+        )
+        total_value += child_value
+        weighted_rate_total += child_weighted_total
+        weighted_rate_weight += child_weight
+
+    parent_rate = (weighted_rate_total / weighted_rate_weight) if weighted_rate_weight else 0.0
+    node["revenue_value"] = round(total_value, 4)
+    node["profit_rate"] = round(parent_rate, 4)
+    node["value"] = [
+        round(total_value, 4),
+        round(parent_rate, 4),
+    ]
+    return total_value, weighted_rate_total, weighted_rate_weight
+
+
+def _iter_treemap_leaves(nodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    leaves: list[dict[str, Any]] = []
+    stack = list(nodes)
+    while stack:
+        current = stack.pop()
+        children = current.get("children") or []
+        if children:
+            stack.extend(children)
+            continue
+        leaves.append(current)
+    return leaves
 
 
 def allocation_chart(summary: dict[str, Any]) -> alt.Chart | None:
@@ -1669,11 +2069,14 @@ def allocation_treemap_options(
     if not nodes:
         return None
 
+    snapshot_lookup = _build_treemap_market_snapshot_lookup(holdings)
+    for node in nodes:
+        _rollup_treemap_node_values(node, snapshot_lookup=snapshot_lookup)
+
     leaf_rates = [
-        round(float(child.get("profit_rate") or 0), 2)
-        for node in nodes
-        for child in (node.get("children") or [])
-        if child.get("profit_rate") is not None
+        round(float(leaf.get("profit_rate") or 0), 2)
+        for leaf in _iter_treemap_leaves(nodes)
+        if leaf.get("profit_rate") is not None
     ]
     rate_min = min(leaf_rates) if leaf_rates else 0.0
     rate_max = max(leaf_rates) if leaf_rates else 0.0
@@ -1683,74 +2086,103 @@ def allocation_treemap_options(
         visual_min -= 0.01
         visual_max += 0.01
 
-    for node in nodes:
-        children = node.get("children") or []
-        total_value = 0.0
-        weighted_rate_total = 0.0
-        weighted_rate_weight = 0.0
-        for child in children:
-            revenue_value = float(child.get("value") or 0)
-            profit_rate = child.get("profit_rate")
-            child["revenue_value"] = round(revenue_value, 4)
-            child_rate = round(float(profit_rate or 0), 4)
-            child["value"] = [
-                round(revenue_value, 4),
-                child_rate,
-            ]
-            child["itemStyle"] = {
-                "borderColor": "#F8FAFC",
-                "borderWidth": 1,
-                "gapWidth": 1,
-            }
-            total_value += revenue_value
-            if profit_rate is not None:
-                weighted_rate_total += revenue_value * float(profit_rate)
-                weighted_rate_weight += revenue_value
-
-        parent_rate = (weighted_rate_total / weighted_rate_weight) if weighted_rate_weight else 0.0
-        node["revenue_value"] = round(total_value, 4)
-        node["profit_rate"] = round(parent_rate, 4)
-        node["value"] = [
-            round(total_value, 4),
-            round(parent_rate, 4),
-        ]
-
     tooltip_formatter = None
     if JsCode is not None:
         tooltip_formatter = JsCode(
             """
             function(info) {
+                function esc(value) {
+                    return String(value || '')
+                        .replace(/&/g, '&amp;')
+                        .replace(/</g, '&lt;')
+                        .replace(/>/g, '&gt;')
+                        .replace(/"/g, '&quot;')
+                        .replace(/'/g, '&#39;');
+                }
+                var data = info.data || {};
                 var rawValue = Array.isArray(info.value) ? info.value[0] : info.value;
-                var revenue = Math.round(Number(rawValue || 0)).toLocaleString('ko-KR');
+                var revenue = '₩' + Math.round(Number(rawValue || 0)).toLocaleString('ko-KR');
                 var path = [];
                 if (info.treePathInfo) {
                     for (var i = 1; i < info.treePathInfo.length; i += 1) {
                         path.push(info.treePathInfo[i].name);
                     }
                 }
-                var lines = [
-                    '<div style="font-weight:700; margin-bottom:6px;">' + info.name + '</div>',
-                    '평가금액: ₩' + revenue
-                ];
-                if (path.length > 1) {
-                    lines.unshift('<div style="font-size:12px; color:#64748B; margin-bottom:4px;">' + path.join(' → ') + '</div>');
+                if (data.node_kind !== 'holding') {
+                    var summaryLines = [
+                        '<div style="font-size:11px; color:#8B93A7; margin-bottom:6px;">' + esc(path.join(' → ')) + '</div>',
+                        '<div style="font-size:16px; font-weight:700; color:#FFFFFF; margin-bottom:10px;">' + esc(info.name) + '</div>',
+                        '<div style="display:flex; justify-content:space-between; gap:16px; margin-bottom:4px;">'
+                            + '<span style="font-size:11px; color:#7F8798;">평가금액</span>'
+                            + '<span style="font-family:monospace; font-size:12px; color:#DDE3EE;">' + revenue + '</span>'
+                        + '</div>'
+                    ];
+                    if (data.profit_rate !== null && data.profit_rate !== undefined) {
+                        var groupRate = Number(data.profit_rate || 0);
+                        var groupColor = groupRate >= 0 ? '#E22B2B' : '#1763B2';
+                        summaryLines.push(
+                            '<div style="display:flex; justify-content:space-between; gap:16px;">'
+                                + '<span style="font-size:11px; color:#7F8798;">가중 수익률</span>'
+                                + '<span style="font-family:monospace; font-size:12px; color:' + groupColor + ';">'
+                                + (groupRate >= 0 ? '+' : '') + groupRate.toFixed(2) + '%</span>'
+                            + '</div>'
+                        );
+                    }
+                    return (
+                        '<div style="min-width:220px; max-width:280px; background:rgba(30,34,45,.97); border:1px solid rgba(255,255,255,.10); '
+                        + 'border-radius:10px; padding:14px 16px 12px; box-shadow:0 12px 32px rgba(0,0,0,.42);">'
+                        + summaryLines.join('')
+                        + '</div>'
+                    );
                 }
-                if (info.data && info.data.profit_rate !== null && info.data.profit_rate !== undefined) {
-                    lines.push('수익률: ' + Number(info.data.profit_rate).toFixed(2) + '%');
-                }
-                return lines.join('<br/>');
+                var dayRate = data.day_change_rate;
+                var dayText = data.day_change_text || '-';
+                var dayPositive = dayRate === null || dayRate === undefined || Number(dayRate || 0) >= 0;
+                var dayColor = dayPositive ? '#E22B2B' : '#1763B2';
+                var dayBackground = dayPositive ? 'rgba(226,43,43,.13)' : 'rgba(23,99,178,.15)';
+                var profitRate = data.profit_rate;
+                var holdingPositive = profitRate === null || profitRate === undefined || Number(profitRate || 0) >= 0;
+                var holdingColor = holdingPositive ? '#E22B2B' : '#1763B2';
+                var pathLabel = path.length > 1 ? path.slice(0, -1).join(' → ') : (data.bucket || '');
+                return (
+                    '<div style="min-width:230px; max-width:280px; background:rgba(30,34,45,.97); border:1px solid rgba(255,255,255,.10); '
+                    + 'border-radius:10px; padding:14px 16px 12px; box-shadow:0 4px 6px rgba(0,0,0,.3),0 12px 32px rgba(0,0,0,.6);">'
+                    +   '<div style="display:flex; align-items:flex-start; justify-content:space-between; gap:10px; margin-bottom:10px; '
+                    +   'padding-bottom:10px; border-bottom:1px solid rgba(255,255,255,.07);">'
+                    +     '<div>'
+                    +       '<div style="font-size:16px; font-weight:700; color:#FFFFFF; letter-spacing:-0.02em;">' + esc(info.name) + '</div>'
+                    +       '<div style="font-size:10px; color:#868993; margin-top:2px; line-height:1.35;">' + esc(data.symbol || '') + '</div>'
+                    +     '</div>'
+                    +     '<div style="font-family:monospace; font-size:12px; font-weight:500; padding:3px 8px; border-radius:4px; '
+                    +       'white-space:nowrap; color:' + dayColor + '; background:' + dayBackground + ';">' + esc(dayText) + '</div>'
+                    +   '</div>'
+                    +   '<div style="display:flex; flex-direction:column; gap:5px; margin-bottom:10px;">'
+                    +     '<div style="display:flex; justify-content:space-between; align-items:center; gap:12px;"><span style="font-size:10px; color:#555C6E;">현재가</span><span style="font-family:monospace; font-size:11px; color:#D1D4DC;">' + esc(data.current_price_text || revenue) + '</span></div>'
+                    +     '<div style="display:flex; justify-content:space-between; align-items:center; gap:12px;"><span style="font-size:10px; color:#555C6E;">당일 등락률</span><span style="font-family:monospace; font-size:11px; color:' + dayColor + ';">' + esc(dayText) + '</span></div>'
+                    +     '<div style="display:flex; justify-content:space-between; align-items:center; gap:12px;"><span style="font-size:10px; color:#555C6E;">보유 수익률</span><span style="font-family:monospace; font-size:11px; color:' + holdingColor + ';">' + esc(data.holding_profit_text || '-') + '</span></div>'
+                    +     '<div style="display:flex; justify-content:space-between; align-items:center; gap:12px;"><span style="font-size:10px; color:#555C6E;">섹터</span><span style="font-family:monospace; font-size:11px; color:#9BA3B2;">' + esc(data.sector_name || data.bucket || '-') + '</span></div>'
+                    +   '</div>'
+                    +   '<div style="margin-top:10px; padding-top:9px; border-top:1px solid rgba(255,255,255,.07);">'
+                    +     '<div style="font-size:9px; font-weight:500; color:#555C6E; letter-spacing:.08em; text-transform:uppercase; margin-bottom:5px;">당일 추세</div>'
+                    +     (data.sparkline_svg || '<div style="height:40px; display:flex; align-items:center; justify-content:center; color:#868993; font-size:10px;">당일 데이터 없음</div>')
+                    +     '<div style="display:flex; justify-content:space-between; gap:8px; margin-top:6px;">'
+                    +       '<span style="font-size:10px; color:#868993;">' + esc(pathLabel) + '</span>'
+                    +       '<span style="font-size:10px; color:#868993;">' + esc(data.intraday_as_of || '') + '</span>'
+                    +     '</div>'
+                    +   '</div>'
+                    + '</div>'
+                );
             }
             """
         )
 
     tooltip_config: dict[str, Any] = {
-        "backgroundColor": "#FFFFFF",
-        "borderColor": "#E2E8F0",
-        "borderWidth": 1,
-        "borderRadius": 10,
-        "padding": [10, 12],
+        "backgroundColor": "transparent",
+        "borderWidth": 0,
+        "padding": 0,
+        "confine": True,
         "textStyle": {"color": "#1E293B", "fontSize": 12},
-        "extraCssText": "box-shadow: 0 8px 24px rgba(15, 23, 42, 0.14);",
+        "extraCssText": "box-shadow:none;",
     }
     if tooltip_formatter is not None:
         tooltip_config["formatter"] = tooltip_formatter
@@ -1767,16 +2199,21 @@ def allocation_treemap_options(
         )
 
     return {
-        "backgroundColor": "transparent",
+        "backgroundColor": TREEMAP_CANVAS_BG_COLOR,
         "animationDurationUpdate": 220,
         "title": {
-            "text": "자산군 → 보유 종목",
+            "text": "자산군 → 섹터 → 보유 종목",
             "left": "center",
-            "top": 0,
+            "top": 8,
+            "padding": [6, 12],
+            "backgroundColor": TREEMAP_TITLE_BG_COLOR,
+            "borderColor": TREEMAP_TITLE_BORDER_COLOR,
+            "borderWidth": 1,
+            "borderRadius": 999,
             "textStyle": {
                 "fontSize": 15,
                 "fontWeight": 700,
-                "color": "#334155",
+                "color": TREEMAP_TITLE_TEXT_COLOR,
             },
         },
         "tooltip": tooltip_config,
@@ -1797,27 +2234,27 @@ def allocation_treemap_options(
             "text": ["높은 수익률", "낮은 수익률"],
             "textGap": 6,
             "textStyle": {
-                "color": "#64748B",
+                "color": FEARGREED_MUTED_TEXT_COLOR,
                 "fontSize": 12,
                 "fontWeight": 600,
             },
             "inRange": {
-                "color": ["#F1646C", "#F2D675", "#9CCB6D"],
+                "color": FEARGREED_TREEMAP_PALETTE,
             },
             "outOfRange": {
                 "colorAlpha": 0.0,
             },
-            "borderColor": "#D7DEE5",
+            "borderColor": FEARGREED_BORDER_COLOR,
             "padding": 0,
         },
         "series": [
             {
                 "name": "자산 배분",
                 "type": "treemap",
-                "top": 36,
-                "left": 0,
-                "right": 0,
-                "bottom": 68,
+                "top": 52,
+                "left": 8,
+                "right": 8,
+                "bottom": 72,
                 "roam": False,
                 "nodeClick": False,
                 "sort": "desc",
@@ -1839,49 +2276,66 @@ def allocation_treemap_options(
                 "upperLabel": {
                     "show": True,
                     "formatter": label_formatter,
-                    "height": 28,
+                    "height": 24,
                     "color": "#F8FAFC",
                     "fontWeight": 700,
                     "overflow": "truncate",
                     "ellipsis": "…",
                 },
                 "itemStyle": {
-                    "borderColor": "#5E646B",
-                    "borderWidth": 2,
-                    "gapWidth": 2,
-                    "borderRadius": 2,
+                    "borderColor": TREEMAP_CANVAS_BORDER_COLOR,
+                    "borderWidth": 3,
+                    "gapWidth": 4,
+                    "borderRadius": 8,
                 },
                 "emphasis": {
                     "focus": "self",
                     "itemStyle": {
-                        "borderColor": "#173F46",
+                        "borderColor": TREEMAP_TITLE_TEXT_COLOR,
                         "borderWidth": 3,
                         "shadowBlur": 16,
-                        "shadowColor": "rgba(15, 23, 42, 0.12)",
+                        "shadowColor": "rgba(0, 0, 0, 0.26)",
                     }
                 },
                 "levels": [
                     {
                         "itemStyle": {
-                            "borderColor": "#5E646B",
-                            "borderWidth": 3,
-                            "gapWidth": 3,
+                            "borderColor": TREEMAP_CANVAS_BORDER_COLOR,
+                            "borderWidth": 4,
+                            "gapWidth": 6,
+                            "borderRadius": 10,
                         },
                         "upperLabel": {
                             "show": True,
                             "height": 30,
-                            "color": "#FFFFFF",
-                            "backgroundColor": "#5E646B",
+                            "color": FEARGREED_FULL_TEXT_COLOR,
+                            "backgroundColor": FEARGREED_FLAT_COLOR,
                             "padding": [6, 10],
                         },
                     },
                     {
-                        "color": ["#F1646C", "#F2D675", "#9CCB6D"],
+                        "itemStyle": {
+                            "borderColor": TREEMAP_CANVAS_BORDER_COLOR,
+                            "borderWidth": 3,
+                            "gapWidth": 4,
+                            "borderRadius": 8,
+                        },
+                        "upperLabel": {
+                            "show": True,
+                            "height": 24,
+                            "color": FEARGREED_BRIGHT_TEXT_COLOR,
+                            "backgroundColor": "rgba(42,46,57,0.88)",
+                            "padding": [4, 8],
+                        },
+                    },
+                    {
+                        "color": FEARGREED_TREEMAP_PALETTE,
                         "colorMappingBy": "value",
                         "itemStyle": {
-                            "borderColor": "#D5DDE3",
-                            "borderWidth": 1,
-                            "gapWidth": 1,
+                            "borderColor": TREEMAP_CANVAS_BORDER_COLOR,
+                            "borderWidth": 2,
+                            "gapWidth": 3,
+                            "borderRadius": 6,
                         },
                     },
                 ],
@@ -1917,11 +2371,11 @@ def holdings_bar_options(frame: pd.DataFrame, *, selected_symbol: str | None = N
                 "current_value": round(float(row.get("current_value") or 0), 4),
                 "profit_rate": round(rate, 2),
                 "itemStyle": {
-                    "color": "#1D7F78" if rate >= 0 else "#D14D57",
-                    "borderColor": "#0F766E" if is_selected else "#FFFFFF",
+                    "color": FEARGREED_UP_COLOR if rate >= 0 else FEARGREED_DOWN_COLOR,
+                    "borderColor": FEARGREED_ACCENT_COLOR if is_selected else "rgba(255,255,255,0.08)",
                     "borderWidth": 3 if is_selected else 0,
                     "shadowBlur": 18 if is_selected else 0,
-                    "shadowColor": "rgba(15, 118, 110, 0.22)" if is_selected else "transparent",
+                    "shadowColor": "rgba(41, 98, 255, 0.28)" if is_selected else "transparent",
                     "opacity": 1 if is_selected else 0.92,
                 },
                 "label": {
@@ -1929,7 +2383,7 @@ def holdings_bar_options(frame: pd.DataFrame, *, selected_symbol: str | None = N
                     "position": "top" if rate >= 0 else "bottom",
                     "distance": 8,
                     "formatter": format_pct(rate),
-                    "color": "#0D3559" if is_selected else "#4B5D6B",
+                    "color": FEARGREED_FULL_TEXT_COLOR if is_selected else FEARGREED_MID_TEXT_COLOR,
                     "fontWeight": 700 if is_selected else 600,
                     "opacity": 1 if is_selected or not selected_key else 0.78,
                 },
@@ -1961,10 +2415,10 @@ def holdings_bar_options(frame: pd.DataFrame, *, selected_symbol: str | None = N
     y_axis_config: dict[str, Any] = {
         "type": "value",
         "name": "수익률 (%)",
-        "nameTextStyle": {"color": "#607285", "fontWeight": 700},
-        "axisLabel": {"color": "#607285", "formatter": "{value}%"},
+        "nameTextStyle": {"color": FEARGREED_MID_TEXT_COLOR, "fontWeight": 700},
+        "axisLabel": {"color": FEARGREED_MUTED_TEXT_COLOR, "formatter": "{value}%"},
         "axisLine": {"show": False},
-        "splitLine": {"lineStyle": {"color": "#D7E2E7"}},
+        "splitLine": {"lineStyle": {"color": FEARGREED_BORDER_COLOR}},
     }
     if minimum >= 0:
         y_axis_config["min"] = 0.0
@@ -1978,7 +2432,7 @@ def holdings_bar_options(frame: pd.DataFrame, *, selected_symbol: str | None = N
         "grid": {"top": 56, "right": 12, "bottom": 96, "left": 56},
         "tooltip": {
             "trigger": "item",
-            "backgroundColor": "rgba(21, 40, 31, 0.92)",
+            "backgroundColor": "rgba(30, 34, 45, 0.97)",
             "borderWidth": 0,
             "textStyle": {"color": "#F8FAFC", "fontSize": 12},
             **({"formatter": tooltip_formatter} if tooltip_formatter is not None else {}),
@@ -1989,11 +2443,11 @@ def holdings_bar_options(frame: pd.DataFrame, *, selected_symbol: str | None = N
             "axisLabel": {
                 "interval": 0,
                 "rotate": 32,
-                "color": "#607285",
+                "color": FEARGREED_MUTED_TEXT_COLOR,
                 "fontSize": 11,
                 "margin": 14,
             },
-            "axisLine": {"lineStyle": {"color": "#C8D4DA"}},
+            "axisLine": {"lineStyle": {"color": FEARGREED_BORDER_COLOR}},
             "axisTick": {"show": False},
         },
         "yAxis": y_axis_config,
@@ -2046,8 +2500,8 @@ def holdings_bar_fallback_chart(frame: pd.DataFrame, *, selected_symbol: str | N
                     labelLimit=118,
                     labelPadding=10,
                     titlePadding=14,
-                    labelColor="#607285",
-                    titleColor="#607285",
+                    labelColor=FEARGREED_MUTED_TEXT_COLOR,
+                    titleColor=FEARGREED_MID_TEXT_COLOR,
                 ),
             ),
             y=alt.Y(
@@ -2056,13 +2510,13 @@ def holdings_bar_fallback_chart(frame: pd.DataFrame, *, selected_symbol: str | N
                 axis=alt.Axis(
                     format=".0f",
                     grid=True,
-                    gridColor="#D7E2E7",
+                    gridColor=FEARGREED_BORDER_COLOR,
                     tickCount=6,
-                    labelColor="#607285",
-                    titleColor="#607285",
+                    labelColor=FEARGREED_MUTED_TEXT_COLOR,
+                    titleColor=FEARGREED_MID_TEXT_COLOR,
                 ),
             ),
-            color=alt.Color("tone:N", legend=None, scale=alt.Scale(domain=["수익", "손실"], range=["#1D7F78", "#D14D57"])),
+            color=alt.Color("tone:N", legend=None, scale=alt.Scale(domain=["수익", "손실"], range=[FEARGREED_UP_COLOR, FEARGREED_DOWN_COLOR])),
             opacity=alt.Opacity("selected_opacity:Q", legend=None),
             tooltip=[
                 alt.Tooltip("product_name:N", title="종목"),
@@ -2073,7 +2527,7 @@ def holdings_bar_fallback_chart(frame: pd.DataFrame, *, selected_symbol: str | N
     )
     labels = (
         alt.Chart(chart_frame)
-        .mark_text(dy=-8, fontSize=11, fontWeight="bold", color="#0D3559")
+        .mark_text(dy=-8, fontSize=11, fontWeight="bold", color=FEARGREED_FULL_TEXT_COLOR)
         .encode(
             x=alt.X("display_name:N", sort=display_order),
             y=alt.Y("profit_rate:Q"),
@@ -2094,12 +2548,12 @@ def selected_holding_trend_chart(
 ) -> alt.Chart:
     """선택 종목 단일 추이 차트를 만든다."""
 
-    measure_key = str(measure or "market_value")
+    measure_key = str(measure or DEFAULT_SELECTED_TREND_MEASURE)
     measure_title = label_detail_measure(measure_key)
     measure_format = ",.2f" if measure_key == "close" else (".2f" if measure_key == "profit_rate" else ",.0f")
     return (
         alt.Chart(frame)
-        .mark_line(point=True, strokeWidth=3, color="#0F766E")
+        .mark_line(point=True, strokeWidth=3, color="#80AAF0")
         .encode(
             x=alt.X("date:T", title="날짜"),
             y=alt.Y(f"{measure_key}:Q", title=measure_title),
@@ -2121,6 +2575,77 @@ def selected_holding_trend_chart(
     )
 
 
+def _selected_holding_trend_data_view_option() -> Any | None:
+    """선택 종목 트렌드 toolbox의 데이터 보기 HTML 렌더러를 반환한다."""
+
+    if JsCode is None:
+        return None
+
+    return JsCode(
+        """
+        function(option) {
+            function esc(value) {
+                return String(value || '')
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/'/g, '&#39;');
+            }
+
+            function formatClose(value) {
+                return Number(value || 0).toLocaleString('ko-KR', {
+                    minimumFractionDigits: 0,
+                    maximumFractionDigits: 2
+                });
+            }
+
+            function formatRate(value) {
+                var numeric = Number(value || 0);
+                return (numeric >= 0 ? '+' : '') + numeric.toFixed(2) + '%';
+            }
+
+            function formatValue(value) {
+                return '₩' + Math.round(Number(value || 0)).toLocaleString('ko-KR');
+            }
+
+            var rows = (((option || {}).series || [])[0] || {}).data || [];
+            var headerStyle = 'padding:8px 10px; border-bottom:1px solid #D7E2E7; background:#F8FAFC; color:#334155; font-weight:700; text-align:center;';
+            var cellStyle = 'padding:8px 10px; border-bottom:1px solid #E2E8F0; color:#1E293B;';
+            var html = '<div style="padding:8px 2px 2px;">';
+            html += '<table style="width:100%; border-collapse:collapse; font-size:12px;">';
+            html += '<thead><tr>';
+            html += '<th style="' + headerStyle + '">년</th>';
+            html += '<th style="' + headerStyle + '">월</th>';
+            html += '<th style="' + headerStyle + '">일</th>';
+            html += '<th style="' + headerStyle + '">기준가(종가)</th>';
+            html += '<th style="' + headerStyle + '">수익률</th>';
+            html += '<th style="' + headerStyle + '">평가금액</th>';
+            html += '</tr></thead><tbody>';
+
+            if (!rows.length) {
+                html += '<tr><td colspan="6" style="' + cellStyle + ' text-align:center; color:#64748B;">데이터가 없습니다.</td></tr>';
+            } else {
+                for (var index = 0; index < rows.length; index += 1) {
+                    var row = rows[index] || {};
+                    html += '<tr>'
+                        + '<td style="' + cellStyle + ' text-align:center;">' + esc(row.year || '') + '</td>'
+                        + '<td style="' + cellStyle + ' text-align:center;">' + esc(row.month || '') + '</td>'
+                        + '<td style="' + cellStyle + ' text-align:center;">' + esc(row.day || '') + '</td>'
+                        + '<td style="' + cellStyle + ' text-align:right; font-variant-numeric:tabular-nums;">' + esc(formatClose(row.close)) + '</td>'
+                        + '<td style="' + cellStyle + ' text-align:right; font-variant-numeric:tabular-nums;">' + esc(formatRate(row.profit_rate)) + '</td>'
+                        + '<td style="' + cellStyle + ' text-align:right; font-variant-numeric:tabular-nums;">' + esc(formatValue(row.market_value)) + '</td>'
+                        + '</tr>';
+                }
+            }
+
+            html += '</tbody></table></div>';
+            return html;
+        }
+        """
+    )
+
+
 def selected_holding_trend_options(
     frame: pd.DataFrame,
     *,
@@ -2134,7 +2659,7 @@ def selected_holding_trend_options(
     if frame.empty:
         return None
 
-    measure_key = str(measure or "market_value")
+    measure_key = str(measure or DEFAULT_SELECTED_TREND_MEASURE)
     measure_title = label_detail_measure(measure_key)
     working = frame.sort_values("date").copy()
     working["date"] = pd.to_datetime(working["date"])
@@ -2143,12 +2668,20 @@ def selected_holding_trend_options(
     full_dates = working["date"].dt.strftime("%Y-%m-%d").tolist()
 
     series_data: list[dict[str, Any]] = []
-    for row, label_date, full_date in zip(working.to_dict(orient="records"), x_labels, full_dates):
+    for row, label_date, full_date, row_date in zip(
+        working.to_dict(orient="records"),
+        x_labels,
+        full_dates,
+        working["date"],
+    ):
         series_data.append(
             {
                 "value": round(float(row.get(measure_key) or 0), 4),
                 "date": full_date,
                 "axis_label": label_date,
+                "year": row_date.strftime("%Y"),
+                "month": row_date.strftime("%m"),
+                "day": row_date.strftime("%d"),
                 "product_name": selected_holding_name,
                 "market_value": round(float(row.get("market_value") or 0), 4),
                 "profit_rate": round(float(row.get("profit_rate") or 0), 4),
@@ -2224,14 +2757,16 @@ def selected_holding_trend_options(
     y_axis_config: dict[str, Any] = {
         "type": "value",
         "name": measure_title,
-        "nameTextStyle": {"color": "#607285", "fontWeight": 700, "padding": [0, 0, 0, 4]},
+        "nameTextStyle": {"color": FEARGREED_MID_TEXT_COLOR, "fontWeight": 700, "padding": [0, 0, 0, 4]},
         "axisLine": {"show": False},
         "axisTick": {"show": False},
-        "splitLine": {"lineStyle": {"color": "#D7E2E7"}},
-        "axisLabel": {"color": "#607285"},
+        "splitLine": {"lineStyle": {"color": FEARGREED_BORDER_COLOR}},
+        "axisLabel": {"color": FEARGREED_MUTED_TEXT_COLOR},
     }
     if axis_label_formatter is not None:
         y_axis_config["axisLabel"]["formatter"] = axis_label_formatter
+
+    data_view_option = _selected_holding_trend_data_view_option()
 
     return {
         "backgroundColor": "transparent",
@@ -2245,11 +2780,11 @@ def selected_holding_trend_options(
             "textStyle": {
                 "fontSize": 16,
                 "fontWeight": 700,
-                "color": "#1E293B",
+                "color": FEARGREED_FULL_TEXT_COLOR,
             },
             "subtextStyle": {
                 "fontSize": 11,
-                "color": "#64748B",
+                "color": FEARGREED_MUTED_TEXT_COLOR,
             },
         },
         "legend": {
@@ -2260,7 +2795,7 @@ def selected_holding_trend_options(
             "itemHeight": 10,
             "icon": "circle",
             "textStyle": {
-                "color": "#64748B",
+                "color": FEARGREED_MUTED_TEXT_COLOR,
                 "fontSize": 12,
             },
         },
@@ -2276,18 +2811,18 @@ def selected_holding_trend_options(
             "axisPointer": {
                 "type": "line",
                 "lineStyle": {
-                    "color": "#94A3B8",
+                    "color": FEARGREED_MUTED_TEXT_COLOR,
                     "width": 1,
                     "type": "dashed",
                 },
             },
-            "backgroundColor": "#FFFFFF",
-            "borderColor": "#E2E8F0",
+            "backgroundColor": "rgba(30, 34, 45, 0.97)",
+            "borderColor": FEARGREED_BORDER_COLOR,
             "borderWidth": 1,
             "borderRadius": 12,
             "padding": [10, 12],
-            "textStyle": {"color": "#1E293B", "fontSize": 12},
-            "extraCssText": "box-shadow: 0 8px 24px rgba(15, 23, 42, 0.14);",
+            "textStyle": {"color": FEARGREED_BRIGHT_TEXT_COLOR, "fontSize": 12},
+            "extraCssText": "box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);",
             **({"formatter": tooltip_formatter} if tooltip_formatter is not None else {}),
         },
         "toolbox": {
@@ -2296,11 +2831,11 @@ def selected_holding_trend_options(
             "right": 0,
             "itemSize": 16,
             "iconStyle": {
-                "borderColor": "#6B7FC8",
+                "borderColor": FEARGREED_ACCENT_COLOR,
             },
             "emphasis": {
                 "iconStyle": {
-                    "borderColor": "#0B6BDA",
+                    "borderColor": FEARGREED_FULL_TEXT_COLOR,
                 }
             },
             "feature": {
@@ -2314,6 +2849,7 @@ def selected_holding_trend_options(
                     "title": "데이터 보기",
                     "readOnly": True,
                     "lang": ["데이터 보기", "닫기", "새로고침"],
+                    **({"optionToContent": data_view_option} if data_view_option is not None else {}),
                 },
                 "dataZoom": {
                     "show": True,
@@ -2341,10 +2877,10 @@ def selected_holding_trend_options(
             "type": "category",
             "boundaryGap": False,
             "data": x_labels,
-            "axisLine": {"lineStyle": {"color": "#C8D4DA"}},
+            "axisLine": {"lineStyle": {"color": FEARGREED_BORDER_COLOR}},
             "axisTick": {"show": False},
             "axisLabel": {
-                "color": "#607285",
+                "color": FEARGREED_MUTED_TEXT_COLOR,
                 "hideOverlap": True,
                 "margin": 12,
             },
@@ -2361,18 +2897,18 @@ def selected_holding_trend_options(
                 "type": "slider",
                 "height": 22,
                 "bottom": 30,
-                "borderColor": "#D7DEE5",
-                "backgroundColor": "#F8FAFC",
-                "fillerColor": "rgba(11, 107, 218, 0.12)",
+                "borderColor": FEARGREED_BORDER_COLOR,
+                "backgroundColor": FEARGREED_PANEL_COLOR,
+                "fillerColor": "rgba(41, 98, 255, 0.18)",
                 "handleSize": 18,
                 "brushSelect": False,
                 "dataBackground": {
-                    "lineStyle": {"color": "rgba(11, 107, 218, 0.55)"},
-                    "areaStyle": {"color": "rgba(11, 107, 218, 0.08)"},
+                    "lineStyle": {"color": "rgba(128, 170, 240, 0.55)"},
+                    "areaStyle": {"color": "rgba(128, 170, 240, 0.08)"},
                 },
                 "selectedDataBackground": {
-                    "lineStyle": {"color": "#0B6BDA"},
-                    "areaStyle": {"color": "rgba(11, 107, 218, 0.16)"},
+                    "lineStyle": {"color": FEARGREED_ACCENT_COLOR},
+                    "areaStyle": {"color": "rgba(41, 98, 255, 0.18)"},
                 },
             },
         ],
@@ -2386,12 +2922,12 @@ def selected_holding_trend_options(
                 "symbolSize": 7,
                 "data": series_data,
                 "lineStyle": {
-                    "color": "#0B6BDA",
+                    "color": "#80AAF0",
                     "width": 3,
                 },
                 "itemStyle": {
-                    "color": "#FFFFFF",
-                    "borderColor": "#0B6BDA",
+                    "color": FEARGREED_FULL_TEXT_COLOR,
+                    "borderColor": "#80AAF0",
                     "borderWidth": 2,
                 },
                 "areaStyle": {
@@ -2402,8 +2938,8 @@ def selected_holding_trend_options(
                         "x2": 0,
                         "y2": 1,
                         "colorStops": [
-                            {"offset": 0, "color": "rgba(11, 107, 218, 0.22)"},
-                            {"offset": 1, "color": "rgba(11, 107, 218, 0.02)"},
+                            {"offset": 0, "color": "rgba(128, 170, 240, 0.28)"},
+                            {"offset": 1, "color": "rgba(128, 170, 240, 0.03)"},
                         ],
                     }
                 },
@@ -2416,7 +2952,7 @@ def selected_holding_trend_options(
                             "symbol": "none",
                             "silent": True,
                             "lineStyle": {
-                                "color": "#94A3B8",
+                                "color": FEARGREED_MUTED_TEXT_COLOR,
                                 "type": "dashed",
                             },
                             "data": [{"yAxis": 0}],
@@ -2711,6 +3247,7 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]], roll
     echarts_available = st_echarts is not None
     selection_key = dashboard_holding_selection_key(account_id)
     trend_period_key = dashboard_trend_period_key(account_id)
+    trend_measure_key = f"selected-trend-measure:{account_id}"
     available_symbols = {
         normalize_holding_symbol(holding.get("symbol"))
         for holding in holdings
@@ -2721,6 +3258,8 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]], roll
         st.session_state[selection_key] = ""
         selected_symbol = ""
     period = str(st.session_state.get(trend_period_key, "6mo") or "6mo")
+    if str(st.session_state.get(trend_measure_key) or "").strip() not in DETAIL_MEASURE_LABELS:
+        st.session_state[trend_measure_key] = DEFAULT_SELECTED_TREND_MEASURE
     overview_frame = holdings_overview_frame(holdings, selected_symbol=selected_symbol or None, limit=10)
     summary_cols = st.columns(5, gap="small", vertical_alignment="top")
 
@@ -2746,11 +3285,17 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]], roll
         st.warning("현재 환경에서는 ECharts 모듈을 불러오지 못해 대시보드 차트를 표시할 수 없습니다.")
 
     with st.container(border=True, height=DASHBOARD_OVERVIEW_PANEL_HEIGHT, key="dashboard-panel-allocation"):
-        render_dashboard_section_header("자산 배분", "자산군에서 보유 종목까지 한 번에 보고, 종목을 누르면 아래에서 개별 트렌드를 바로 확인합니다.")
         treemap_options = allocation_treemap_options(
             summary,
             holdings,
             selected_symbol=selected_symbol or None,
+        )
+        render_dashboard_section_header(
+            "자산 배분",
+            "자산군에서 보유 종목까지 한 번에 보고, 종목을 누르면 아래에서 개별 트렌드를 바로 확인합니다.",
+            status_text="데이터 로드됨" if treemap_options is not None else "데이터 대기",
+            status_tone="live" if treemap_options is not None else "idle",
+            status_palette_colors=FEARGREED_TREEMAP_PALETTE if treemap_options is not None else None,
         )
         if treemap_options is None:
             st.info("배분을 그릴 데이터가 아직 없습니다.")
@@ -2771,7 +3316,7 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]], roll
 
     with trend_col:
         with st.container(border=True, height=DASHBOARD_OVERVIEW_PANEL_HEIGHT, key="dashboard-panel-selected-trend"):
-            selected_trend_measure = "market_value"
+            selected_trend_measure = DEFAULT_SELECTED_TREND_MEASURE
             st.markdown("### 선택 종목 트렌드")
 
             if not selected_symbol:
@@ -2805,8 +3350,8 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]], roll
                             "표시 지표",
                             options=["market_value", "profit_rate", "close"],
                             format_func=label_detail_measure,
-                            default="market_value",
-                            key=f"selected-trend-measure:{account_id}",
+                            default=DEFAULT_SELECTED_TREND_MEASURE,
+                            key=trend_measure_key,
                         )
                     with action_col:
                         if st.button("선택 해제", key=f"clear-selected-holding:{account_id}", width="stretch"):
@@ -2828,7 +3373,7 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]], roll
                             st.info("선택 종목의 시세 이력이 아직 없어 트렌드 차트를 표시할 수 없습니다.")
                         else:
                             selected_frame = selected_holding_trend.sort_values("date").copy()
-                            selected_measure = str(selected_trend_measure or "market_value")
+                            selected_measure = str(selected_trend_measure or DEFAULT_SELECTED_TREND_MEASURE)
                             selected_symbol_code = str(selected_holdings[0].get("symbol") or selected_symbol).strip() or selected_symbol
                             if echarts_available:
                                 trend_options = selected_holding_trend_options(
@@ -3132,10 +3677,13 @@ def data_page(account: dict[str, Any], rollup_state: dict[str, Any] | None = Non
 
     account_id = int(account["id"])
     status = backend_status()
+    market_status = quote_provider_status() or {}
     holdings = list_holdings(account_id)
+    worker_status = get_realtime_worker_status(account_id) or {}
     trade_logs = list_trade_logs(account_id)
     interest_rows = list_daily_interest(account_id)
     snapshot_rows = list_account_snapshots(account_id)
+    last_quote_at = latest_realtime_quote_time(account_id)
     snapshot_date = str((rollup_state or {}).get("snapshot_date") or date.today().isoformat()).strip()
     summary = account_summary(account, holdings, trade_logs=trade_logs, interest_rows=interest_rows)
     cash_adjustment_logs = [
@@ -3160,6 +3708,22 @@ def data_page(account: dict[str, Any], rollup_state: dict[str, Any] | None = Non
         status_col_2.metric("거래 기록", f"{len(trade_logs):,}건", latest_date_text(trade_logs, "trade_date"))
         status_col_3.metric("현금 수정 순반영", format_won(summary["cash_flow"]["net_adjustment"]))
         status_col_4.metric("자산 스냅샷", f"{len(snapshot_rows):,}건", latest_date_text(snapshot_rows, "snapshot_date"))
+        quote_col_1, quote_col_2, quote_col_3 = st.columns(3)
+        quote_col_1.metric(
+            "KIS REST",
+            "사용 가능" if market_status.get("kis_rest_enabled") else "미설정",
+            f"env={market_status.get('kis_env', '-')}",
+        )
+        quote_col_2.metric(
+            "KIS WebSocket worker",
+            str(worker_status.get("connection_state") or "미확인"),
+            str(worker_status.get("last_seen_at") or "-"),
+        )
+        quote_col_3.metric(
+            "마지막 quote 반영",
+            str(last_quote_at or "-"),
+            str(worker_status.get("last_quote_at") or "-"),
+        )
         if cash_adjustment_logs:
             st.caption(
                 f"현금 수정 기록 `{len(cash_adjustment_logs):,}`건이 현재 현금과 평가액에 반영됩니다. "
@@ -3182,6 +3746,11 @@ def data_page(account: dict[str, Any], rollup_state: dict[str, Any] | None = Non
         if status.get("missing_config"):
             missing_text = ", ".join(f"`{item}`" for item in status["missing_config"])
             st.caption(f"누락 설정: {missing_text}")
+        if market_status.get("kis_missing_config"):
+            missing_text = ", ".join(f"`{item}`" for item in market_status["kis_missing_config"])
+            st.caption(f"KIS 누락 설정: {missing_text}")
+        if market_status.get("kis_master_cache_updated_at"):
+            st.caption(f"KIS 마스터 캐시: `{market_status['kis_master_cache_updated_at']}`")
         for notice in status.get("notices", []):
             st.caption(f"참고: {notice}")
 
@@ -3334,7 +3903,17 @@ def main() -> None:
         else:
             mark_rollup_synced(int(account["id"]))
     if active_page == "Dashboard":
-        dashboard_page(account, holdings, rollup_state)
+        live_refresh_interval = dashboard_live_refresh_interval(int(account["id"]))
+        if live_refresh_interval and hasattr(st, "fragment"):
+            @st.fragment(run_every=live_refresh_interval)
+            def render_dashboard_fragment() -> None:
+                refreshed_account = get_account(int(account["id"])) or account
+                refreshed_holdings = list_holdings(int(account["id"]))
+                dashboard_page(refreshed_account, refreshed_holdings, rollup_state)
+
+            render_dashboard_fragment()
+        else:
+            dashboard_page(account, holdings, rollup_state)
     elif active_page == "Trades":
         trade_entry_page(account, holdings, accounts)
     else:

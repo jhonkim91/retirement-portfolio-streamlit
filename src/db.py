@@ -1671,6 +1671,129 @@ def _supabase_set_holding_price(holding_id: int, current_price: float, as_of: st
     )
 
 
+def _supabase_record_realtime_price_tick(
+    *,
+    account_id: int,
+    holding_id: int | None,
+    symbol: str,
+    price: float,
+    previous_close: float | None = None,
+    day_change_rate: float | None = None,
+    currency: str = "KRW",
+    quote_time: str | None = None,
+    source: str = "KIS WebSocket",
+    metadata_json: dict[str, Any] | None = None,
+) -> None:
+    _require_user_id()
+    timestamp = str(quote_time or now_iso())
+    if holding_id is not None:
+        _supabase_set_holding_price(holding_id, float(price), timestamp)
+    _supabase_request(
+        "POST",
+        "realtime_price_ticks",
+        data={
+            "account_id": account_id,
+            "holding_id": holding_id,
+            "symbol": str(symbol or "").strip().upper(),
+            "price": float(price),
+            "previous_close": float(previous_close) if previous_close is not None else None,
+            "day_change_rate": float(day_change_rate) if day_change_rate is not None else None,
+            "currency": str(currency or "KRW").strip().upper() or "KRW",
+            "quote_time": timestamp,
+            "ingested_at": now_iso(),
+            "source": str(source or "KIS WebSocket").strip() or "KIS WebSocket",
+            "metadata_json": _metadata_payload(metadata_json),
+        },
+        prefer_return="minimal",
+    )
+
+
+def _supabase_list_realtime_price_ticks(account_id: int, limit: int = 200) -> list[dict[str, Any]]:
+    if not _supabase_get_account(account_id):
+        return []
+    result = _supabase_request(
+        "GET",
+        "realtime_price_ticks",
+        filters={
+            "account_id": f"eq.{account_id}",
+            "order": "quote_time.desc,id.desc",
+            "limit": int(limit),
+        },
+    )
+    return list(result or [])
+
+
+def _supabase_upsert_realtime_worker_status(
+    *,
+    account_id: int,
+    worker_name: str,
+    connection_state: str,
+    last_seen_at: str | None = None,
+    last_quote_at: str | None = None,
+    metadata_json: dict[str, Any] | None = None,
+) -> None:
+    _require_user_id()
+    payload = {
+        "worker_name": str(worker_name or "").strip() or "kis-quote-worker",
+        "connection_state": str(connection_state or "").strip() or "unknown",
+        "last_seen_at": str(last_seen_at or "").strip() or None,
+        "last_quote_at": str(last_quote_at or "").strip() or None,
+        "updated_at": now_iso(),
+        "metadata_json": _metadata_payload(metadata_json),
+    }
+    existing = _supabase_request("GET", "realtime_worker_status", filters={"account_id": f"eq.{account_id}"}) or []
+    if existing:
+        _supabase_request(
+            "PATCH",
+            "realtime_worker_status",
+            data=payload,
+            filters={"account_id": f"eq.{account_id}"},
+            prefer_return="minimal",
+        )
+        return
+    _supabase_request(
+        "POST",
+        "realtime_worker_status",
+        data={"account_id": account_id, **payload},
+        prefer_return="minimal",
+    )
+
+
+def _supabase_get_realtime_worker_status(account_id: int) -> dict[str, Any] | None:
+    if not _supabase_get_account(account_id):
+        return None
+    rows = _supabase_request("GET", "realtime_worker_status", filters={"account_id": f"eq.{account_id}"}) or []
+    return rows[0] if rows else None
+
+
+def _supabase_latest_realtime_quote_time(account_id: int) -> str:
+    if not _supabase_get_account(account_id):
+        return ""
+    rows = _supabase_request(
+        "GET",
+        "realtime_price_ticks",
+        filters={
+            "account_id": f"eq.{account_id}",
+            "select": "quote_time",
+            "order": "quote_time.desc,id.desc",
+            "limit": 1,
+        },
+    ) or []
+    if rows and rows[0].get("quote_time"):
+        return str(rows[0]["quote_time"])
+    holdings = _supabase_request(
+        "GET",
+        "holdings",
+        filters={
+            "account_id": f"eq.{account_id}",
+            "select": "price_updated_at",
+            "order": "price_updated_at.desc",
+            "limit": 1,
+        },
+    ) or []
+    return str(holdings[0].get("price_updated_at") or "") if holdings else ""
+
+
 def _supabase_list_trade_logs(account_id: int) -> list[dict[str, Any]]:
     if not _supabase_get_account(account_id):
         return []
@@ -2186,6 +2309,72 @@ def _sqlite_set_holding_price(holding_id: int, current_price: float, as_of: str 
     sqlite_db.set_holding_price(holding_id, current_price, as_of)
 
 
+def _sqlite_record_realtime_price_tick(
+    *,
+    account_id: int,
+    holding_id: int | None,
+    symbol: str,
+    price: float,
+    previous_close: float | None = None,
+    day_change_rate: float | None = None,
+    currency: str = "KRW",
+    quote_time: str | None = None,
+    source: str = "KIS WebSocket",
+    metadata_json: dict[str, Any] | None = None,
+) -> None:
+    _require_user_id()
+    sqlite_db.record_realtime_price_tick(
+        account_id=account_id,
+        holding_id=holding_id,
+        symbol=symbol,
+        price=price,
+        previous_close=previous_close,
+        day_change_rate=day_change_rate,
+        currency=currency,
+        quote_time=quote_time,
+        source=source,
+        metadata_json=metadata_json,
+    )
+
+
+def _sqlite_list_realtime_price_ticks(account_id: int, limit: int = 200) -> list[dict[str, Any]]:
+    if not _sqlite_get_account(account_id):
+        return []
+    return sqlite_db.list_realtime_price_ticks(account_id, limit=limit)
+
+
+def _sqlite_upsert_realtime_worker_status(
+    *,
+    account_id: int,
+    worker_name: str,
+    connection_state: str,
+    last_seen_at: str | None = None,
+    last_quote_at: str | None = None,
+    metadata_json: dict[str, Any] | None = None,
+) -> None:
+    _require_user_id()
+    sqlite_db.upsert_realtime_worker_status(
+        account_id=account_id,
+        worker_name=worker_name,
+        connection_state=connection_state,
+        last_seen_at=last_seen_at,
+        last_quote_at=last_quote_at,
+        metadata_json=metadata_json,
+    )
+
+
+def _sqlite_get_realtime_worker_status(account_id: int) -> dict[str, Any] | None:
+    if not _sqlite_get_account(account_id):
+        return None
+    return sqlite_db.get_realtime_worker_status(account_id)
+
+
+def _sqlite_latest_realtime_quote_time(account_id: int) -> str:
+    if not _sqlite_get_account(account_id):
+        return ""
+    return sqlite_db.latest_realtime_quote_time(account_id)
+
+
 def _sqlite_list_trade_logs(account_id: int) -> list[dict[str, Any]]:
     if not _sqlite_get_account(account_id):
         return []
@@ -2469,6 +2658,122 @@ def set_holding_price(holding_id: int, current_price: float, as_of: str | None =
         supabase_call=lambda: _supabase_set_holding_price(holding_id, current_price, as_of),
         sqlite_call=lambda: _sqlite_set_holding_price(holding_id, current_price, as_of),
     )
+
+
+def record_realtime_price_tick(
+    *,
+    account_id: int,
+    holding_id: int | None,
+    symbol: str,
+    price: float,
+    previous_close: float | None = None,
+    day_change_rate: float | None = None,
+    currency: str = "KRW",
+    quote_time: str | None = None,
+    source: str = "KIS WebSocket",
+    metadata_json: dict[str, Any] | None = None,
+) -> None:
+    """최신가 overwrite와 실시간 tick 적재를 동시에 처리한다."""
+
+    _run_with_fallback(
+        supabase_call=lambda: _supabase_record_realtime_price_tick(
+            account_id=account_id,
+            holding_id=holding_id,
+            symbol=symbol,
+            price=price,
+            previous_close=previous_close,
+            day_change_rate=day_change_rate,
+            currency=currency,
+            quote_time=quote_time,
+            source=source,
+            metadata_json=metadata_json,
+        ),
+        sqlite_call=lambda: _sqlite_record_realtime_price_tick(
+            account_id=account_id,
+            holding_id=holding_id,
+            symbol=symbol,
+            price=price,
+            previous_close=previous_close,
+            day_change_rate=day_change_rate,
+            currency=currency,
+            quote_time=quote_time,
+            source=source,
+            metadata_json=metadata_json,
+        ),
+    )
+
+
+def list_realtime_price_ticks(account_id: int, *, limit: int = 200) -> list[dict[str, Any]]:
+    """계좌의 실시간 quote 이력을 최신순으로 반환한다."""
+
+    if _current_backend() == BACKEND_SQLITE:
+        return _sqlite_list_realtime_price_ticks(account_id, limit=limit)
+
+    try:
+        return _supabase_list_realtime_price_ticks(account_id, limit=limit)
+    except Exception as exc:
+        if _should_fallback(exc):
+            return []
+        raise
+
+
+def upsert_realtime_worker_status(
+    *,
+    account_id: int,
+    worker_name: str,
+    connection_state: str,
+    last_seen_at: str | None = None,
+    last_quote_at: str | None = None,
+    metadata_json: dict[str, Any] | None = None,
+) -> None:
+    """계좌별 실시간 worker 연결 상태를 저장한다."""
+
+    _run_with_fallback(
+        supabase_call=lambda: _supabase_upsert_realtime_worker_status(
+            account_id=account_id,
+            worker_name=worker_name,
+            connection_state=connection_state,
+            last_seen_at=last_seen_at,
+            last_quote_at=last_quote_at,
+            metadata_json=metadata_json,
+        ),
+        sqlite_call=lambda: _sqlite_upsert_realtime_worker_status(
+            account_id=account_id,
+            worker_name=worker_name,
+            connection_state=connection_state,
+            last_seen_at=last_seen_at,
+            last_quote_at=last_quote_at,
+            metadata_json=metadata_json,
+        ),
+    )
+
+
+def get_realtime_worker_status(account_id: int) -> dict[str, Any] | None:
+    """계좌별 실시간 worker 상태를 반환한다."""
+
+    if _current_backend() == BACKEND_SQLITE:
+        return _sqlite_get_realtime_worker_status(account_id)
+
+    try:
+        return _supabase_get_realtime_worker_status(account_id)
+    except Exception as exc:
+        if _should_fallback(exc):
+            return None
+        raise
+
+
+def latest_realtime_quote_time(account_id: int) -> str:
+    """계좌별 가장 최근 quote 반영 시각을 반환한다."""
+
+    if _current_backend() == BACKEND_SQLITE:
+        return _sqlite_latest_realtime_quote_time(account_id)
+
+    try:
+        return _supabase_latest_realtime_quote_time(account_id)
+    except Exception as exc:
+        if _should_fallback(exc):
+            return ""
+        raise
 
 
 def list_trade_logs(account_id: int) -> list[dict[str, Any]]:

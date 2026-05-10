@@ -218,7 +218,12 @@ class AllocationTreemapVisualMapTests(unittest.TestCase):
             "cash": 0,
         }
 
-        options = dashboard_app.allocation_treemap_options(summary, holdings)
+        original = dashboard_app.fetch_intraday_price_snapshot
+        dashboard_app.fetch_intraday_price_snapshot = lambda symbol, interval="5m": {}
+        try:
+            options = dashboard_app.allocation_treemap_options(summary, holdings)
+        finally:
+            dashboard_app.fetch_intraday_price_snapshot = original
 
         self.assertIsNotNone(options)
         assert options is not None
@@ -226,6 +231,9 @@ class AllocationTreemapVisualMapTests(unittest.TestCase):
         self.assertEqual(options["visualMap"]["max"], 150.0)
         self.assertEqual(options["visualMap"]["dimension"], 1)
         self.assertEqual(options["series"][0]["visualDimension"], 1)
+        self.assertEqual(options["visualMap"]["inRange"]["color"], dashboard_app.FEARGREED_TREEMAP_PALETTE)
+        self.assertEqual(options["backgroundColor"], dashboard_app.TREEMAP_CANVAS_BG_COLOR)
+        self.assertEqual(options["title"]["textStyle"]["color"], dashboard_app.TREEMAP_TITLE_TEXT_COLOR)
 
     def test_allocation_treemap_out_of_range_tiles_are_transparent(self) -> None:
         """선택 범위 밖 타일은 흐리게가 아니라 투명 fill로 처리한다."""
@@ -249,11 +257,89 @@ class AllocationTreemapVisualMapTests(unittest.TestCase):
             "cash": 0,
         }
 
-        options = dashboard_app.allocation_treemap_options(summary, holdings)
+        original = dashboard_app.fetch_intraday_price_snapshot
+        dashboard_app.fetch_intraday_price_snapshot = lambda symbol, interval="5m": {}
+        try:
+            options = dashboard_app.allocation_treemap_options(summary, holdings)
+        finally:
+            dashboard_app.fetch_intraday_price_snapshot = original
 
         self.assertIsNotNone(options)
         assert options is not None
         self.assertEqual(options["visualMap"]["outOfRange"]["colorAlpha"], 0.0)
+
+    def test_allocation_treemap_groups_holdings_by_sector_and_attaches_intraday_details(self) -> None:
+        """트리맵은 자산군 아래 섹터를 만들고 hover용 intraday 정보를 leaf에 붙인다."""
+
+        holdings = [
+            {
+                "product_name": "TIGER 미국S&P500",
+                "symbol": "360750",
+                "asset_type": "risk",
+                "quantity": 1,
+                "avg_cost": 100,
+                "current_price": 110,
+            },
+            {
+                "product_name": "TIGER 미국테크TOP10 INDXX",
+                "symbol": "381170",
+                "asset_type": "risk",
+                "quantity": 1,
+                "avg_cost": 100,
+                "current_price": 120,
+            },
+            {
+                "product_name": "KOSEF 국고채10년",
+                "symbol": "148070",
+                "asset_type": "safe",
+                "quantity": 1,
+                "avg_cost": 100,
+                "current_price": 101,
+            },
+        ]
+        summary = {
+            "allocation": {
+                "risk": 230,
+                "safe": 101,
+                "cash": 0,
+            },
+            "cash": 0,
+        }
+
+        def snapshot_stub(symbol: str, interval: str = "5m") -> dict[str, object]:
+            return {
+                "symbol": symbol,
+                "series": [100.0, 102.0, 104.0],
+                "current_price": 104.0,
+                "previous_close": 100.0,
+                "day_change_rate": 4.0,
+                "as_of": "2026-05-10T14:55:00+09:00",
+                "currency": "KRW",
+            }
+
+        original = dashboard_app.fetch_intraday_price_snapshot
+        dashboard_app.fetch_intraday_price_snapshot = snapshot_stub
+        try:
+            options = dashboard_app.allocation_treemap_options(summary, holdings)
+        finally:
+            dashboard_app.fetch_intraday_price_snapshot = original
+
+        self.assertIsNotNone(options)
+        assert options is not None
+        self.assertEqual(options["title"]["text"], "자산군 → 섹터 → 보유 종목")
+
+        root_nodes = options["series"][0]["data"]
+        risk_node = next(node for node in root_nodes if node["name"] == "위험자산")
+        risk_sectors = {child["name"]: child for child in risk_node["children"]}
+        self.assertIn("미국지수", risk_sectors)
+        self.assertIn("미국테크", risk_sectors)
+
+        us_index_leaf = risk_sectors["미국지수"]["children"][0]
+        self.assertEqual(us_index_leaf["sector_name"], "미국지수")
+        self.assertEqual(us_index_leaf["current_price_text"], "₩104")
+        self.assertEqual(us_index_leaf["day_change_text"], "+4.00%")
+        self.assertEqual(us_index_leaf["holding_profit_text"], "+10.00%")
+        self.assertIn("<svg", us_index_leaf["sparkline_svg"])
 
 
 class SelectedHoldingTrendOptionTests(unittest.TestCase):
@@ -339,6 +425,52 @@ class SelectedHoldingTrendOptionTests(unittest.TestCase):
         assert options is not None
         self.assertIn("markLine", options["series"][0])
         self.assertEqual(options["series"][0]["markLine"]["data"], [{"yAxis": 0}])
+
+    def test_selected_holding_trend_options_data_view_shows_full_daily_columns(self) -> None:
+        """데이터 보기는 년월일, 종가, 수익률, 평가금액 컬럼을 함께 노출한다."""
+
+        frame = pd.DataFrame(
+            [
+                {
+                    "date": "2026-01-31",
+                    "product_name": "삼성전자",
+                    "market_value": 1200000,
+                    "profit_rate": 3.25,
+                    "close": 60100,
+                },
+                {
+                    "date": "2026-02-28",
+                    "product_name": "삼성전자",
+                    "market_value": 1265000,
+                    "profit_rate": 8.40,
+                    "close": 63500,
+                },
+            ]
+        )
+
+        options = dashboard_app.selected_holding_trend_options(
+            frame,
+            selected_holding_name="삼성전자",
+            selected_symbol_code="005930",
+            measure="profit_rate",
+            period_label="6개월",
+        )
+
+        self.assertIsNotNone(options)
+        assert options is not None
+        data_view = options["toolbox"]["feature"]["dataView"]
+        self.assertIn("optionToContent", data_view)
+        option_to_content = str(data_view["optionToContent"])
+        for label in ("년", "월", "일", "기준가(종가)", "수익률", "평가금액"):
+            self.assertIn(label, option_to_content)
+
+        first_point = options["series"][0]["data"][0]
+        self.assertEqual(first_point["year"], "2026")
+        self.assertEqual(first_point["month"], "01")
+        self.assertEqual(first_point["day"], "31")
+        self.assertEqual(first_point["close"], 60100.0)
+        self.assertEqual(first_point["profit_rate"], 3.25)
+        self.assertEqual(first_point["market_value"], 1200000.0)
 
 
 if __name__ == "__main__":

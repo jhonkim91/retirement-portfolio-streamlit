@@ -2,12 +2,14 @@ from __future__ import annotations
 
 from datetime import date
 import unittest
+from unittest.mock import patch
 
 from src.analytics import (
     account_summary,
     allocation_treemap_nodes,
     cumulative_contribution_frame,
     holdings_overview_frame,
+    infer_holding_sector_label,
     projected_today_interest,
     snapshot_trend_frame,
 )
@@ -101,9 +103,11 @@ class AccountSummaryTests(unittest.TestCase):
         nodes = allocation_treemap_nodes(summary, holdings)
 
         self.assertEqual([node["name"] for node in nodes], ["위험자산", "안전자산", "현금"])
-        self.assertEqual(nodes[0]["children"][0]["name"], "KODEX 200")
-        self.assertEqual(nodes[0]["children"][0]["symbol"], "069500")
-        self.assertEqual(nodes[1]["children"][0]["name"], "국고채 ETF")
+        self.assertEqual(nodes[0]["children"][0]["name"], "주식/ETF")
+        self.assertEqual(nodes[0]["children"][0]["children"][0]["name"], "KODEX 200")
+        self.assertEqual(nodes[0]["children"][0]["children"][0]["symbol"], "069500")
+        self.assertEqual(nodes[1]["children"][0]["name"], "채권")
+        self.assertEqual(nodes[1]["children"][0]["children"][0]["name"], "국고채 ETF")
         self.assertEqual(nodes[2]["children"][0]["name"], "예수금")
         self.assertEqual(nodes[2]["children"][0]["value"], 300_000.0)
 
@@ -117,8 +121,17 @@ class AccountSummaryTests(unittest.TestCase):
         summary = account_summary(account, holdings, trade_logs=[], interest_rows=[])
         nodes = allocation_treemap_nodes(summary, holdings, selected_symbol="148070")
 
-        self.assertFalse(nodes[0]["children"][0]["is_selected"])
-        self.assertTrue(nodes[1]["children"][0]["is_selected"])
+        self.assertFalse(nodes[0]["children"][0]["children"][0]["is_selected"])
+        self.assertTrue(nodes[1]["children"][0]["children"][0]["is_selected"])
+
+    @patch("src.analytics.resolve_kis_sector_label", return_value="전기·전자")
+    def test_infer_holding_sector_label_prefers_kis_master_result(self, sector_mock) -> None:
+        self.assertEqual(infer_holding_sector_label("삼성전자", "005930", "risk"), "전기·전자")
+        sector_mock.assert_called_once_with("005930")
+
+    @patch("src.analytics.resolve_kis_sector_label", return_value=None)
+    def test_infer_holding_sector_label_falls_back_to_keyword_rules_when_kis_missing(self, _sector_mock) -> None:
+        self.assertEqual(infer_holding_sector_label("TIGER 미국테크TOP10 INDXX", "381170", "risk"), "미국테크")
 
     def test_holdings_overview_frame_keeps_selected_symbol_inside_limit(self) -> None:
         holdings = [

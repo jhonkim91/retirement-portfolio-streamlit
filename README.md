@@ -18,7 +18,7 @@
 
 - UI: `Streamlit`
 - 저장소: `Supabase` 우선, 필요 시 로컬 `SQLite` fallback
-- 시세: `yfinance`
+- 시세: `KIS REST/WebSocket` 우선, 미지원 자산은 `yfinance` fallback
 - 로컬 앱 데이터 파일: `data/portfolio.db`
 
 ## 로컬 실행
@@ -95,6 +95,39 @@ $env:SUPABASE_KEY = "your-anon-public-key"
 streamlit run app.py
 ```
 
+### KIS 시세/실시간 설정
+
+국내 종목 섹터와 장중 시세는 KIS Open API를 우선 사용합니다.
+
+```powershell
+$env:KIS_APP_KEY = "your-kis-app-key"
+$env:KIS_APP_SECRET = "your-kis-app-secret"
+$env:KIS_ENV = "prod"   # 또는 paper
+streamlit run app.py
+```
+
+- `KIS_APP_KEY`, `KIS_APP_SECRET`이 있으면 국내주식/국내ETF 현재가와 당일 추세를 KIS REST로 우선 조회합니다.
+- 대시보드 `실시간` 버튼은 KIS REST 우선으로 `holdings.current_price`, `price_updated_at`을 갱신합니다.
+- 국내 개별주 섹터는 KIS 종목 마스터와 업종 코드 캐시를 기준으로 우선 분류하고, ETF/해외 자산은 기존 규칙을 fallback으로 유지합니다.
+
+### KIS WebSocket worker
+
+장중 자동 반영은 별도 worker 프로세스로 처리합니다.
+
+```powershell
+# Supabase service role 기준
+$env:SUPABASE_URL = "https://your-project.supabase.co"
+$env:SUPABASE_SERVICE_ROLE_KEY = "your-service-role-key"
+$env:KIS_APP_KEY = "your-kis-app-key"
+$env:KIS_APP_SECRET = "your-kis-app-secret"
+$env:KIS_ENV = "prod"
+python scripts/run_kis_quote_worker.py --backend supabase
+```
+
+- worker는 현재 보유 중인 국내 종목 전체를 KIS WebSocket으로 구독합니다.
+- 수신한 quote마다 `holdings.current_price`를 overwrite하고 `realtime_price_ticks` 이력 테이블에도 append 합니다.
+- `데이터 > 운영 상태`에서 `KIS REST`, `KIS WebSocket worker`, `마지막 quote 반영` 상태를 확인할 수 있습니다.
+
 ### 일별 스냅샷 자동 실행
 
 일별 자산 스냅샷 저장은 GitHub Actions 워크플로 [`.github/workflows/daily-rollup.yml`](.github/workflows/daily-rollup.yml)로 자동 실행할 수 있습니다.
@@ -134,7 +167,7 @@ python scripts/run_daily_rollup.py --backend supabase --date 2026-05-10 --timezo
 
 - **UI**: Streamlit
 - **데이터베이스**: Supabase (PostgreSQL)
-- **시세**: yfinance
+- **시세**: KIS REST/WebSocket 우선, yfinance fallback
 - **배포**: Streamlit Community Cloud
 
 ## 주의

@@ -1,11 +1,16 @@
 from __future__ import annotations
 
 from datetime import date
+import importlib
+import os
+from pathlib import Path
+import tempfile
 import unittest
 from unittest.mock import patch
 
 import requests
 
+from src import sqlite_db
 from src.db import (
     BACKEND_SQLITE,
     BACKEND_SUPABASE,
@@ -483,6 +488,56 @@ class SyncAccountRollupTests(unittest.TestCase):
         )
         self.assertEqual(result["historical_snapshots_updated"], 3)
         self.assertTrue(result["snapshot_updated"])
+
+
+class SQLiteRealtimeQuotePersistenceTests(unittest.TestCase):
+    """SQLite 실시간 quote overwrite/append 동작을 검증한다."""
+
+    def test_record_realtime_price_tick_updates_holding_and_appends_tick_history(self) -> None:
+        """tick 저장 시 holdings 현재가와 실시간 이력 테이블이 함께 갱신된다."""
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            database_path = Path(temp_dir) / "portfolio.db"
+            with patch.dict(os.environ, {"RETIREMENT_DB_PATH": str(database_path)}, clear=False):
+                sqlite_module = importlib.reload(sqlite_db)
+                sqlite_module.initialize_database()
+                account_id = sqlite_module.create_account("user-1::테스트 계좌", opening_cash=500000)
+                sqlite_module.record_trade(
+                    account_id,
+                    symbol="005930",
+                    product_name="삼성전자",
+                    trade_type="buy",
+                    asset_type="risk",
+                    quantity=2,
+                    price=65000,
+                    trade_date="2026-05-10",
+                    notes="테스트 매수",
+                )
+                holding = sqlite_module.list_holdings(account_id)[0]
+
+                sqlite_module.record_realtime_price_tick(
+                    account_id=account_id,
+                    holding_id=int(holding["id"]),
+                    symbol="005930",
+                    price=71200,
+                    previous_close=70000,
+                    day_change_rate=1.7143,
+                    currency="KRW",
+                    quote_time="2026-05-10T09:15:00",
+                    metadata_json={"source": "unit-test"},
+                )
+
+                updated_holding = sqlite_module.list_holdings(account_id)[0]
+                ticks = sqlite_module.list_realtime_price_ticks(account_id, limit=5)
+
+                self.assertEqual(float(updated_holding["current_price"]), 71200.0)
+                self.assertEqual(str(updated_holding["price_updated_at"]), "2026-05-10T09:15:00")
+                self.assertEqual(len(ticks), 1)
+                self.assertEqual(float(ticks[0]["price"]), 71200.0)
+                self.assertEqual(float(ticks[0]["previous_close"]), 70000.0)
+                self.assertEqual(float(ticks[0]["day_change_rate"]), 1.7143)
+                self.assertEqual(str(ticks[0]["metadata_json"]), '{"source":"unit-test"}')
+                self.assertEqual(sqlite_module.latest_realtime_quote_time(account_id), "2026-05-10T09:15:00")
 
 
 if __name__ == "__main__":

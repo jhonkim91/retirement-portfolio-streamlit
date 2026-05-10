@@ -187,6 +187,58 @@ def _ensure_daily_account_snapshot_table(connection: sqlite3.Connection) -> None
     )
 
 
+def _ensure_realtime_price_ticks_table(connection: sqlite3.Connection) -> None:
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS realtime_price_ticks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            account_id INTEGER NOT NULL,
+            holding_id INTEGER,
+            symbol TEXT NOT NULL,
+            price REAL NOT NULL,
+            previous_close REAL,
+            day_change_rate REAL,
+            currency TEXT NOT NULL DEFAULT 'KRW',
+            quote_time TEXT NOT NULL,
+            ingested_at TEXT NOT NULL,
+            source TEXT NOT NULL DEFAULT 'KIS WebSocket',
+            metadata_json TEXT NOT NULL DEFAULT '{}',
+            FOREIGN KEY(account_id) REFERENCES accounts(id) ON DELETE CASCADE,
+            FOREIGN KEY(holding_id) REFERENCES holdings(id) ON DELETE SET NULL
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_realtime_price_ticks_account_quote_time
+        ON realtime_price_ticks(account_id, quote_time DESC)
+        """
+    )
+    connection.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_realtime_price_ticks_symbol_quote_time
+        ON realtime_price_ticks(symbol, quote_time DESC)
+        """
+    )
+
+
+def _ensure_realtime_worker_status_table(connection: sqlite3.Connection) -> None:
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS realtime_worker_status (
+            account_id INTEGER PRIMARY KEY,
+            worker_name TEXT NOT NULL,
+            connection_state TEXT NOT NULL,
+            last_seen_at TEXT,
+            last_quote_at TEXT,
+            updated_at TEXT NOT NULL,
+            metadata_json TEXT NOT NULL DEFAULT '{}',
+            FOREIGN KEY(account_id) REFERENCES accounts(id) ON DELETE CASCADE
+        )
+        """
+    )
+
+
 def initialize_database() -> None:
     """로컬 SQLite 스키마를 생성하고 필요한 마이그레이션을 적용한다."""
 
@@ -243,6 +295,8 @@ def initialize_database() -> None:
         _ensure_trade_log_columns(connection)
         _ensure_daily_interest_table(connection)
         _ensure_daily_account_snapshot_table(connection)
+        _ensure_realtime_price_ticks_table(connection)
+        _ensure_realtime_worker_status_table(connection)
         _migrate_trade_logs(connection)
         # 자동 배포 검사용 빈 계좌는 남길 필요가 없다.
         connection.execute(
@@ -253,6 +307,8 @@ def initialize_database() -> None:
               AND id NOT IN (SELECT account_id FROM trade_logs)
               AND id NOT IN (SELECT account_id FROM daily_interest)
               AND id NOT IN (SELECT account_id FROM daily_account_snapshot)
+              AND id NOT IN (SELECT account_id FROM realtime_price_ticks)
+              AND id NOT IN (SELECT account_id FROM realtime_worker_status)
             """
         )
         connection.commit()
@@ -415,6 +471,147 @@ def set_holding_price(holding_id: int, current_price: float, as_of: str | None =
             (float(current_price or 0), as_of or now_iso(), now_iso(), holding_id),
         )
         connection.commit()
+
+
+def record_realtime_price_tick(
+    *,
+    account_id: int,
+    holding_id: int | None,
+    symbol: str,
+    price: float,
+    previous_close: float | None = None,
+    day_change_rate: float | None = None,
+    currency: str = "KRW",
+    quote_time: str | None = None,
+    source: str = "KIS WebSocket",
+    metadata_json: dict[str, Any] | None = None,
+) -> None:
+    """최신가를 holdings에 반영하고 실시간 tick 이력을 적재한다."""
+
+    timestamp = str(quote_time or now_iso())
+    with connect() as connection:
+        _require_account(connection, account_id)
+        if holding_id is not None:
+            connection.execute(
+                """
+                UPDATE holdings
+                SET current_price = ?, price_updated_at = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (float(price), timestamp, now_iso(), holding_id),
+            )
+        connection.execute(
+            """
+            INSERT INTO realtime_price_ticks (
+                account_id, holding_id, symbol, price, previous_close, day_change_rate,
+                currency, quote_time, ingested_at, source, metadata_json
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                account_id,
+                holding_id,
+                str(symbol or "").strip().upper(),
+                float(price),
+                float(previous_close) if previous_close is not None else None,
+                float(day_change_rate) if day_change_rate is not None else None,
+                str(currency or "KRW").strip().upper() or "KRW",
+                timestamp,
+                now_iso(),
+                str(source or "KIS WebSocket").strip() or "KIS WebSocket",
+                _metadata_json(metadata_json),
+            ),
+        )
+        connection.commit()
+
+
+def list_realtime_price_ticks(account_id: int, *, limit: int = 200) -> list[dict[str, Any]]:
+    """계좌별 실시간 tick 이력을 최신순으로 반환한다."""
+
+    return _fetch_all(
+        """
+        SELECT *
+        FROM realtime_price_ticks
+        WHERE account_id = ?
+        ORDER BY quote_time DESC, id DESC
+        LIMIT ?
+        """,
+        (account_id, int(limit)),
+    )
+
+
+def upsert_realtime_worker_status(
+    *,
+    account_id: int,
+    worker_name: str,
+    connection_state: str,
+    last_seen_at: str | None = None,
+    last_quote_at: str | None = None,
+    metadata_json: dict[str, Any] | None = None,
+) -> None:
+    """계좌별 실시간 worker 상태를 저장하거나 갱신한다."""
+
+    timestamp = now_iso()
+    with connect() as connection:
+        _require_account(connection, account_id)
+        connection.execute(
+            """
+            INSERT INTO realtime_worker_status (
+                account_id, worker_name, connection_state, last_seen_at,
+                last_quote_at, updated_at, metadata_json
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(account_id) DO UPDATE SET
+                worker_name = excluded.worker_name,
+                connection_state = excluded.connection_state,
+                last_seen_at = excluded.last_seen_at,
+                last_quote_at = excluded.last_quote_at,
+                updated_at = excluded.updated_at,
+                metadata_json = excluded.metadata_json
+            """,
+            (
+                account_id,
+                str(worker_name or "").strip() or "kis-quote-worker",
+                str(connection_state or "").strip() or "unknown",
+                str(last_seen_at or "").strip() or None,
+                str(last_quote_at or "").strip() or None,
+                timestamp,
+                _metadata_json(metadata_json),
+            ),
+        )
+        connection.commit()
+
+
+def get_realtime_worker_status(account_id: int) -> dict[str, Any] | None:
+    """계좌별 실시간 worker 상태를 반환한다."""
+
+    return _fetch_one("SELECT * FROM realtime_worker_status WHERE account_id = ?", (account_id,))
+
+
+def latest_realtime_quote_time(account_id: int) -> str:
+    """계좌별 가장 최근 실시간 quote 반영 시각을 반환한다."""
+
+    row = _fetch_one(
+        """
+        SELECT quote_time
+        FROM realtime_price_ticks
+        WHERE account_id = ?
+        ORDER BY quote_time DESC, id DESC
+        LIMIT 1
+        """,
+        (account_id,),
+    )
+    if row and row.get("quote_time"):
+        return str(row["quote_time"])
+    holding_row = _fetch_one(
+        """
+        SELECT MAX(price_updated_at) AS quote_time
+        FROM holdings
+        WHERE account_id = ?
+        """,
+        (account_id,),
+    )
+    return str((holding_row or {}).get("quote_time") or "")
 
 
 def list_trade_logs(account_id: int) -> list[dict[str, Any]]:

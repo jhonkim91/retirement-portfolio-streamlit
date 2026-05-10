@@ -32,6 +32,13 @@
 - [x] 보유 종목 수익률 차트 mixed 구간 Y축 자동 스케일 복원
 - [x] 선택 종목 트렌드 상단 데이터 텍스트 제거 및 컨트롤 박스 정리
 - [x] 선택 종목 트렌드 제목/종목코드 표기 및 컨트롤 일열 정리
+- [x] 자산 배분 히트맵 hover 상세 카드 및 자동 섹터 분류 추가
+- [x] 선택 종목 트렌드 데이터 보기 컬럼 확장 및 기본 지표 수익률 변경
+- [x] 로컬 운영 상태 패널 및 대시보드 자동 새로고침 검증
+- [x] 운영 Supabase realtime 스키마 원격 점검 및 진행 문서 동기화
+- [x] KIS quote worker 로컬 시크릿 fallback 및 Supabase preflight 추가
+- [ ] 운영 Supabase SQL Editor에서 최신 `setup_supabase.sql` 적용
+- [ ] 장중 KIS quote 적재 최종 검증
 
 ## 프로젝트 유형
 - Python 프로젝트
@@ -536,7 +543,326 @@ streamlit run app.py
 - 비고:
   - 원격 대시보드 검증은 로그인 성공, 작업공간 표시 확인, 저장소 `Supabase`, 대상 페이지 `dashboard` 기준으로 통과
 
+## 2026-05-10 자산 배분 히트맵 hover 상세 카드 및 자동 섹터 분류 추가
+- 변경 파일: `app.py`, `src/analytics.py`, `src/market.py`, `tests/test_analytics.py`, `tests/test_app_dashboard.py`, `Memory.md`
+- 변경 내용:
+  - 자산 배분 트리맵 계층을 `자산군 → 섹터 → 보유 종목` 구조로 확장
+  - DB 스키마 변경 없이 보유 종목명과 자산군 기준의 자동 섹터 분류 규칙 추가
+  - `src/market.py`에 `2일·5분봉` 기준 intraday 시세 snapshot 조회 함수 추가
+  - 트리맵 hover tooltip을 카드형 UI로 교체하고 `현재가`, `당일 등락률`, `보유 수익률`, `섹터`, `당일 추세 sparkline`, `기준 시각`을 표시
+  - 예수금 hover는 현금 자산 전용 안내와 잔액 중심 표시로 분기
+  - 트리맵 title을 `자산군 → 섹터 → 보유 종목`으로 변경
+  - analytics/app 회귀 테스트를 갱신해 섹터 계층과 intraday tooltip 데이터 연결을 검증
+- 설치:
+  - 추가 설치 없음
+- 검증:
+  - `python -m compileall app.py src scripts tests` 성공
+  - `python -m unittest discover -s tests -p "test_*.py"` 성공
+  - 결과: 단위 테스트 `55`건 통과
+- 비고:
+  - intraday 데이터는 `yfinance` 기준 최근 거래일 `5분` 간격 데이터를 사용하며, cache TTL은 `120초`
+
+## 2026-05-10 선택 종목 트렌드 데이터 보기 컬럼 확장 및 기본 지표 수익률 변경
+- 변경 파일: `app.py`, `tests/test_app_dashboard.py`, `Memory.md`
+- 변경 내용:
+  - 선택 종목 트렌드의 `표시 지표` 기본값을 `수익률`로 변경
+  - ECharts `데이터 보기`를 커스텀해 `년`, `월`, `일`, `기준가(종가)`, `수익률`, `평가금액` 컬럼을 항상 함께 표시
+  - 차트 series 데이터에 연/월/일 필드를 추가하고 데이터 보기 회귀 테스트를 보강
+- 설치:
+  - 추가 설치 없음
+- 검증:
+  - `python -m compileall app.py src scripts tests` 성공
+  - `python -m unittest discover -s tests -p "test_*.py"` 성공
+  - 결과: 단위 테스트 `56`건 통과
+
+## 2026-05-10 KIS 우선 섹터/시세 provider 및 실시간 quote worker 추가
+- 변경 파일:
+  - `app.py`
+  - `src/analytics.py`
+  - `src/db.py`
+  - `src/kis.py`
+  - `src/market.py`
+  - `src/sqlite_db.py`
+  - `scripts/run_kis_quote_worker.py`
+  - `setup_supabase.sql`
+  - `requirements.txt`
+  - `.env.example`
+  - `.streamlit/secrets.example.toml`
+  - `README.md`
+  - `Procfile`
+  - `tests/test_analytics.py`
+  - `tests/test_db.py`
+  - `tests/test_market.py`
+  - `Memory.md`
+- 변경 내용:
+  - `src/kis.py`를 추가해 KIS REST 토큰, WebSocket approval key, 국내 현재가/분봉/일봉 조회, 마스터/업종 코드 캐시, WebSocket 메시지 파서를 분리
+  - `src/market.py`를 provider facade로 확장해 국내주식/국내ETF는 KIS REST 우선, 실패 시 기존 `yfinance` fallback을 사용하도록 변경
+  - `search_products()`에 KIS 종목 마스터 검색을 우선 연결하고, `fetch_latest_price()`, `fetch_intraday_price_snapshot()`, `fetch_price_history()`의 기존 시그니처는 유지
+  - `src/analytics.py`의 섹터 분류를 KIS 마스터 우선으로 변경하고, KIS 섹터가 없을 때만 기존 키워드 규칙으로 fallback
+  - SQLite/Supabase에 `realtime_price_ticks`, `realtime_worker_status` 스키마와 접근 함수를 추가
+  - `scripts/run_kis_quote_worker.py`를 추가해 보유 중인 국내 종목 전체를 KIS WebSocket으로 구독하고, 수신 시 `holdings.current_price` overwrite + `realtime_price_ticks` append를 동시에 수행
+  - `app.py` 데이터 페이지 운영 상태에 `KIS REST`, `KIS WebSocket worker`, `마지막 quote 반영` 상태를 추가하고, worker 연결 시 대시보드 본문을 `10초` 간격으로 다시 읽도록 연결
+  - `.env.example`, `.streamlit/secrets.example.toml`, `README.md`, `Procfile`을 KIS 설정과 worker 실행 기준으로 갱신
+- 설치:
+  - `python -m pip install websocket-client`
+- 검증:
+  - `python -m compileall app.py src scripts tests` 성공
+  - `python -m unittest discover -s tests -p "test_*.py"` 성공
+  - 결과: 단위 테스트 `64`건 통과
+  - `python scripts/run_kis_quote_worker.py --help` 성공
+  - `python -c "import websocket; print(websocket.__version__)"` 성공 (`1.9.0`)
+- 미완료/운영 후속:
+  - 운영 Supabase에는 최신 `setup_supabase.sql`을 다시 적용해 `realtime_price_ticks`, `realtime_worker_status` 테이블과 RLS를 생성해야 함
+  - 실제 KIS 자격 증명으로 `scripts/run_kis_quote_worker.py`를 붙여 장중 quote 반영을 수동 확인하는 단계는 아직 수행하지 않음
+  - 로컬 SQLite 데모 기준 브라우저 검증은 완료했지만, 실제 KIS 자격 증명과 운영 Supabase를 붙인 상태의 브라우저 체감 검증은 아직 수행하지 않음
+
+## 2026-05-10 로컬 운영 상태 패널 및 대시보드 자동 새로고침 검증
+- 변경 파일: `Memory.md`
+- 변경 내용:
+  - `/tmp/retirement-portfolio-verify.db`를 사용하는 로컬 전용 SQLite 검증 환경으로 `streamlit run app.py`를 기동해 기존 로컬 DB와 분리된 상태에서 확인
+  - 로컬 데모 작업공간 진입 후 `realtime_worker_status`, `realtime_price_ticks`를 임시 seed하여 `데이터 > 운영 상태` 패널에 `KIS WebSocket worker=connected`, `마지막 quote 반영` 시각이 표시되는지 확인
+  - 대시보드에서 `실시간` 버튼으로 전체 리런을 한 번 유도한 뒤, 같은 검증 DB의 보유 종목 `current_price`를 변경해 `10초` 주기 자동 새로고침으로 `현재 평가액`이 갱신되는지 확인
+- 설치:
+  - 추가 설치 없음
+- 검증:
+  - `env PORTFOLIO_BACKEND=sqlite RETIREMENT_DB_PATH=/tmp/retirement-portfolio-verify.db ./.venv/bin/python -m streamlit run app.py --server.port 8514 --server.headless true`
+  - Playwright headless로 로컬 브라우저 검증 수행
+  - `python -m compileall app.py src scripts tests` 성공
+  - `python -m unittest discover -s tests -p "test_*.py"` 성공
+  - 결과:
+    - 단위 테스트 `64`건 통과
+    - `데이터 저장소=로컬 SQLite`, `KIS REST=미설정`, `KIS WebSocket worker=connected`, `마지막 quote 반영=2026-05-10T14:23:10Z` 확인
+    - 대시보드 `현재 평가액`이 `₩16,662,060`에서 `₩19,848,520`로 변경되어 자동 새로고침 반영 확인
+- 산출물:
+  - `artifacts/local-data-status-lines.txt`
+  - `artifacts/local-data-status.png`
+  - `artifacts/local-dashboard-refresh-before.txt`
+  - `artifacts/local-dashboard-refresh-before.png`
+  - `artifacts/local-dashboard-refresh-after.txt`
+  - `artifacts/local-dashboard-refresh-after.png`
+- 비고:
+  - 현재 `.streamlit/secrets.toml`에는 `SUPABASE_URL`, `SUPABASE_KEY`, 배포 검증 계정만 있고 `SUPABASE_SERVICE_ROLE_KEY`, `KIS_APP_KEY`, `KIS_APP_SECRET`은 없어 운영 Supabase/KIS live worker 검증은 진행하지 못함
+  - 이번 검증의 worker 연결 상태와 quote 시각은 실제 KIS 수신이 아니라 로컬 검증 DB에 임시 seed한 값 기준임
+
+## 2026-05-10 운영 Supabase realtime 스키마 원격 점검 및 진행 문서 동기화
+- 변경 파일: `Memory.md`, `docs/progress-memory.md`
+- 변경 내용:
+  - 배포 앱 `데이터` 페이지를 다시 검증해 현재 원격 저장소 상태와 운영 패널 노출 여부를 확인
+  - 배포 검증 계정 세션으로 Supabase REST를 직접 조회해 `accounts`, `realtime_worker_status`, `realtime_price_ticks` 접근 결과를 분리 확인
+  - 확인 결과를 `docs/progress-memory.md`에 최신 운영 메모로 동기화
+- 설치:
+  - 추가 설치 없음
+- 검증:
+  - `PLAYWRIGHT_BROWSERS_PATH=/workspaces/retirement-portfolio-streamlit/.playwright-browsers ./.venv/bin/python scripts/verify_streamlit_deployment.py --page data --expect-backend supabase --wait-ms 20000 --text-output artifacts/deploy-data-status-20260510.txt --screenshot artifacts/deploy-data-status-20260510.png`
+  - 검증 계정 로그인 후 Supabase REST 직접 조회
+  - `python -m unittest discover -s tests -p "test_*.py"` 성공
+  - 결과: 단위 테스트 `64`건 통과
+  - 결과 상세:
+    - 배포 앱 `데이터 저장소=Supabase`, `거래 기록=9건`, `자산 스냅샷=3건`, 최신 스냅샷 `2026-05-10` 확인
+    - `accounts` REST 조회는 `200`
+    - `realtime_worker_status`, `realtime_price_ticks` REST 조회는 모두 `404 PGRST205`로 반환되어 운영 Supabase에 최신 realtime 스키마가 아직 없음을 확인
+- 산출물:
+  - `artifacts/deploy-data-status-20260510.txt`
+  - `artifacts/deploy-data-status-20260510.png`
+- 비고:
+  - 현재 세션에는 `SUPABASE_SERVICE_ROLE_KEY`, `KIS_APP_KEY`, `KIS_APP_SECRET`이 없어 운영 SQL 직접 적용과 live worker 실행은 계속 불가
+  - 따라서 다음 실제 작업은 운영 Supabase SQL Editor에서 최신 `setup_supabase.sql`을 적용한 뒤, 같은 경로로 REST/브라우저 재검증하는 것임
+
+## 2026-05-10 feargreed 스타일 대시보드 테마 조정 및 agent-browser 로컬 설치
+- 변경 파일: `app.py`, `tests/test_app_dashboard.py`, `Memory.md`
+- 변경 내용:
+  - `https://feargreed.co.kr/kospi-heatmap/`의 다크 팔레트 기준으로 대시보드 배경, 패널, 텍스트, 버튼, 차트 공통 색상을 `#131722`, `#1E222D`, `#2A2F3E`, `#D1D4DC` 계열로 재정의
+  - `자산 배분` 섹션 헤더에 `데이터 로드됨` 상태 칩을 추가하고, 청록색 도트 `#26A69A`에 `dashboard-live-blink` 애니메이션을 연결
+  - `자산 배분` 트리맵과 하단 범례를 `#050F28`, `#0D3D7A`, `#80AAF0`, `#2A2E39`, `#FF8080`, `#E22B2B`, `#3A0000` 색상 순서로 맞추고 관련 테스트를 보강
+  - 이 환경에는 `npm`, `cargo`가 없어 `agent-browser 0.27.0` npm tarball을 저장소 내부 `.local/agent-browser`에 풀고, `.local/bin/agent-browser` 심볼릭 링크로 프로젝트 전용 CLI를 구성
+- 설치:
+  - `curl -fsSL https://registry.npmjs.org/agent-browser/-/agent-browser-0.27.0.tgz -o .local/downloads/agent-browser-0.27.0.tgz`
+  - `tar -xzf .local/downloads/agent-browser-0.27.0.tgz -C .local/agent-browser`
+  - `ln -sf ../agent-browser/package/bin/agent-browser-linux-x64 .local/bin/agent-browser`
+- 검증:
+  - `./.local/bin/agent-browser doctor --quick --json` 성공
+  - `env PORTFOLIO_BACKEND=sqlite RETIREMENT_DB_PATH=/tmp/retirement-portfolio-theme-verify.db ./.venv/bin/python -m streamlit run app.py --server.port 8515 --server.headless true`
+  - `PATH="/workspaces/retirement-portfolio-streamlit/.local/bin:$PATH" agent-browser open/click/wait/screenshot`로 `데모 체험 -> 데모 작업공간 시작하기 -> 내 작업공간` 진입 성공
+  - `python -m compileall app.py src scripts tests` 성공
+  - `python -m unittest discover -s tests -p "test_*.py"` 성공
+  - 결과:
+    - 단위 테스트 `64`건 통과
+    - 상태 칩 텍스트 `데이터 로드됨`, 도트 색상 `rgb(38, 166, 154)`, 애니메이션 이름 `dashboard-live-blink` 확인
+    - 자산 배분 범례 색상이 `rgb(5, 15, 40)`, `rgb(13, 61, 122)`, `rgb(128, 170, 240)`, `rgb(42, 46, 57)`, `rgb(255, 128, 128)`, `rgb(226, 43, 43)`, `rgb(58, 0, 0)` 순서로 렌더링됨을 DOM에서 확인
+    - 앱 배경이 `radial-gradient + linear-gradient(rgb(19, 23, 34) -> rgb(23, 27, 36))`로 적용된 것을 DOM 계산값으로 확인
+- 산출물:
+  - `artifacts/agent-browser-login.png`
+  - `artifacts/theme-feargreed-dashboard-agent-browser.png`
+- 비고:
+  - `agent-browser`는 프로젝트 로컬 설치 상태이며, 재사용 시 `PATH="/workspaces/retirement-portfolio-streamlit/.local/bin:$PATH"`를 먼저 주거나 `./.local/bin/agent-browser`로 직접 실행하면 됨
+
+## 2026-05-10 대시보드 배경 원복 및 자산 배분 팔레트 헤더 이동
+- 변경 파일: `app.py`, `Memory.md`
+- 변경 내용:
+  - `inject_app_styles()`의 전역 배경과 사이드바, 카드 표면 색상을 기존 밝은 톤(`#f4f7f6`, `#eef3f2`, `#ecf5f2`) 기준으로 되돌림
+  - `자산 배분` 섹션의 하단 대형 범례 출력은 제거하고, `데이터 로드됨` 상태 칩 오른쪽에 7단계 소형 색상 팔레트를 인라인으로 배치
+  - 트리맵 자체의 색상 코드는 기존 feargreed 팔레트(`#050F28` ~ `#3A0000`)를 유지
+- 설치:
+  - 추가 설치 없음
+- 검증:
+  - `env PORTFOLIO_BACKEND=sqlite RETIREMENT_DB_PATH=/tmp/retirement-portfolio-theme-verify-2.db ./.venv/bin/python -m streamlit run app.py --server.port 8516 --server.headless true`
+  - `PATH="/workspaces/retirement-portfolio-streamlit/.local/bin:$PATH" agent-browser open/click/wait/screenshot`로 `데모 체험 -> 데모 작업공간 시작하기 -> 내 작업공간` 재진입
+  - `python -m compileall app.py src scripts tests` 성공
+  - `python -m unittest discover -s tests -p "test_*.py"` 성공
+  - 결과:
+    - 단위 테스트 `64`건 통과
+    - 앱 배경 계산값이 `radial-gradient(circle at 0% 0%, rgba(214, 232, 231, 0.65), ...) + linear-gradient(rgb(244, 247, 246) -> rgb(238, 243, 242) -> rgb(247, 248, 247))`로 복귀한 것을 DOM에서 확인
+    - 사이드바 배경이 `linear-gradient(rgb(236, 245, 242) -> rgb(228, 238, 234))`로 복귀한 것을 DOM에서 확인
+    - `데이터 로드됨` 옆에 폭 `78px`, 세그먼트 `7개`의 소형 팔레트가 렌더링되고 기존 feargreed 색상 순서를 유지하는 것을 확인
+- 산출물:
+  - `artifacts/dashboard-background-restored.png`
+
+## 2026-05-10 자산 배분 캔버스 대비 및 내부 제목 가독성 보강
+- 변경 파일: `app.py`, `tests/test_app_dashboard.py`, `Memory.md`
+- 변경 내용:
+  - 자산 배분 ECharts 루트 배경을 `#EEF4F2`로 바꾸고, 트리맵 gap/border/radius를 키워 타일 경계가 패널 배경과 더 분리되도록 조정
+  - `자산군 → 섹터 → 보유 종목` 내부 제목을 흰 글자에서 짙은 녹청색 텍스트 배지로 바꾸고, 제목용 흰색 pill 배경과 테두리를 추가
+  - `dashboard-panel-allocation` 패널 표면도 미세하게 더 밝은 그라디언트로 보강
+- 설치:
+  - 추가 설치 없음
+- 검증:
+  - `env PORTFOLIO_BACKEND=sqlite RETIREMENT_DB_PATH=/tmp/retirement-portfolio-theme-verify-3.db ./.venv/bin/python -m streamlit run app.py --server.port 8517 --server.headless true`
+  - `PATH="/workspaces/retirement-portfolio-streamlit/.local/bin:$PATH" agent-browser open/click/wait/screenshot`로 데모 대시보드 재확인
+  - `python -m compileall app.py tests/test_app_dashboard.py` 성공
+  - `python -m unittest discover -s tests -p "test_*.py"` 성공
+  - 결과:
+    - 단위 테스트 `64`건 통과
+    - 자산 배분 제목 pill과 연한 캔버스 배경이 실제 화면에 렌더링되는 것을 스크린샷으로 확인
+    - 테스트에서 트리맵 옵션 `backgroundColor=#EEF4F2`, 제목 색상 `#103B42`를 검증
+- 산출물:
+  - `artifacts/dashboard-allocation-contrast.png`
+
+## 2026-05-10 자산 배분 수익률 색상 매핑을 0 중심 piecewise로 전환
+- 변경 파일: `app.py`, `tests/test_app_dashboard.py`, `Memory.md`
+- 변경 내용:
+  - 자산 배분 트리맵의 수익률 색상 매핑을 `현재 min/max 연속형`에서 `0% 중심 5단계 piecewise`로 교체
+  - 색상 단계는 `강한 손실`, `약한 손실`, `보합`, `약한 수익`, `강한 수익`의 5단계로 고정하고, 헤더 우측 소형 팔레트도 같은 순서로 동기화
+  - `예수금(CASH)` 타일은 수익률 매핑과 분리된 중립색으로 고정해 성과 색상과 의미가 섞이지 않도록 조정
+  - 트리맵 캔버스 배경을 `#F7F9FB`로 더 중립화하고, 하단의 연속형 min/max 수익률 바는 제거
+- 설치:
+  - 추가 설치 없음
+- 검증:
+  - `python -m compileall app.py tests/test_app_dashboard.py` 성공
+  - `python -m unittest discover -s tests -p "test_*.py"` 성공
+  - `env PORTFOLIO_BACKEND=sqlite RETIREMENT_DB_PATH=/tmp/retirement-portfolio-theme-verify-4.db ./.venv/bin/python -m streamlit run app.py --server.port 8518 --server.headless true`
+  - `PATH="/workspaces/retirement-portfolio-streamlit/.local/bin:$PATH" agent-browser open/click/wait/screenshot`로 데모 대시보드 확인
+  - 결과:
+    - 단위 테스트 `64`건 통과
+    - visualMap이 숨김 piecewise 5단계로 구성되고, 예수금 leaf의 `itemStyle.color`가 중립색으로 설정되는 것을 테스트로 검증
+    - 브라우저 DOM에서 헤더 우측 팔레트가 `rgb(29, 79, 145)`, `rgb(143, 180, 232)`, `rgb(217, 222, 231)`, `rgb(242, 163, 155)`, `rgb(180, 35, 24)` 순서로 렌더링되는 것을 확인
+    - 화면상 예수금이 중립 회색 계열로 분리되고, 수익 구간 종목이 붉은 단계 색으로 더 일관되게 표시되는 것을 확인
+- 산출물:
+  - `artifacts/dashboard-allocation-piecewise.png`
+
+## 2026-05-10 자산 배분 빨강-파랑 팔레트 복귀 및 헤더 칩 높이 정렬
+- 변경 파일: `app.py`, `tests/test_app_dashboard.py`, `Memory.md`
+- 변경 내용:
+  - 자산 배분 색상 체계를 piecewise 5단계에서 직전의 빨강-파랑 연속 팔레트(`FEARGREED_TREEMAP_PALETTE`)로 되돌림
+  - visualMap을 다시 연속형 `min/max` 기준으로 복구하고, 트리맵 하단 공간도 직전 값으로 복원
+  - 헤더 우측 소형 팔레트 칩의 `padding`과 `min-height`를 조정해 `데이터 로드됨` 칩과 실제 높이를 동일하게 맞춤
+- 설치:
+  - 추가 설치 없음
+- 검증:
+  - `python -m compileall app.py tests/test_app_dashboard.py` 성공
+  - `python -m unittest discover -s tests -p "test_*.py"` 성공
+  - `env PORTFOLIO_BACKEND=sqlite RETIREMENT_DB_PATH=/tmp/retirement-portfolio-theme-verify-5.db ./.venv/bin/python -m streamlit run app.py --server.port 8519 --server.headless true`
+  - `PATH="/workspaces/retirement-portfolio-streamlit/.local/bin:$PATH" agent-browser open/click/wait/screenshot`로 데모 대시보드 재확인
+  - 결과:
+    - 단위 테스트 `64`건 통과
+    - 브라우저 DOM 계산값 기준 `dashboard-load-status.height=30px`, `dashboard-load-palette.height=30px` 확인
+    - 헤더 우측 팔레트가 다시 `rgb(5, 15, 40)`, `rgb(13, 61, 122)`, `rgb(128, 170, 240)`, `rgb(42, 46, 57)`, `rgb(255, 128, 128)`, `rgb(226, 43, 43)`, `rgb(58, 0, 0)` 순서로 렌더링되는 것을 확인
+- 산출물:
+  - `artifacts/dashboard-allocation-redblue-restored.png`
+
+## 2026-05-10 KIS 실자격 증명 반영 및 live worker 사전 검증
+- 변경 파일: `.streamlit/secrets.toml`, `Memory.md`
+- 변경 내용:
+  - 로컬 시크릿에 `KIS_APP_KEY`, `KIS_APP_SECRET`를 반영하고 앱 설정에서 KIS 구성이 완전하게 잡히는지 확인
+  - KIS REST 현재가 및 당일 추세 조회, approval key 발급을 실제 자격 증명으로 검증
+  - 운영 Supabase REST를 service role로 재확인한 결과 `realtime_worker_status`, `realtime_price_ticks`가 여전히 `404 PGRST205`라 최신 `setup_supabase.sql` 미적용 상태임을 재확인
+  - 임시 SQLite DB(`/tmp/retirement-portfolio-kis-verify.db`)에 데모 워크스페이스를 시드하고 `scripts/run_kis_quote_worker.py --backend sqlite`로 WebSocket 연결 및 종목 구독 상태를 검증
+- 설치:
+  - 추가 설치 없음
+- 검증:
+  - `python3 -c "from src.kis import kis_settings; print(kis_settings())"`로 `enabled=True`, `env=prod`, `missing_config=[]` 확인
+  - `python3 -c "from src.kis import KisApiClient; client = KisApiClient(); ... client.get_domestic_latest_price('005930'); client.get_domestic_intraday_snapshot('005930') ..."`로 국내 종목 `005930`, `360750`의 현재가 및 intraday snapshot 조회 성공 확인
+  - `python3 -c "from src.kis import KisApiClient; print(KisApiClient().get_approval_key() is not None)"`로 approval key 발급 성공 확인
+  - `python3 - <<'PY' ... requests.get(.../rest/v1/accounts), requests.get(.../rest/v1/holdings), requests.get(.../rest/v1/realtime_worker_status), requests.get(.../rest/v1/realtime_price_ticks) ... PY`로 운영 Supabase REST 상태 재확인
+  - `PORTFOLIO_BACKEND=sqlite RETIREMENT_DB_PATH=/tmp/retirement-portfolio-kis-verify.db python3 - <<'PY' ... db.seed_demo_workspace() ... PY`로 로컬 데모 워크스페이스 시드
+  - `PORTFOLIO_BACKEND=sqlite RETIREMENT_DB_PATH=/tmp/retirement-portfolio-kis-verify.db timeout 20s python3 scripts/run_kis_quote_worker.py --backend sqlite`로 KIS WebSocket 연결 검증
+- 결과:
+  - KIS REST 현재가 및 intraday snapshot 조회가 정상 동작했고 approval key 발급도 성공
+  - 임시 SQLite 백엔드에서 worker가 `KIS WebSocket 연결 완료: 16개 종목 구독`까지 진행됨을 확인
+  - worker 상태 기록 시각이 `2026-05-10T16:36:37Z`였고 이는 한국시간 `2026-05-11 01:36:37 KST`라 장 시작 전 상태였음
+  - 이 시각 기준으로 장중 시세 틱은 미수신 상태였고, 검증 후 SQLite `realtime_worker_status`에는 계좌 2건이 `connected`, `realtime_price_ticks`는 `0`건으로 남음
+  - 운영 Supabase는 `accounts`, `holdings`는 `200` 응답이지만 `realtime_worker_status`, `realtime_price_ticks`는 `404 PGRST205`로, 현재 live worker의 실제 선행 조건은 운영 SQL 반영임을 확인
+- 산출물:
+  - 별도 산출물 파일 생성 없음
+- 비고:
+  - `.streamlit/secrets.toml`은 로컬 전용 시크릿 파일이며 Git 추적 대상이 아님
+  - 다음 실제 작업은 운영 Supabase SQL Editor에서 최신 `setup_supabase.sql`을 적용한 뒤 `python3 scripts/run_kis_quote_worker.py --backend supabase`를 재실행하는 것
+  - 장중 quote 적재 최종 확인은 한국 장중(`KST 09:00~15:30`)에 다시 검증해야 함
+
+## 2026-05-10 KIS quote worker 로컬 시크릿 fallback 및 Supabase preflight 추가
+- 변경 파일: `scripts/run_kis_quote_worker.py`, `tests/test_run_kis_quote_worker.py`, `Memory.md`
+- 변경 내용:
+  - `run_kis_quote_worker.py`가 `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`를 환경 변수 우선, 없으면 로컬 `.streamlit/secrets.toml`에서 읽도록 보강
+  - `--preflight-only` 옵션을 추가해 WebSocket 연결 없이도 저장소/스키마 선행 조건만 빠르게 점검할 수 있게 변경
+  - Supabase backend 실행 전에 `public.realtime_worker_status`, `public.realtime_price_ticks` REST 노출 여부를 확인하고, 누락 시 `setup_supabase.sql` 적용 안내와 함께 즉시 실패하도록 preflight 추가
+- 설치:
+  - 추가 설치 없음
+- 검증:
+  - `python3 -m compileall scripts/run_kis_quote_worker.py tests/test_run_kis_quote_worker.py` 성공
+  - `python3 -m unittest tests.test_run_kis_quote_worker` 성공
+  - `python3 scripts/run_kis_quote_worker.py --backend supabase --preflight-only` 실행
+  - `python3 -m compileall app.py src scripts tests` 성공
+  - `python3 -m unittest discover -s tests -p "test_*.py"` 성공
+- 결과:
+  - 신규 단위 테스트 `4`건 통과, 전체 테스트 `68`건 통과
+  - 로컬 env export 없이 `.streamlit/secrets.toml` 기준으로 worker preflight가 실행되는 것을 확인
+  - 운영 Supabase preflight가 `public.realtime_worker_status`, `public.realtime_price_ticks` 누락을 즉시 감지하고 `setup_supabase.sql` 적용 안내와 함께 종료함을 확인
+- 산출물:
+  - 별도 산출물 파일 생성 없음
+- 비고:
+  - 현재 세션에는 운영 Supabase SQL Editor나 DB 직접 접속 정보가 없어 원격 SQL 적용 자체는 수행하지 못함
+  - 다음 실제 작업은 운영 Supabase SQL Editor에서 최신 `setup_supabase.sql`을 적용한 뒤 `python3 scripts/run_kis_quote_worker.py --backend supabase --preflight-only`로 1차 확인, 이후 한국 장중(`KST 09:00~15:30`)에 `python3 scripts/run_kis_quote_worker.py --backend supabase`로 quote 적재를 재검증하는 것
+
+## 2026-05-10 Supabase realtime 최소 핫픽스 SQL 및 runbook 추가
+- 변경 파일: `docs/supabase-realtime-schema-hotfix.sql`, `docs/supabase-realtime-worker-runbook.md`, `Memory.md`
+- 변경 내용:
+  - 운영 Supabase에서 현재 누락된 `public.realtime_worker_status`, `public.realtime_price_ticks`만 빠르게 복구할 수 있도록 [docs/supabase-realtime-schema-hotfix.sql](/workspaces/retirement-portfolio-streamlit/docs/supabase-realtime-schema-hotfix.sql) 추가
+  - hotfix SQL에는 realtime 2개 테이블 생성, 인덱스, `authenticated/service_role` 권한, RLS 정책, `NOTIFY pgrst, 'reload schema';`를 포함
+  - 적용 직후 REST `200` 확인, schema cache refresh, worker 실행, 배포 후속 검증 순서를 정리한 [docs/supabase-realtime-worker-runbook.md](/workspaces/retirement-portfolio-streamlit/docs/supabase-realtime-worker-runbook.md) 추가
+- 설치:
+  - 추가 설치 없음
+- 검증:
+  - `python3 scripts/run_kis_quote_worker.py --backend supabase --preflight-only` 실행
+  - `python3 -m unittest tests.test_run_kis_quote_worker` 성공
+  - `python3 -m compileall app.py src scripts tests` 성공
+  - `python3 -m unittest discover -s tests -p "test_*.py"` 성공
+  - `python3 - <<'PY' ... requests.get(.../rest/v1/daily_interest), requests.get(.../rest/v1/daily_account_snapshot), requests.get(.../rest/v1/realtime_worker_status), requests.get(.../rest/v1/realtime_price_ticks) ... PY`로 운영 Supabase REST 상태 재확인
+  - Supabase 공식 문서 확인:
+    - `Securing your API`에서 explicit grant 필요 조건 확인
+    - `Reload/refresh postgrest schema`에서 `NOTIFY pgrst, 'reload schema';` 사용법 확인
+    - `PostgREST not recognizing new columns, tables, views or functions`에서 `select pg_notification_queue_usage();` 기반 refresh 절차 확인
+- 결과:
+  - worker preflight가 로컬 시크릿 기준으로 실행되며, 운영 Supabase에서 `public.realtime_worker_status`, `public.realtime_price_ticks` 누락을 즉시 감지하고 `setup_supabase.sql` 적용 안내와 함께 종료함을 확인
+  - 단위 테스트 `4`건, 전체 테스트 `68`건 통과
+  - 운영 Supabase REST 상태는 `daily_interest=200`, `daily_account_snapshot=200`, `realtime_worker_status=404`, `realtime_price_ticks=404`로 확인되어 현재 누락 범위가 realtime 2개 테이블에 한정됨을 재확인
+- 산출물:
+  - `docs/supabase-realtime-schema-hotfix.sql`
+  - `docs/supabase-realtime-worker-runbook.md`
+- 비고:
+  - 현재 세션에는 Supabase Management API용 PAT 또는 DB 직접 접속 비밀번호가 없어 원격 SQL 직접 실행은 여전히 불가
+  - 다음 실제 작업은 운영 Supabase SQL Editor에서 새 hotfix SQL 또는 최신 `setup_supabase.sql`을 적용한 뒤 `python3 scripts/run_kis_quote_worker.py --backend supabase --preflight-only`로 `200` 전환을 확인하는 것
+  - 이후 한국 장중(`KST 09:00~15:30`)에 `python3 scripts/run_kis_quote_worker.py --backend supabase`를 다시 실행해 quote 적재를 검증해야 함
+
 ## 다음 작업 후보
-- 로컬 `streamlit run app.py` 실사용 흐름에서 현금 조정 저장 후 데이터 반영 체감 속도 재확인
-- 배포 점검 스크립트 실행 여부 검토
-- `docs/progress-memory.md`와 필요 시 내용 동기화 검토
+- 운영 Supabase SQL Editor에서 `docs/supabase-realtime-schema-hotfix.sql` 또는 최신 `setup_supabase.sql` 적용
+- `python3 scripts/run_kis_quote_worker.py --backend supabase --preflight-only`로 realtime 테이블 노출 재확인
+- 한국 장중(`KST 09:00~15:30`)에 `python3 scripts/run_kis_quote_worker.py --backend supabase`로 quote 반영 수동 검증

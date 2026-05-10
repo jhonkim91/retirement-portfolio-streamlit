@@ -293,3 +293,29 @@
 - Verification completed:
   - `python -m py_compile src/db.py tests/test_db.py`
   - `python -m unittest tests.test_db`
+
+## 2026-05-10 realtime schema remote inspection
+
+- Re-ran the deployed app verifier against `https://retirement-portfolio-app-nh2vq9ferqnpehsslbykbe.streamlit.app/` on the `데이터` page.
+- Current observed result on the deployed app:
+  - login succeeds for the verification account
+  - workspace opens normally
+  - backend storage is `Supabase`
+  - visible metrics show `거래 기록 9건`, `자산 스냅샷 3건`, latest snapshot date `2026-05-10`
+- Ran an authenticated REST check against the same Supabase project using the verification account session:
+  - `accounts`: `200 OK`
+  - `realtime_worker_status`: `404 PGRST205` (`public.realtime_worker_status` not found in schema cache)
+  - `realtime_price_ticks`: `404 PGRST205` (`public.realtime_price_ticks` not found in schema cache)
+- Conclusion:
+  - the production Supabase project is still missing the latest realtime schema from [setup_supabase.sql](/workspaces/retirement-portfolio-streamlit/setup_supabase.sql)
+  - the deployed app is on Supabase, but the new realtime worker storage tables are not yet available remotely
+  - local browser verification of the realtime dashboard flow was completed only on SQLite demo data, not on production Supabase
+- Current credential blocker:
+  - local `.streamlit/secrets.toml` currently has `SUPABASE_URL`, `SUPABASE_KEY`, and deployment verification account credentials
+  - it does **not** have `SUPABASE_SERVICE_ROLE_KEY`, `KIS_APP_KEY`, or `KIS_APP_SECRET`
+  - because of that, this session cannot apply the production SQL directly or run `scripts/run_kis_quote_worker.py --backend supabase` against live KIS
+- Next required operator actions:
+  1. apply the latest [setup_supabase.sql](/workspaces/retirement-portfolio-streamlit/setup_supabase.sql) in the production Supabase SQL Editor
+  2. confirm `realtime_worker_status` and `realtime_price_ticks` return `200` over REST after schema cache refresh
+  3. provide or load `SUPABASE_SERVICE_ROLE_KEY`, `KIS_APP_KEY`, and `KIS_APP_SECRET`
+  4. then run `python scripts/run_kis_quote_worker.py --backend supabase` and re-check the deployed `데이터 > 운영 상태` page

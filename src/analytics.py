@@ -6,7 +6,7 @@ from typing import Any
 
 import pandas as pd
 
-from .market import fetch_price_history
+from .market import fetch_price_history, resolve_kis_sector_label
 
 
 CAPITAL_INFLOW_TYPES = {"personal_deposit", "employer_deposit"}
@@ -17,6 +17,19 @@ MANUAL_ADJUSTMENT_TYPES = {"cash_adjustment"}
 INTEREST_TYPES = {"interest"}
 DEFAULT_ANNUAL_INTEREST_RATE = 0.05
 LEGACY_EMPLOYER_DEPOSIT_NAMES = {"회사 현금입금", "회사 납입금"}
+SECTOR_KEYWORD_RULES = (
+    ("미국테크", ("미국테크", "BIG TECH", "BIGTECH", "QQQ", "AI반도체", "AI 반도체")),
+    ("미국지수", ("S&P500", "S&P 500", "나스닥100", "NASDAQ100", "NASDAQ 100", "미국S&P", "미국나스닥")),
+    ("반도체/전자", ("반도체", "하이닉스", "삼성전자", "DB하이텍", "전자")),
+    ("플랫폼/인터넷", ("NAVER", "카카오", "인터넷", "플랫폼")),
+    ("원자력/에너지", ("원자력", "에너지", "태양광", "2차전지", "배터리")),
+    ("채권", ("국고채", "채권", "BOND", "회사채")),
+    ("금/원자재", ("금현물", "금 ", "GOLD", "원자재", "은", "구리")),
+    ("배당/리츠", ("고배당", "배당", "리츠", "REIT", "부동산", "인프라")),
+    ("자동차", ("현대차", "기아", "모비스", "자동차")),
+    ("바이오/헬스케어", ("바이오", "제약", "헬스", "의료", "셀트리온")),
+    ("방산/산업재", ("한화에어로", "방산", "우주", "항공", "두산", "산업재")),
+)
 
 
 def _trade_match_key(log: dict[str, Any]) -> str:
@@ -71,6 +84,38 @@ def holdings_overview_frame(
 
     working["is_selected"] = working["selection_symbol"] == selected_key
     return working
+
+
+def infer_holding_sector_label(product_name: Any, symbol: Any, asset_type: Any) -> str:
+    """보유 종목명과 자산군을 기반으로 표시용 섹터 라벨을 추론한다."""
+
+    normalized_asset_type = str(asset_type or "").strip().lower()
+    if normalized_asset_type == "cash":
+        return "현금"
+
+    kis_sector_label = resolve_kis_sector_label(symbol)
+    if kis_sector_label:
+        return kis_sector_label
+
+    raw_name = str(product_name or symbol or "").strip()
+    name_upper = raw_name.upper().replace("_", " ")
+    if normalized_asset_type == "safe":
+        if any(keyword in name_upper for keyword in ("국고채", "채권", "BOND", "회사채")):
+            return "채권"
+        if any(keyword in name_upper for keyword in ("금현물", "GOLD", "원자재", "은", "구리")):
+            return "금/원자재"
+        if any(keyword in name_upper for keyword in ("리츠", "REIT", "부동산", "인프라")):
+            return "배당/리츠"
+
+    for sector_label, keywords in SECTOR_KEYWORD_RULES:
+        if any(keyword.upper() in name_upper for keyword in keywords):
+            return sector_label
+
+    if normalized_asset_type == "safe":
+        return "안전자산"
+    if normalized_asset_type == "risk":
+        return "주식/ETF"
+    return "기타"
 
 
 def _amount_from_log(log: dict[str, Any]) -> float:
@@ -252,21 +297,45 @@ def allocation_treemap_nodes(
         if bucket_frame.empty:
             continue
 
-        bucket_children: list[dict[str, Any]] = []
+        sector_children_map: dict[str, list[dict[str, Any]]] = defaultdict(list)
         for _, row in bucket_frame.iterrows():
             current_value = float(row.get("current_value") or 0)
             if current_value <= 0:
                 continue
             symbol = str(row.get("symbol") or "").strip().upper()
-            bucket_children.append(
+            sector_label = infer_holding_sector_label(row.get("product_name"), symbol, row.get("asset_type"))
+            sector_children_map[sector_label].append(
                 {
                     "name": str(row.get("product_name") or row.get("symbol") or "종목"),
                     "value": round(current_value, 4),
                     "bucket": bucket_label,
+                    "sector_name": sector_label,
                     "symbol": symbol,
                     "selection_symbol": symbol,
                     "is_selected": bool(symbol and symbol == selected_key),
                     "profit_rate": round(float(row.get("profit_rate") or 0), 4),
+                    "current_price": round(float(row.get("current_price") or 0), 4),
+                }
+            )
+
+        bucket_children: list[dict[str, Any]] = []
+        for sector_label, sector_rows in sorted(
+            sector_children_map.items(),
+            key=lambda item: sum(float(child.get("value") or 0) for child in item[1]),
+            reverse=True,
+        ):
+            sorted_sector_rows = sorted(
+                sector_rows,
+                key=lambda child: float(child.get("value") or 0),
+                reverse=True,
+            )
+            bucket_children.append(
+                {
+                    "name": sector_label,
+                    "value": round(sum(float(child.get("value") or 0) for child in sorted_sector_rows), 4),
+                    "bucket": bucket_label,
+                    "sector_name": sector_label,
+                    "children": sorted_sector_rows,
                 }
             )
 
