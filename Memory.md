@@ -5,58 +5,47 @@
 - [x] 초기화 대상 파일 존재 여부 확인
 - [x] 프로젝트 유형 판별
 - [x] 기본 검증 수행
-- [x] 2026-05-08 초기화 재확인
-- [x] 2026-05-08 권장 검증 재실행
-- [x] 회사 납입/매매/일별 이자 기준 자동 반영 로직 보강
-- [x] 데이터 탭 누적 원금 기록 추가
-- [x] 로컬 Streamlit 서버 기동 확인
-- [x] 데이터 탭/대시보드 렌더링 검증
-- [x] Streamlit width deprecation 경고 정리
-- [x] KRX 영문 혼합 ETF 코드 시세 조회 보강
-- [x] 영문 혼합 KRX ETF 코드 표본 점검
-- [x] 과거 백데이트 거래 이자 재계산 보강
-- [x] README 배포 안내 최신화
-- [x] historical snapshot 원장 기준 보정
-- [x] SQLite -> Supabase dry-run 재확인
-- [x] Supabase 401/403 fallback 회귀 테스트 추가
-- [x] 실제 로그인 후 브라우저 내부 화면 확인
-- [x] 배포 환경 시크릿/운영 점검 재검증
-- [ ] 현금 카드 직접 수정 UI 브라우저 재검증
-- [ ] `docs/progress-memory.md` 최신 상태 동기화
-- [x] 자산 배분 트리맵 전환
-- [x] 대시보드 전체 스타일 정리
-- [x] 초기 화면 데모 접속 및 테스트 데이터 자동 준비
-- [x] 초기 화면 데모 버튼 무자격 증명 즉시 진입
-- [x] 자산 배분 수익률 하이라이트 연동
-- [x] 배포 ImportError 호환성 완화
+- [x] Memory.md 신규 생성
+- [x] 대시보드 보유 현금 카드 높이 정렬
+- [x] 보유 현금 카드 수정/취소 반응 개선
+- [x] 상단 요약 카드 hover 색상 제거 및 높이 재정렬
+- [x] 접속 화면 상단 제거 및 실시간 버튼 재배치
+- [x] 상단 요약 카드 값 위치 정렬
+- [x] Pylance import 경고 원인 확인 및 인터프리터 설정 정리
+- [x] 로컬 Streamlit 브라우저 검증 및 Playwright 설치
+- [x] README 시크릿/비정상 텍스트 정리
+- [x] 데모 5년 거래 시드 확장 및 이자 적립 제거
+- [x] Memory.md 기준 변경분 리뷰
+- [x] 데모 계정 `test` 고정 및 데모 내부 계좌 리셋 재시드
+- [x] 과거 스냅샷 재동기화와 레거시 이자 반영 복구
 
 ## 프로젝트 유형
 - Python 프로젝트
 - Streamlit 프로젝트
-- Node.js 프로젝트 아님 (`package.json` 미확인)
-- 임베디드/펌웨어 프로젝트 아님 (관련 빌드 파일 미확인)
+- Node.js 프로젝트 아님 (루트 `package.json` 미확인)
+- 임베디드/펌웨어 프로젝트 아님 (루트 `Makefile`, `CMakeLists.txt`, `*.ioc`, `*.uvprojx` 미확인)
 - 판별 근거: `requirements.txt`에 `streamlit` 존재, `.streamlit/config.toml` 존재
 
 ## 현재 확인된 주요 파일
-- `app.py`
-- `requirements.txt`
+- `AGENTS.md`
 - `README.md`
+- `requirements.txt`
 - `.gitignore`
+- `.env.example`
 - `.streamlit/config.toml`
-- `.streamlit/secrets.example.toml`
-- `.streamlit/secrets.toml`
-- `.streamlit/secrets.toml.example`
-- `setup_supabase.sql`
-- `src/auth.py`
+- `app.py`
 - `src/db.py`
-- `src/sqlite_db.py`
+- `src/auth.py`
 - `src/analytics.py`
+- `src/sqlite_db.py`
 - `scripts/run_daily_rollup.py`
 - `scripts/verify_streamlit_deployment.py`
-- `tests/test_analytics.py`
 - `tests/test_db.py`
+- `tests/test_auth.py`
+- `tests/test_analytics.py`
+- `tests/test_market.py`
+- `tests/test_migrate_sqlite_to_supabase.py`
 - `tests/test_verify_streamlit_deployment.py`
-- `docs/progress-memory.md`
 
 ## 실행 방법
 ```powershell
@@ -64,1246 +53,212 @@ python -m pip install -r requirements.txt
 streamlit run app.py
 ```
 
-추가 검증 명령:
-
-```powershell
-python -m compileall app.py src scripts tests
-python -m unittest discover -s tests -p "test_*.py"
-```
-
 ## 생성한 파일 목록
-- 없음
-- 초기화 대상 파일 5종(`AGENTS.md`, `Memory.md`, `.gitignore`, `README.md`, `.env.example`)이 모두 기존에 존재하여 이번 작업에서는 생성하지 않음
+- `Memory.md`
 
 ## 기존에 존재하던 파일 목록
 - `AGENTS.md`
-- `Memory.md`
 - `.gitignore`
 - `README.md`
 - `.env.example`
-- `requirements.txt`
-- `app.py`
-- `Procfile`
-- `setup_supabase.sql`
-- `.streamlit/config.toml`
-- `.streamlit/secrets.example.toml`
-- `.streamlit/secrets.toml`
-- `.streamlit/secrets.toml.example`
-- `docs/progress-memory.md`
-- `src/auth.py`
-- `src/db.py`
-- `src/sqlite_db.py`
-- `src/analytics.py`
-- `scripts/run_daily_rollup.py`
-- `scripts/verify_streamlit_deployment.py`
-- `tests/test_analytics.py`
-- `tests/test_db.py`
-- `tests/test_verify_streamlit_deployment.py`
 
 ## 검증 가능 여부
 - 가능
-- 이번 초기화에서 수행한 검증:
-  - `python -m compileall app.py src scripts tests`
-  - `python -m unittest discover -s tests -p "test_*.py"`
-  - `.env` 미생성 확인
-- 검증 결과:
-  - 문법/바이트코드 컴파일 성공
-  - 단위 테스트 16건 성공
-  - 프로젝트 루트에 `.env` 파일 없음
-  - Streamlit 서버 실제 기동 여부는 이번 초기화 범위에서 미실행
+- `python -m compileall app.py src scripts tests` 성공
+- `python -m unittest discover -s tests -p "test_*.py"` 성공
+- 단위 테스트 `41`건 통과
+- `.env` 파일은 생성하지 않음
 
 ## 현재 프로젝트 상태
 - 상태 미확인
-- 근거: 로컬 서버 기동과 테스트 런타임 기준 내부 화면 렌더링은 확인했지만, 실제 로그인 후 브라우저 내부 화면과 배포 환경 동작은 아직 미확인임
+- 이유: 코드와 문서, 기본 검증 결과는 확인했지만 운영 상태나 사용자 의도 기준 완료 여부는 단정하지 않음
 
-## 2026-05-08 초기화 재확인
-- 작업 범위:
-  - 프로젝트 구조 분석
-  - 초기화 대상 파일 존재 여부 확인
-  - 권장 검증 재실행
-  - `Memory.md` 최신화
-- 프로젝트 유형:
-  - Python 프로젝트
-  - Streamlit 프로젝트
-  - Node.js 프로젝트 아님 (`package.json` 미확인)
-  - 임베디드/펌웨어 프로젝트 아님 (`Makefile`, `CMakeLists.txt`, `*.ioc`, `*.uvprojx` 미확인)
-- 현재 확인된 주요 파일:
-  - `AGENTS.md`
-  - `Memory.md`
-  - `.gitignore`
-  - `README.md`
-  - `.env.example`
-  - `requirements.txt`
-  - `.streamlit/config.toml`
-  - `app.py`
-  - `src/db.py`
-  - `src/auth.py`
-  - `src/analytics.py`
-  - `src/sqlite_db.py`
-  - `scripts/run_daily_rollup.py`
-  - `scripts/verify_streamlit_deployment.py`
-- 실행 방법:
-  - `python -m pip install -r requirements.txt`
-  - `streamlit run app.py`
-- 생성한 파일 목록:
-  - 없음
-- 기존에 존재하던 파일 목록:
-  - `AGENTS.md`
-  - `Memory.md`
-  - `.gitignore`
-  - `README.md`
-  - `.env.example`
-- 검증 가능 여부:
-  - 가능
-  - 수행 결과: `compileall` 성공, `unittest` 16건 성공, `.env` 미생성 확인
-- 현재 프로젝트 상태:
-  - 상태 미확인
-- 다음 작업 후보:
-  - `streamlit run app.py`로 로컬 기동 확인
-  - 필요 시 `python scripts/verify_streamlit_deployment.py --page data --expect-backend supabase`로 배포 점검
-  - Supabase 또는 SQLite 실제 저장 동작 확인
-
-## 2026-05-08 자동 반영 보강
-- 변경 파일:
-  - `app.py`
-  - `src/db.py`
-  - `src/analytics.py`
-  - `tests/test_analytics.py`
-  - `tests/test_db.py`
+## 2026-05-09 대시보드 보유 현금 카드 높이 정렬
+- 변경 파일: `app.py`, `Memory.md`
 - 변경 내용:
-  - 전일까지 누락된 일별 이자를 원장(`trade_logs`, `daily_interest`) 기준으로 자동 보정하는 `sync_account_rollup()` 추가
-  - 오늘 날짜 기준 예상 현금 이자를 대시보드/데이터 화면에 즉시 반영하도록 보강
-  - 대시보드 `실제 성과` 메트릭에 누적 수익률(%) 표시 추가
-  - 회사 납입 누계가 있으면 원금 기준 설명을 함께 표시
-- 검증:
-  - `python -m compileall app.py src tests`
-  - `python -m unittest discover -s tests -p "test_*.py"`
-  - 결과: 테스트 16건 통과
-- 비고:
-  - 자동 보정은 전일까지의 확정 이자를 기록하고, 오늘 이자는 화면에서 예상치로 반영한다.
-  - Streamlit 실제 화면 동작은 아직 미확인이다.
-
-## 2026-05-08 원금 기준 성과 정리
-- 변경 파일:
-  - `app.py`
-  - `src/analytics.py`
-  - `tests/test_analytics.py`
-- 변경 내용:
-  - `회사 납입 누계`, `누적 납입 원금`, `원금 대비 추정 수익`, `보유상품 추정 수익률`을 분리 계산
-  - 매수/매도는 원금을 바꾸지 않고 현금/보유상품 구성만 바꾸는 규칙을 테스트로 고정
-  - 추이 차트 tooltip에 원금 대비 손익/수익률 추가
-- 검증:
-  - `python -m compileall app.py src tests`
-  - `python -m unittest discover -s tests -p "test_*.py"`
-  - 결과: 테스트 16건 통과
-
-## 2026-05-08 데이터 탭 누적 원금 기록
-- 변경 파일:
-  - `app.py`
-  - `src/analytics.py`
-  - `tests/test_analytics.py`
-- 변경 내용:
-  - 데이터 탭에 최초 입금일부터 현재까지의 누적 원금 기록 표 추가
-  - `연금(IRP/퇴직연금)` 계좌 라벨을 명시하고 회사 납입 누계를 별도 컬럼으로 표시
-  - 현재 평가액과 원금 대비 손익/수익률을 누적 기록의 최신 행에서 함께 확인하도록 보강
-  - `cumulative_contribution_frame()` 테스트로 현재 시점 평가액 행이 누적 원금과 올바르게 연결되는지 고정
+  - `보유 현금` 카드의 표시용 `수정` 배지를 카드 마크업으로 옮기고, 실제 버튼은 절대 위치 오버레이로 분리
+  - 오버레이 부모 `stLayoutWrapper`와 내부 `stElementContainer`가 카드 높이를 밀어 올리지 않도록 CSS 조정
+  - `dashboard-summary-card__header` 높이와 여백을 줄여 다른 카드 라벨 높이와 맞춤
 - 검증:
   - `python -m compileall app.py src scripts tests`
   - `python -m unittest discover -s tests -p "test_*.py"`
-  - 결과: 테스트 17건 통과
-- 비고:
-  - 현재 구현은 `retirement` 계좌를 `연금(IRP/퇴직연금)`으로 묶어 표시한다.
-  - `IRP`와 `퇴직연금`을 서로 다른 저장 속성으로 분리하는 스키마 변경은 아직 미구현이다.
+  - 로컬 SQLite 데모 모드 서버: `PORTFOLIO_BACKEND=sqlite` + 데모 자격 증명 비활성화 상태로 `8512` 포트 기동
+  - Playwright headless로 데모 체험 진입 후 상단 카드 높이 측정
+  - 결과: `입금 원금`, `보유 현금`, `현재 평가액`, `원금 대비 평가손익`, `원금 대비 수익률` 카드 높이 모두 `97.59375px`로 동일
+  - 콘솔 오류 0건, 페이지 오류 0건
+- 산출물:
+  - `artifacts/dashboard-cash-card-height-local-demo-fixed-2.png`
+  - `artifacts/dashboard-cash-card-height-local-demo-fixed-2.json`
 
-## 2026-05-08 로컬 실행 및 화면 검증
-- 변경 파일:
-  - `Memory.md`
-- 변경 내용:
-  - `python -m streamlit run app.py --server.port 8510 --server.headless true`로 로컬 서버 기동 확인
-  - Playwright headless로 로컬 첫 화면을 열어 로그인/계정 만들기 탭과 입력 필드가 렌더링되는지 확인
-  - `Streamlit AppTest`에서 인증 모듈을 테스트용으로 패치하고 `PORTFOLIO_BACKEND=sqlite`로 강제해 데이터 탭/대시보드 내부 화면 렌더링 확인
-- 검증:
-  - `http://127.0.0.1:8510/_stcore/health` 응답 `ok`
-  - Playwright DOM 확인: 로그인, 계정 만들기, 이메일/비밀번호 입력 필드 표시
-  - AppTest 데이터 탭 확인:
-    - `원금 누적 기록` 섹션 렌더링
-    - `누적 투자원금`, `현재 평가액`, `원금 대비 현재 수익률` 메트릭 렌더링
-  - AppTest 대시보드 확인:
-    - `원금 대비 추정 수익`, `누적 납입 원금`, `회사 납입 누계`, `누적 이자` 메트릭 렌더링
-    - `2026-05-08 예상 현금 이자` 캡션 렌더링
-- 비고:
-  - 실제 Supabase 로그인 자격 증명이 없어 브라우저에서 로그인 후 내부 화면까지의 완전한 E2E 검증은 이번 작업 범위에서 미실행
-  - 테스트 런타임에서 `use_container_width` deprecation 경고가 반복 출력됨
-  - 대시보드 시세 조회 중 Yahoo Finance 심볼 `0113D0` 404 경고가 있었지만 AppTest 렌더링 자체는 성공
-
-## 2026-05-08 Streamlit width deprecation 정리
-- 변경 파일:
-  - `app.py`
-  - `Memory.md`
-- 변경 내용:
-  - `st.button()`, `st.form_submit_button()`, `st.download_button()`의 `use_container_width=True`를 `width="stretch"`로 치환
-  - `st.dataframe()`과 `st.altair_chart()`의 `use_container_width=True`를 `width="stretch"`로 치환
-  - 화면 레이아웃 폭 동작은 유지하면서 Streamlit deprecation 경고만 제거
-- 검증:
-  - `rg -n "use_container_width" app.py src tests scripts` 결과 없음
-  - `python -m compileall app.py src scripts tests`
-  - `python -m unittest discover -s tests -p "test_*.py"`
-  - AppTest 재검증:
-    - 데이터 탭 메트릭 `데이터 저장소`, `누적 이자`, `누적 투자원금`, `현재 평가액`, `원금 대비 현재 수익률` 렌더링 확인
-    - 대시보드 메트릭 `포트폴리오 평가액`, `원금 대비 추정 수익`, `누적 납입 원금`, `회사 납입 누계`, `누적 이자` 렌더링 확인
-- 비고:
-  - AppTest 실행 시 `use_container_width` 경고는 더 이상 출력되지 않음
-  - 테스트 런타임의 `ScriptRunContext` 경고와 Yahoo Finance 심볼 `0113D0` 조회 404 경고는 별도 이슈로 남아 있음
-  - SQLite 강제 모드 AppTest가 `sync_account_rollup()`를 통과하면서 로컬 `data/portfolio.db`에 일별 이자/스냅샷 쓰기가 발생했을 수 있으므로 후속 검토 시 데이터 변경 여부를 함께 확인할 것
-
-## 2026-05-08 KRX 영문 혼합 ETF 코드 시세 조회 보강
-- 변경 파일:
-  - `src/market.py`
-  - `tests/test_market.py`
-  - `Memory.md`
-- 변경 내용:
-  - KRX 상장 코드 판별 규칙에 `9999A9` 형태의 영문 혼합 ETF 코드를 추가
-  - `0113D0` 같은 코드가 `normalize_symbol()`에서 `0113D0.KS`로 정규화되도록 수정
-  - Yahoo 검색 결과 파싱에서도 영문 혼합 KRX 코드를 인식하도록 정규식 보강
-  - `tests/test_market.py`로 `is_krx_code()`, `normalize_symbol()`, `clean_code()` 회귀 테스트 추가
-- 검증:
-  - `python -m compileall app.py src scripts tests`
-  - `python -m unittest discover -s tests -p "test_*.py"`
-  - 결과: 테스트 22건 통과
-  - 실조회:
-    - `normalize_symbol('0113D0') == '0113D0.KS'`
-    - `fetch_latest_price('0113D0')` 결과 `12260.0`, 기준일 `2026-05-08`
-    - `fetch_price_history('0113D0', '1mo')` 결과 21행
-  - AppTest 대시보드 재확인:
-    - 예외 0건
-    - 이전의 `0113D0` Yahoo 404 경고 미재현
-- 비고:
-  - 라이브 확인 기준 Naver ETF 목록과 Naver 차트 API 모두 `0113D0`를 `TIME 글로벌탑픽액티브`로 반환했고, Yahoo Finance도 `0113D0.KS`에는 응답함
-
-## 2026-05-08 영문 혼합 KRX ETF 코드 표본 점검
-- 변경 파일:
-  - `Memory.md`
-- 변경 내용:
-  - Naver ETF 목록 API에서 영문 혼합 KRX ETF 코드 표본 15건을 추출해 정규화 및 Yahoo 시세 응답 여부를 점검
-  - 표본 코드: `0043B0`, `0162Z0`, `0117V0`, `0072R0`, `0117L0`, `0167A0`, `0139F0`, `0091P0`, `0163Y0`, `0061Z0`, `0148J0`, `0048J0`, `0105E0`, `0127P0`, `0101N0`
-- 검증:
-  - 모든 표본이 `normalize_symbol()`에서 `*.KS`로 정규화됨
-  - 모든 표본이 `yfinance.Ticker(<code>.KS).history(period='5d')` 기준 5행 응답
-- 비고:
-  - 현재 수집한 Naver ETF 영문 혼합 코드 225건은 모두 `9999A9` 패턴이었음
-  - 이번 표본 범위에서는 추가 fallback 로직 없이 현재 정규화 수정만으로 충분했음
-
-## 2026-05-08 과거 백데이트 거래 이자 재계산 보강
-- 변경 파일:
-  - `src/db.py`
-  - `app.py`
-  - `tests/test_db.py`
-  - `Memory.md`
-- 변경 내용:
-  - `sync_account_rollup()`가 누락 이자만 채우는 방식에서, 원장과 기존 이자 이력이 어긋난 경우 자동 이자 기간 전체를 재구성하도록 보강
-  - 기대 이자 일정과 실제 `trade_logs`/`daily_interest` 상태를 비교하는 diff 집계 및 추가/수정/삭제 건수 계산 로직 추가
-  - SQLite/Supabase 모두 전일까지의 자동 이자 레코드를 삭제 후 기대 일정으로 다시 쓰는 `_replace_interest_history()` 경로 추가
-  - 대시보드 상단 자동 반영 안내가 `추가/재계산/제거` 건수와 순변동 금액을 함께 보여주도록 보강
-- 검증:
-  - `python -m compileall app.py src scripts tests`
-  - `python -m unittest discover -s tests -p "test_*.py"`
-  - 결과: 테스트 23건 통과
-- 비고:
-  - 이번 재계산은 자동 생성된 일별 이자 이력만 재구성하며, 과거 날짜의 `daily_account_snapshot` 이력은 재생성하지 않음
-  - 실데이터 쓰기 검증은 로컬 DB 변형 가능성이 있어 이번 단계에서는 단위 테스트로만 확인
-
-## 2026-05-08 README 배포 안내 최신화
-- 변경 파일:
-  - `README.md`
-  - `Memory.md`
-- 변경 내용:
-  - Streamlit Community Cloud 배포 절차를 현재 공식 용어에 맞춰 `Create app`, `Advanced settings > Secrets` 기준으로 정리
-  - `Repository` 예시를 현재 git remote 기준 `jhonkim91/retirement-portfolio-streamlit`로 구체화
-  - 배포 후 `Settings > Secrets` 로 시크릿을 추가하는 보조 절차를 분리해 문서화
-  - `scripts/verify_streamlit_deployment.py` 사용 시 로그인 자격 증명이 없으면 종료 코드 `1`로 실패한다는 조건을 README에 명시
-- 검증:
-  - `python scripts/verify_streamlit_deployment.py --page data --expect-backend supabase`
-  - 결과: `STREAMLIT_VERIFY_EMAIL`/`STREAMLIT_VERIFY_PASSWORD` 미설정으로 종료 코드 `1`, 예상 오류 메시지 확인
-- 비고:
-  - 실제 배포 환경 로그인 검증은 자격 증명이 준비된 뒤 재실행 필요
-
-## 2026-05-08 historical snapshot 원장 기준 보정
-- 변경 파일:
-  - `src/db.py`
-  - `app.py`
-  - `tests/test_db.py`
-  - `Memory.md`
-- 변경 내용:
-  - `sync_account_rollup()`에서 과거 이자 보정이 발생하면 해당 시작일 이후의 기존 historical snapshot을 함께 재계산하도록 보강
-  - historical snapshot 보정 시 `cash_balance`와 `total_cost`는 원장 기준으로 다시 계산하고, 기존 snapshot에 저장돼 있던 `market_value`는 유지한 채 `total_value`만 다시 맞춤
-  - 대시보드 자동 반영 안내에 `과거 스냅샷 보정` 건수를 추가
-  - 테스트로 누락 이자 3일 보정 후 `2026-05-06`~`2026-05-08` snapshot 3건이 함께 수정되는 시나리오를 고정
-- 검증:
-  - `python -m compileall app.py src scripts tests`
-  - `python -m unittest discover -s tests -p "test_*.py"`
-  - 결과: 테스트 24건 통과
-- 비고:
-  - 시점별 가격 이력이 저장돼 있지 않아 historical snapshot의 `market_value`는 새로 추정하지 않고 기존 저장값을 유지함
-  - 따라서 이번 보정은 historical snapshot의 현금/원가/총액 정합성을 높이는 목적이며, 과거 시점 시장가격 재현까지 포함하지 않음
-
-## 2026-05-08 SQLite -> Supabase dry-run 재확인
-- 변경 파일:
-  - `docs/progress-memory.md`
-  - `Memory.md`
-- 변경 내용:
-  - `scripts/migrate_sqlite_to_supabase.py`를 기본 dry-run 모드로 다시 실행해 현재 로컬 SQLite 이관 대상 규모를 최신 값으로 재확인
-  - 예전 메모에 남아 있던 `거래기록 58 / 이자 0 / 스냅샷 0` 수치를 최신 dry-run 결과로 갱신
-  - 현재 source namespace와 계좌별 이관 계획을 `docs/progress-memory.md`에 반영
-- 검증:
-  - `python scripts/migrate_sqlite_to_supabase.py`
-  - 결과:
-    - source namespace: `6e4d857d-b654-40c9-b458-a0b084449fce`
-    - 계좌 4개 / 보유종목 6개 / 거래기록 122개 / 일별 이자 64개 / 스냅샷 1개
-    - `--write` 미지정 상태라 실제 Supabase 쓰기는 수행하지 않음
-- 비고:
-  - 운영 쓰기를 진행하려면 대상 사용자 이메일, 대상 사용자 비밀번호 환경변수, `SUPABASE_KEY`가 추가로 필요함
-## 다음 작업 후보
-- 실제 로그인 자격 증명으로 브라우저에서 데이터 탭의 누적 원금 기록 표와 현재 평가액 기준 수익률 표시 확인
-- 실제 로그인 자격 증명으로 브라우저에서 대시보드의 자동 이자 반영 메시지와 누적 수익률 표시 확인
-- historical snapshot `market_value`를 시점별 가격 이력과 연결해 더 정확히 재생성할지 검토
-- `docs/progress-memory.md` 기준 운영 계정에서 첫 계좌 생성과 기존 데이터 이관 중 우선순위 결정
-- 대상 사용자 이메일/비밀번호와 `SUPABASE_KEY` 준비 후 `scripts/migrate_sqlite_to_supabase.py --write` 실행 검토
-- `scripts/verify_streamlit_deployment.py --page data --expect-backend supabase`로 배포 환경 재검증
-- Streamlit 실제 실행(`streamlit run app.py`) 후 로컬 UI 동작 확인
-
-## 2026-05-08 구조 및 Memory 점검 요약
-- 변경 파일:
-  - `Memory.md`
-- 변경 내용:
-  - 프로젝트 루트 구조, `requirements.txt`, `README.md`, `.streamlit/config.toml`, `Memory.md`를 다시 확인
-  - `Memory.md` 기준 최근 완료/미완료 항목, 실행 방법, 검증 결과, 다음 작업 후보를 재정리
-  - 현재 git working tree가 dirty 상태이며 기존 미커밋 변경이 다수 존재함을 확인
-- 현재 파일 상태:
-  - 수정 추적 파일: `.gitignore`, `README.md`, `app.py`, `data/portfolio.db`, `docs/progress-memory.md`, `src/analytics.py`, `src/db.py`, `src/market.py`, `tests/test_analytics.py`, `tests/test_db.py`
-  - 미추적 파일: `.env.example`, `.vscode/`, `AGENTS.md`, `Memory.md`, `tests/test_market.py`, `tmp_source.png`
-  - 이번 점검에서는 위 파일들에 추가 변경을 가하지 않고 `Memory.md`만 갱신
-- 실행/설정 기준:
-  - 실행 명령은 기존 문서와 동일하게 `python -m pip install -r requirements.txt`, `streamlit run app.py`
-  - `.streamlit/config.toml`은 `theme` 설정 유지, `[server] headless = true` 유지
-- 검증:
-  - 이번 점검에서는 구조/문서/메모리 확인만 수행했고 추가 테스트는 재실행하지 않음
-  - 최신 기록 기준 마지막 검증 결과는 `python -m compileall app.py src scripts tests`, `python -m unittest discover -s tests -p "test_*.py"` 성공, dry-run 마이그레이션 재확인까지 완료
-- 현재 상태 판단:
-  - 코드와 문서는 최근 작업 내용이 `Memory.md`와 대체로 일치함
-  - 다만 실제 로그인 후 내부 화면 확인과 배포 환경 시크릿/운영 점검은 아직 미완료 상태로 유지
-
-## 2026-05-08 Supabase fallback 회귀 테스트 보강
-- 변경 파일:
-  - `tests/test_db.py`
-  - `Memory.md`
-- 변경 내용:
-  - `src/db.py`의 `_should_fallback()` / `_run_with_fallback()` 정책을 직접 고정하는 회귀 테스트 3건 추가
-  - `401`, `403` 인증/권한 오류에서는 `SQLite fallback`으로 우회하지 않고 예외를 그대로 재전파하는지 확인
-  - `500` 서버 오류에서는 기존처럼 `SQLite fallback`이 동작하는지 확인
-  - 배포 검증 자격 증명(`STREAMLIT_VERIFY_EMAIL`, `STREAMLIT_VERIFY_PASSWORD`)은 현재 환경과 `.streamlit/secrets.toml`에 없어 실제 로그인 기반 검증은 이번 턴에서 계속 보류
-- 검증:
-  - `python -m compileall app.py src scripts tests`
-  - `python -m unittest discover -s tests -p "test_*.py"`
-  - 결과: 테스트 27건 통과
-- 비고:
-  - 운영 Supabase 온보딩/데모 버튼 실검증을 재개하려면 로그인 자격 증명이 추가로 필요
-  - 현재 `.streamlit/secrets.toml`에는 `SUPABASE_URL`, `SUPABASE_KEY`만 있고 검증용 이메일/비밀번호는 없음
-
-## 2026-05-08 배포 로그인 자격 증명 재검증 실패
-- 변경 파일:
-  - `Memory.md`
-- 변경 내용:
-  - 제공된 자격 증명으로 `scripts/verify_streamlit_deployment.py` 기본 검증과 `--click-demo` 검증을 각각 재실행
-  - 두 실행 모두 로그인 화면에서 `Invalid login credentials`가 반환되어 앱 내부 화면 진입 실패
-- 검증:
-  - `python scripts/verify_streamlit_deployment.py --page data --expect-backend supabase`
-  - `python scripts/verify_streamlit_deployment.py --page data --expect-backend supabase --click-demo`
-  - 결과: 두 명령 모두 종료 코드 `1`, 동일한 로그인 실패 메시지 재현
-- 비고:
-  - 현재 차단 원인은 배포 앱 계정 자격 증명 불일치로 보임
-  - 다음 진행을 위해서는 비밀번호 재확인 또는 해당 이메일로 비밀번호 재설정 후 새 자격 증명이 필요
-
-## 2026-05-08 배포 로그인 검증 성공
-- 변경 파일:
-  - `Memory.md`
-- 변경 내용:
-  - 새로 확인한 배포 앱 자격 증명으로 `scripts/verify_streamlit_deployment.py` 기본 검증과 `--click-demo` 검증을 다시 실행
-  - 두 실행 모두 로그인 성공, 작업공간 진입 성공, `데이터 > 운영 상태` 패널 확인 성공
-  - 현재 배포 앱 저장소가 `Supabase`로 보고되고, 온보딩/RLS hotfix 차단 상태는 재현되지 않음
-- 검증:
-  - `python scripts/verify_streamlit_deployment.py --page data --expect-backend supabase`
-  - `python scripts/verify_streamlit_deployment.py --page data --expect-backend supabase --click-demo`
-  - 결과:
-    - `logged_in=true`
-    - `workspace_visible=true`
-    - `status_panel_visible=true`
-    - `backend_storage=Supabase`
-    - `hotfix_required=false`
-    - `ok=true`
-- 비고:
-  - 이번 응답에서는 `demo_button_clicked=false`, `demo_seeded=true`로 반환되어 이미 작업공간 상태에서 검증된 것으로 해석됨
-  - 현재 계정은 온보딩이 아닌 기존 작업공간 계정으로 보인다
-
-## 2026-05-08 운영 데이터 상태 우선순위 점검
-- 변경 파일:
-  - `Memory.md`
-- 변경 내용:
-  - 배포 `데이터` 페이지 본문을 텍스트로 저장해 실제 작업공간 상태를 확인
-  - 현재 배포 계정 `jhonkim2025@gmail.com`은 온보딩이 아니라 기존 작업공간 상태이며, 선택 계좌 `IRP (신한)` / 포트폴리오 평가액 `₩919,352` / 실제 성과 `₩117,032` / 투입 원금 `₩802,320` / 현금 `₩253,717` / 누적 이자 `₩0` 이 표시됨
-  - `scripts/migrate_sqlite_to_supabase.py` dry-run을 재실행해 로컬 SQLite 이관 대상 4계좌가 아직 그대로 남아 있음을 재확인
-- 검증:
-  - `python scripts/verify_streamlit_deployment.py --page data --expect-backend supabase --text-output artifacts\\verify-data-page.txt`
-  - `python scripts/verify_streamlit_deployment.py --page dashboard --expect-backend supabase --text-output artifacts\\verify-dashboard-page.txt`
-  - `python scripts/migrate_sqlite_to_supabase.py`
-- 결과:
-  - 배포 작업공간: 기존 데이터가 있는 Supabase 계정
-  - 로컬 SQLite dry-run: 계좌 4개 / 보유종목 6개 / 거래기록 122개 / 일별 이자 64개 / 스냅샷 1개
-- 비고:
-  - 다음 단계는 읽기 검증이 아니라 원격 Supabase 쓰기(`--write`) 여부 결정이다
-  - 현재 배포 계정에 이미 데이터가 있으므로, 이관 실행 전 덮어쓰기 의도를 확인해야 한다
-
-## 2026-05-08 회사 납입 기준 보정 후 Supabase 이관
-- 변경 파일:
-  - `src/analytics.py`
-  - `scripts/migrate_sqlite_to_supabase.py`
-  - `tests/test_analytics.py`
-  - `tests/test_migrate_sqlite_to_supabase.py`
-  - `Memory.md`
-- 변경 내용:
-  - 레거시 원장에 `trade_type='personal_deposit'`로 저장돼 있어도 `product_name='회사 현금입금'` 또는 `회사 납입금`이면 `employer_deposit`로 재해석하도록 보강
-  - 같은 정규화 규칙을 `account_summary()` 계산과 `migrate_sqlite_to_supabase.py` 이관 경로에 모두 적용
-  - 로컬 `IRP (신한)` 계좌(`id=6`) 원장을 재점검한 결과 회사 성격 입금은 `2026-02-05`, `2026-03-05`, `2026-04-03`, `2026-04-30` 각 `₩200,000`으로 총 `₩800,000`
-  - 그 기준으로 로컬 요약값이 `company_principal=800000`, `total_principal=800000`, `net_flow=800000`, `total_interest=581.2625`, `total_value=916508.2625`로 재계산됨을 확인
-  - 이후 `scripts/migrate_sqlite_to_supabase.py --write --target-email jhonkim2025@gmail.com`를 실행해 Supabase로 실제 이관 완료
-- 검증:
-  - `python -m compileall app.py src scripts tests`
-  - `python -m unittest discover -s tests -p "test_*.py"`
-  - `python scripts/migrate_sqlite_to_supabase.py`
-  - `python scripts/migrate_sqlite_to_supabase.py --write --target-email jhonkim2025@gmail.com`
-  - `python scripts/verify_streamlit_deployment.py --page dashboard --expect-backend supabase --text-output artifacts\\post-migration-dashboard.txt`
-- 결과:
-  - 테스트 30건 통과
-  - 실제 이관 건수: 계좌 4 / 보유종목 6 / 거래기록 122 / 일별 이자 64 / 스냅샷 1
-  - 배포 대시보드 재검증:
-    - 저장소 `Supabase`
-    - 계좌 `IRP (신한)`
-    - 순유입 `₩800,000`
-    - 투입 원금 `₩800,000`
-    - 누적 이자 `₩581`
-    - 포트폴리오 평가액 `₩916,508`
-- 비고:
-  - 현재 배포 대시보드 문구는 `회사 납입 누계`를 별도 노출하지 않고 `순유입`/`투입 원금` 위주로 표시되고 있음
-  - 하지만 이관된 원장 레코드 기준으로 `회사 성격 입금 총액 = 80만원`이 맞는 상태다
-
-## 2026-05-08 대시보드 핵심 지표 카드형 레이아웃 조정
-- 변경 파일:
-  - `app.py`
-  - `Memory.md`
-- 변경 내용:
-  - 대시보드 상단 핵심 지표 영역을 기본 `st.metric` 나열 대신 커스텀 HTML/CSS 카드 스트립으로 변경
-  - 카드 구성은 `입금 원금`, `보유 현금`, `현재 평가액`, `원금 대비 평가손익`, `원금 대비 수익률` 5개로 정리
-  - `보유 현금` 카드에는 상단 `수정` 배지와 `아래 현금 조정 카드에서 바로 수정` 안내 문구 추가
-  - 반응형 CSS를 넣어 좁은 화면에서는 2열, 더 좁은 화면에서는 1열로 줄어들도록 조정
-- 검증:
-  - `python -m compileall app.py src scripts tests`
-  - `python -m unittest discover -s tests -p "test_*.py"`
-  - 결과: 테스트 30건 통과
-- 비고:
-  - 이번 턴은 대시보드 상단 카드 레이아웃만 바꿨고, 계산 로직과 아래 차트/폼 영역은 유지
-  - 실제 배포 화면 반영은 배포/재실행 후 브라우저에서 최종 시각 확인이 필요
-
-## 2026-05-08 배포 웹 미반영 원인 확인
-- 변경 파일:
-  - `Memory.md`
-- 변경 내용:
-  - 배포 웹 대시보드를 다시 검증해 현재 표시 텍스트를 확인
-  - 웹은 아직 기존 `포트폴리오 평가액 / 실제 성과 / 투입 원금 / 현금 / 누적 이자` 레이아웃을 보여주고 있어 새 카드형 메트릭 UI는 반영되지 않음
-  - 로컬 git 상태 확인 결과 `app.py` 포함 다수 변경이 미커밋 상태이며, `HEAD`와 `origin/main`은 둘 다 `a583b10`으로 같아 원격에는 새 UI 변경이 아직 올라가지 않았음
-- 검증:
-  - `git status --short`
-  - `git log --oneline --decorate -n 8`
-  - `python scripts/verify_streamlit_deployment.py --page dashboard --expect-backend supabase --text-output artifacts\\web-dashboard-current.txt`
-- 결과:
-  - 배포 웹은 기존 레이아웃 유지
-  - 로컬 변경은 아직 커밋/푸시 전 상태
-- 비고:
-  - 웹 반영을 위해서는 관련 변경을 커밋하고 원격으로 푸시한 뒤 Streamlit 배포가 다시 돌아야 함
-
-## 2026-05-08 대시보드 카드 HTML 렌더링 보정
-- 변경 파일:
-  - `app.py`
-  - `Memory.md`
-- 변경 내용:
-  - 첫 배포 후 대시보드 카드 일부가 HTML 문자열 그대로 노출되는 현상 확인
-  - 원인: 카드 5개를 하나의 큰 HTML 블록으로 이어 붙이는 방식이 배포 환경에서 안정적으로 렌더링되지 않음
-  - 조치: `render_dashboard_metric_strip()`를 `st.columns()` 기반으로 바꾸고, 카드마다 개별 `st.markdown(..., unsafe_allow_html=True)`를 호출하도록 수정
-- 검증:
-  - `python -m compileall app.py src scripts tests`
-  - `python -m unittest discover -s tests -p "test_*.py"`
-  - 결과: 테스트 30건 통과
-- 비고:
-  - 이 수정은 카드 스타일/라벨은 유지하면서 렌더 방식만 안전하게 바꾸는 최소 패치다
-
-## 2026-05-08 커밋 푸시 및 배포 확인
-- 변경 파일:
-  - `Memory.md`
-- 변경 내용:
-  - `6d34396` `Refine Supabase rollup metrics and dashboard cards` 커밋을 `origin/main`에 푸시
-  - 첫 배포 반영 후 대시보드 카드 라벨(`입금 원금`, `보유 현금`, `현재 평가액`, `원금 대비 평가손익`, `원금 대비 수익률`)은 웹에 나타났지만 일부 카드 HTML이 그대로 노출되는 현상 확인
-  - `92a86d3` `Fix dashboard metric card rendering` 커밋으로 카드 렌더 방식을 개별 `st.markdown` 호출로 보정 후 다시 푸시
-- 검증:
-  - `git push origin main`
-  - `python scripts/verify_streamlit_deployment.py --page dashboard --expect-backend supabase --text-output artifacts\\web-dashboard-current.txt`
-  - `python scripts/verify_streamlit_deployment.py --page dashboard --expect-backend supabase --screenshot artifacts\\deploy-dashboard-current.png`
-  - `python scripts/verify_streamlit_deployment.py --page dashboard --expect-backend supabase --text-output artifacts\\deploy-final-check.txt --screenshot artifacts\\deploy-final-check.png`
-- 결과:
-  - 배포 텍스트 기준 새 카드 라벨은 웹에 반영됨
-  - `dashboard-metric-card__label`, `</div>` 같은 raw HTML 텍스트 노출은 보정 후 재현되지 않음
-  - 다만 배포 검증 스크린샷은 시점에 따라 대시보드 대신 로그인 폼이 본문에 잠시 보이는 등 세션/재렌더 타이밍 편차가 있어, 브라우저 수동 확인까지 하면 더 안전함
-- 비고:
-  - 현재 원격 최신 커밋은 `92a86d3`
-
-## 2026-05-08 대시보드 카드 문자열 렌더링 2차 보정
-- 변경 파일:
-  - `app.py`
-  - `Memory.md`
-- 변경 내용:
-  - 배포 웹에서 카드 HTML 일부가 여전히 조각 문자열처럼 보이는 현상을 재확인
-  - `render_dashboard_metric_strip()` 내부 카드 마크업을 들여쓰기 포함 멀티라인 f-string에서 단일 연결 문자열로 바꿔 Markdown 파서 간섭 여지를 제거
-- 검증:
-  - `python -m compileall app.py src scripts tests`
-  - `python -m unittest discover -s tests -p "test_*.py"`
-  - 결과: 테스트 30건 통과
-
-## 2026-05-08 현금 카드 직접 수정 전환
-- 변경 파일:
-  - `app.py`
-  - `Memory.md`
-- 변경 내용:
-  - 대시보드 상단 5개 카드 중 `보유 현금` 카드만 `수정` 버튼 클릭 시 카드 내부에서 바로 편집 가능하도록 변경
-  - `수정` 클릭 시 목표 현금 잔액 입력과 `저장/취소` 버튼이 같은 카드 안에 열리도록 구현
-  - 저장 시 `adjust_cash_balance()`를 호출해 오늘 날짜 기준 `대시보드 현금 카드 조정` 메모로 기록
-  - 기존 하단 `현금 조정` 섹션은 제거
-  - 다른 체크 표시된 영역은 유지
-- 검증:
-  - `python -m compileall app.py src scripts tests`
-  - `python -m unittest discover -s tests -p "test_*.py"`
-  - 결과: 테스트 30건 통과
-
-## 2026-05-08 구조/메모리/상태 재확인
-- 변경 파일:
-  - `Memory.md`
-- 변경 내용:
-  - 프로젝트 루트 구조, `requirements.txt`, `README.md`, `.streamlit/config.toml`, `Memory.md`, `docs/progress-memory.md`, git 상태/최근 커밋을 다시 확인
-  - 현재 `HEAD`와 `origin/main`이 둘 다 `2e66863`(`Move cash adjustment into dashboard summary card`)로 일치함을 확인
-  - 현재 워킹트리는 `data/portfolio.db` 수정 1건과 `.env.example`, `AGENTS.md`, `.vscode/`, `artifacts/`, `post-migration-dashboard.txt`, `tmp_source.png` 등 미추적 파일이 남아 있는 상태로 확인
-  - 루트 `Memory.md`는 최근 작업(`현금 카드 직접 수정 전환`)까지 반영되어 있으나 `docs/progress-memory.md`의 원격 반영 이력/운영 상태는 최신 커밋 기준으로 일부 뒤처져 있어 후속 동기화 후보로 남김
-- 실행/설정 기준:
-  - 실행 명령: `python -m pip install -r requirements.txt`, `streamlit run app.py`
-  - 권장 검증 명령: `python -m compileall app.py src scripts tests`, `python -m unittest discover -s tests -p "test_*.py"`
-  - `.streamlit/config.toml` 유지값: `theme.base="light"`, `theme.primaryColor="#0F766E"`, `[server] headless=true`
-- 검증:
-  - 이번 턴은 구조/문서/메모리/설정/깃 상태 점검만 수행했고 추가 테스트는 재실행하지 않음
-  - 최신 기록 기준 마지막 성공 검증은 `python -m compileall app.py src scripts tests`, `python -m unittest discover -s tests -p "test_*.py"`이며 결과는 테스트 30건 통과
-- 현재 상태 판단:
-  - 최근 완료 작업은 대시보드 `보유 현금` 카드 내부 직접 수정 전환까지 코드/원격 브랜치에 반영된 상태
-  - 미완료 항목은 실제 브라우저에서 현금 카드 저장 UX 최종 확인, 배포 화면 최신 커밋 재확인, 배포/운영 문서(`docs/progress-memory.md`) 최신 상태 동기화 정도로 정리 가능
-
-## 2026-05-08 상단 컨텍스트/헤더 영역 전면 제거
-- 변경 파일:
-  - `app.py`
-  - `Memory.md`
-- 변경 내용:
-  - 대시보드 상단의 `Workspace Context` 배너를 제거
-  - 대시보드 상단의 `Dashboard / 계좌명 / 핵심 상태` 헤더 블록을 제거
-  - 거래/데이터 페이지에도 남아 있던 공통 `render_page_context()` 호출을 제거해 모든 페이지가 바로 본문 카드/폼부터 시작하도록 정리
-  - 더 이상 쓰이지 않는 `page-context`, `dashboard-hero` 관련 CSS와 렌더 함수 마크업을 함께 삭제
-- 검증:
-  - `python -m compileall app.py src scripts tests`
-  - `python -m unittest discover -s tests -p "test_*.py"`
-  - 결과: 테스트 30건 통과
-- 비고:
-  - 이번 턴은 코드/테스트 검증만 수행했고 브라우저 시각 검증은 아직 미실행
-
-## 2026-05-08 상단 영역 제거 후 원격 반영
-- 변경 파일:
-  - `app.py`
-  - `Memory.md`
-- 변경 내용:
-  - 브라우저에 기존 `Workspace Context` / `Dashboard` / `핵심 상태` 영역이 남아 있던 원인을 재확인
-  - 현재 로컬 `app.py`에서는 해당 렌더링 코드가 이미 제거된 상태였고, 브라우저는 아직 푸시되지 않은 이전 배포본을 보고 있던 상황으로 정리
-  - 사용자 요청에 따라 UI 변경은 가능하면 푸시까지 마무리하고 그 사실을 `Memory.md`에 남기는 기준으로 진행
-- 검증:
-  - `git diff -- app.py`
-  - `git log --oneline --decorate -n 5`
-- 비고:
-  - 현재 턴 기준 원격 반영을 위해 `app.py`, `Memory.md`만 선택 커밋/푸시 대상으로 사용
-  - `data/portfolio.db`와 기타 미추적 파일은 이번 UI 변경 범위에 포함하지 않음
-
-## 2026-05-08 자산 배분 ECharts 트리맵 전환
-- 변경 파일:
-  - `app.py`
-  - `src/analytics.py`
-  - `tests/test_analytics.py`
-  - `requirements.txt`
-  - `Memory.md`
-- 변경 내용:
-  - 대시보드 `자산 배분` 섹션을 기존 Altair 도넛 차트에서 `streamlit-echarts` 기반 트리맵으로 전환
-  - 표시 계층은 `자산군 > 보유 종목` 구조로 구성하고, `현금`은 `예수금` 자식 노드로 표시
-  - ECharts 스타일 제목, 색상 구간 바, 상위 카테고리 헤더 느낌의 treemap 옵션을 추가
-  - 런타임에 `streamlit-echarts`가 없으면 기존 도넛 차트로 fallback 되도록 방어 로직 추가
-  - `src.analytics.allocation_treemap_nodes()`와 회귀 테스트 1건을 추가
-  - 배포 설치를 위해 `requirements.txt`에 `streamlit-echarts>=0.6.0,<0.7` 추가
-- 검증:
-  - `python -m pip install "streamlit-echarts>=0.6.0,<0.7"`
-  - `python -m compileall app.py src scripts tests`
-  - `python -m unittest discover -s tests -p "test_*.py"`
-  - 결과: 테스트 31건 통과
-- 비고:
-  - 이번 턴은 코드/테스트 기준 검증까지 완료했고, 실제 브라우저에서 treemap 모양 최종 확인은 아직 미실행
-
-## 2026-05-09 대시보드 전체 레이아웃/스타일 정리
-- 변경 파일:
-  - `app.py`
-  - `Memory.md`
-- 변경 내용:
-  - 대시보드 상단 5개 카드의 값 높이, 버튼 정렬, 여백 리듬을 다시 맞춰 카드 기준선이 더 고르게 보이도록 조정
-  - `자산 배분`/`보유 종목 수익률` 2열 패널에 동일 높이 체계를 적용하고, 섹션 헤더 타이포를 공통 helper로 통일
-  - `자산 배분` 트리맵은 ECharts 기본 `visualMap` UI를 제거하고 하단 커스텀 범례 바로 교체
-  - 트리맵 내부 라벨은 길이 기준으로 잘라 표시하고, 상위 카테고리 헤더와 타일 경계/강조 스타일을 재조정
-  - `보유 종목 수익률` 차트는 높이 고정, 범례 제거, x축 라벨 축약/회전, 축 색상 정리를 적용
-  - `시장 업데이트`, `현재 보유 종목`, `추이` 섹션도 제목/설명 간격과 차트 높이 리듬을 같은 기준으로 정리
-- 검증:
-  - `python -m compileall app.py src scripts tests`
-  - `python -m unittest discover -s tests -p "test_*.py"`
-  - 결과: 테스트 31건 통과
-- 추가 확인:
-  - 임시 Streamlit 미리보기 스크립트와 Playwright로 로컬 렌더 확인을 시도했지만 `streamlit-echarts` 포함 화면은 임시 미리보기에서 신뢰도 있게 재현되지 않아 시각 판정은 보류
-- 비고:
-  - 이번 커밋은 `app.py`, `Memory.md`만 선택 반영하고 `data/portfolio.db`와 로컬 산출물은 제외 유지
-
-## 2026-05-09 초기 화면 데모 접속 추가
-- 변경 파일:
-  - `app.py`
-  - `src/auth.py`
-  - `tests/test_auth.py`
-  - `.env.example`
-  - `.streamlit/secrets.example.toml`
-  - `.streamlit/secrets.toml.example`
-  - `Memory.md`
-- 변경 내용:
-  - 로그인 전 초기 화면에 `데모 접속` 패널과 버튼을 추가
-  - 버튼 클릭 시 `DEMO_LOGIN_EMAIL`/`DEMO_LOGIN_PASSWORD`를 우선 사용하고, 없으면 `STREAMLIT_VERIFY_EMAIL`/`STREAMLIT_VERIFY_PASSWORD`로 fallback 하도록 `src/auth.py` helper 추가
-  - 데모 계정 로그인 후 `seed_demo_workspace()`를 바로 실행해 테스트용 계좌/입금/매수/이자/이체/스냅샷 데이터를 자동 준비하도록 연결
-  - 데모 로그인 성공 후 시드 실패 시에도 다음 화면에서 상태 메시지를 볼 수 있도록 auth feedback 경로를 보강
-  - 설정 예제 파일에 데모 로그인용 환경 변수/시크릿 예시를 추가
-  - `tests/test_auth.py`로 데모 자격 증명 우선순위, fallback, 오류 메시지 회귀 테스트 4건 추가
-- 검증:
-  - `python -m compileall app.py src scripts tests`
-  - `python -m unittest discover -s tests -p "test_*.py"`
-  - `python -m streamlit run app.py --server.port 8512 --server.headless true` 후 Playwright로 초기 화면 텍스트/버튼 노출 확인
-  - 결과: 테스트 35건 통과
-- 추가 확인:
-  - 로컬 초기 화면에서 `데모 접속`, `로그인`, `계정 만들기` 버튼과 안내 문구 노출 확인
-- 미완료/다음 확인:
-  - 실제 배포 또는 로컬 브라우저에서 초기 화면 `데모 접속` 버튼 클릭 후 곧바로 데모 계정 대시보드로 진입하는지 시각 검증 필요
-  - 운영 배포에서 이 기능을 쓰려면 `DEMO_LOGIN_EMAIL`/`DEMO_LOGIN_PASSWORD` 또는 `STREAMLIT_VERIFY_EMAIL`/`STREAMLIT_VERIFY_PASSWORD`가 실제 시크릿에 설정되어 있어야 함
-
-## 2026-05-09 초기 화면 데모 버튼 무자격 증명 진입
-- 변경 파일:
-  - `app.py`
-  - `src/auth.py`
-  - `src/db.py`
-  - `tests/test_auth.py`
-  - `tests/test_db.py`
-  - `Memory.md`
-- 변경 내용:
-  - 초기 화면 `데모 접속` 버튼을 항상 활성화하고, 아이디/비밀번호 입력 없이 바로 진입할 수 있도록 변경
-  - `src/auth.py`에 로컬 데모 세션 모드(`demo@local`)를 추가해 데모 계정 설정이 없을 때도 세션을 직접 생성하도록 보강
-  - 데모 세션 진입 시 `db_backend_state`를 초기화하고, `src/db.py`에서 로컬 데모 세션이면 `SQLite`를 우선 사용하도록 백엔드 선택 규칙을 추가
-  - 같은 버튼으로 `seed_demo_workspace()`를 실행해 테스트 가능한 임의의 계좌/입금/매수/이자/이체/스냅샷 데이터가 자동 준비되도록 유지
-  - Supabase 설정이 없는 환경에서도 데모 버튼은 동작하도록 메인 초기 진입 가드를 완화하고, 실제 로그인/회원가입 버튼은 비활성 안내를 추가
-  - 회귀 테스트로 로컬 데모 세션 fallback, 데모 세션 판별, 데모 세션 SQLite 우선 선택을 추가
-- 검증:
-  - `python -m compileall app.py src scripts tests`
-  - `python -m unittest discover -s tests -p "test_*.py"`
-  - `python -m streamlit run app.py --server.port 8514 --server.headless true` 후 Playwright로 초기 화면 확인
-  - Playwright 결과:
-    - 초기 화면에 `데모 접속` 버튼과 `아이디 입력 없이 버튼만 눌러...` 안내 문구 노출 확인
-    - 버튼 클릭 후 `demo@local`, `로그아웃`, `데모 IRP`, `현재 저장소는 로컬 SQLite 임시 저장소입니다.` 표시 확인
-  - 결과: 테스트 37건 통과, 로컬 브라우저 데모 진입 성공
-- 비고:
-  - 로컬 브라우저 검증 과정에서 `data/portfolio.db`에 데모 데이터가 실제 기록됐으나 이번 커밋에는 포함하지 않음
-  - 실제 Supabase 데모 계정 시크릿이 설정돼 있으면 계속 그 계정으로 로그인하고, 없으면 로컬 SQLite 데모 작업공간으로 자동 fallback 한다
-
-## 2026-05-09 자산 배분 수익률 하이라이트 연동
-- 변경 파일:
-  - `app.py`
-  - `src/analytics.py`
-  - `tests/test_analytics.py`
-  - `Memory.md`
-- 변경 내용:
-  - 자산 배분 트리맵의 하단 범례를 기존 `낮은 비중/높은 비중` 정적 바에서 `현재 종목 수익률 기준` 바와 선택 마커 구조로 교체
-  - 트리맵 타일 색상을 보유 종목 `수익률 %` 기준으로 다시 계산하고, 선택된 종목은 테두리/그림자로 강조되도록 보강
-  - 우측 `보유 종목 수익률` 차트를 Altair 기본 막대에서 ECharts 막대로 전환하고, 클릭 시 동일 종목 selection state를 공유하도록 연결
-  - 트리맵이나 막대 중 하나를 클릭하면 같은 종목이 다른 차트에서도 하이라이트되고, 범례 마커 라벨이 해당 종목 수익률 위치로 이동하도록 구현
-  - `src.analytics.holdings_overview_frame()`를 추가해 선택 종목이 top 10 밖이어도 개요 막대차트에 유지되도록 정리
-  - ECharts 미사용 환경에서는 Altair fallback 차트가 selection opacity만 반영하도록 유지
-- 검증:
-  - `python -m compileall app.py src scripts tests`
-  - `python -m unittest discover -s tests -p "test_*.py"`
-  - 결과: 테스트 39건 통과
-- 브라우저 확인:
-  - 로컬 Streamlit에서 새 범례 문구 `현재 종목 수익률 기준`과 수익률 min/max 텍스트가 렌더링되는 것까지는 확인
-  - headless Playwright 기준 Streamlit 재렌더 타이밍과 canvas click 재현성이 낮아 `트리맵 클릭 -> 선택 종목 캡션 변경` E2E는 부분 확인으로 남김
-- 참고:
-  - 구현 방식은 `streamlit-echarts` 이벤트 반환 예시와 Apache ECharts 이벤트/visual mapping 개념을 참고해, 이벤트는 심볼 문자열만 반환하는 단순 패턴으로 맞춤
-
-## 2026-05-09 배포 ImportError 호환성 완화
-- 변경 파일:
-  - `app.py`
-  - `Memory.md`
-- 변경 내용:
-  - 배포 화면에서 `app.py`의 `from src.analytics import ... holdings_overview_frame ...` 구문이 ImportError로 중단되는 상황을 기준으로 import 경로를 완화
-  - `holdings_overview_frame`를 `src.analytics`에서 직접 이름 import하지 않고, `analytics_module`에서 `getattr()`로 조회한 뒤 없으면 `app.py` 내부 fallback 구현을 사용하도록 변경
-  - 이 변경으로 배포 런타임이 잠시 이전 `src.analytics` 심볼 집합을 보고 있어도 `app.py` import 단계에서 앱 전체가 죽지 않도록 방어
-- 검증:
-  - `python -m compileall app.py src scripts tests`
-  - `python -m unittest discover -s tests -p "test_*.py"`
-  - `python -m streamlit run app.py --server.port 8517 --server.headless true`
-  - 결과: 테스트 39건 통과, 로컬 health check `ok`
-- 비고:
-  - 이번 수정은 배포 장애를 우선 복구하기 위한 호환성 패치다
-  - `data/portfolio.db`는 이번 커밋에 포함하지 않음
-
-## 2026-05-08 프로젝트 초기화 점검
-- [x] 프로젝트 구조 분석
-- [x] 루트 초기화 대상 파일 존재 여부 확인
-- [x] 누락 파일 생성 여부 점검
-- [x] 실행/테스트 가능 여부 확인
-- [x] `Memory.md` 기록 업데이트
-- 프로젝트 유형:
-  - `requirements.txt` 존재
-  - `streamlit==1.55.0` 포함
-  - `package.json`, `pyproject.toml`, `Makefile`, `CMakeLists.txt` 미확인
-  - 판정: `Python + Streamlit`
-- 현재 확인된 주요 파일:
-  - `AGENTS.md`
-  - `Memory.md`
-  - `.gitignore`
-  - `README.md`
-  - `.env.example`
-  - `requirements.txt`
-  - `.streamlit/config.toml`
-  - `app.py`
-  - `src/db.py`
-  - `src/auth.py`
-  - `src/analytics.py`
-  - `src/sqlite_db.py`
-  - `scripts/run_daily_rollup.py`
-  - `scripts/verify_streamlit_deployment.py`
-- 실행 방법:
-  - `python -m pip install -r requirements.txt`
-  - `streamlit run app.py`
-- 생성한 파일 목록:
-  - 없음
-- 기존에 존재하던 파일 목록:
-  - `AGENTS.md`
-  - `Memory.md`
-  - `.gitignore`
-  - `README.md`
-  - `.env.example`
-- 검증 가능 여부:
-  - 가능
-  - 실행 확인 명령:
-    - `python -m compileall app.py src scripts tests`
-    - `python -m unittest discover -s tests -p "test_*.py"`
-  - 확인 결과:
-    - `compileall` 완료
-    - 단위 테스트 39건 통과
-- 현재 프로젝트 상태:
-  - `상태 미확인`
-  - 코드와 문서 기준으로 초기화 대상 파일과 실행 명령은 확인했지만, 운영 상태/배포 상태는 별도 확인 전까지 확정하지 않음
-- 다음 작업 후보:
-  - `.streamlit/secrets.toml` 또는 배포 시크릿 주입 상태 점검
-  - `scripts/verify_streamlit_deployment.py` 기준 배포 검증 수행
-  - 필요 시 `README.md` 실행 예시를 현재 개발 환경 기준으로 보강
-
-## 2026-05-08 작업 상태 요약
-- [x] 프로젝트 구조 확인
-- [x] `Memory.md` 최신 기록 검토
-- [x] 현재 워크트리 상태 확인
-- [x] 권장 검증 명령 재실행
-- 변경 파일:
-  - `Memory.md`
-- 이전 작업 상태 요약:
-  - 대시보드 상단 컨텍스트/헤더 제거
-  - `자산 배분` 시각화를 `streamlit-echarts` 트리맵으로 전환
-  - 초기 화면 `데모 접속` 흐름 추가 및 무자격 증명 로컬 데모 fallback 구현
-  - 자산 배분 트리맵과 보유 종목 수익률 차트 하이라이트 연동
-  - 배포 환경 `ImportError` 호환성 완화 패치 적용
-- 완료 항목:
-  - 로컬 실행/테스트 기준 앱 코드와 테스트 세트가 동작하는 최신 기록 확보
-  - `데모 접속` 버튼 로컬 브라우저 진입 성공 기록 존재
-  - 배포 ImportError 방어 로직 반영 기록 존재
-- 미완료 항목:
-  - 배포 환경 시크릿 주입 상태 확인 미완료
-  - `scripts/verify_streamlit_deployment.py` 기준 실제 배포 검증 미완료
-  - ECharts 상호작용 시각 검증은 부분 확인 상태
-  - 현재 워크트리의 모든 수정 파일이 어떤 목적의 변경인지 문서만으로는 확정 불가
-- 실행 방법:
-  - `python -m pip install -r requirements.txt`
-  - `streamlit run app.py`
-- 검증 결과:
-  - `python -m compileall app.py src scripts tests` 완료
-  - `python -m unittest discover -s tests -p "test_*.py"` 실행
-  - 결과: 테스트 39건 통과
-- 현재 파일 상태:
-  - `git status --short` 기준 수정 흔적:
-    - `.devcontainer/devcontainer.json`
-    - `.streamlit/secrets.example.toml`
-    - `Memory.md`
-    - `README.md`
-    - `app.py`
-    - `data/portfolio.db`
-    - `docs/progress-memory.md`
-    - `setup_supabase.sql`
-    - `src/db.py`
-  - `git status --short` 기준 미추적 항목:
-    - `.vscode/`
-    - `AGENTS.md`
-    - `artifacts/`
-    - `post-migration-dashboard.txt`
-    - `tmp_source.png`
-- 현재 프로젝트 상태:
-  - `상태 미확인`
-  - 이유: 테스트는 통과했지만 워크트리에 누적된 수정/미추적 항목이 있으며, 배포/운영 상태는 별도 확인 전
-- 다음 작업 후보:
-  - 현재 수정 파일 중 실제 반영 대상과 제외 대상을 먼저 분리
-  - `.streamlit/secrets.toml` 또는 배포 시크릿 주입 여부 확인
-  - `scripts/verify_streamlit_deployment.py`로 배포 로그인/백엔드 상태 점검
-  - 필요 시 `README.md`와 `docs/progress-memory.md`를 최신 동작 기준으로 동기화
-- 비고:
-  - 이번 턴은 요약과 검증 기록 정리만 수행했고, 앱 코드 동작 변경은 없음
-
-## 2026-05-08 접속 지연/불안정 점검 및 완화
-- [x] 초기 접속 지연 경로 조사
-- [x] 대시보드 첫 로딩 병목 완화
-- [x] 반복 롤업 실행 완화
-- [x] 검증 및 기록 업데이트
-- 변경 파일:
-  - `app.py`
-  - `Memory.md`
-- 재현/확인 조건:
-  - 로컬 데모 작업공간 기준으로 대시보드 진입 시 `추이` 섹션이 즉시 `build_portfolio_trend()`를 호출
-  - 이 과정에서 보유 종목별 `yfinance` 이력 조회가 첫 렌더에서 바로 실행됨
-  - 메인 진입부는 같은 세션에서도 리렌더마다 `sync_account_rollup()`를 다시 수행할 수 있는 구조였음
-- 확인한 원인:
-  - `app.py`의 `Dashboard > 추이` 섹션이 스냅샷 데이터가 이미 있어도 외부 시세 이력(`build_portfolio_trend`)을 항상 불러와 초기 접속 시간을 늘림
-  - 외부 `Yahoo Finance` 응답 상태에 따라 첫 진입 체감이 느려지거나 불안정해질 수 있음
-  - `main()`에서 `sync_account_rollup()`가 세션 내 동일 계좌/동일 날짜에도 반복 실행되어 불필요한 DB 작업이 누적될 수 있음
+## 2026-05-09 Pylance import 경고 확인
+- 변경 파일: `.vscode/settings.json`, `.venv/pyvenv.cfg`, `Memory.md`
+- 재현 조건:
+  - VS Code Pylance가 `app.py` 상단 import에서 `altair`, `pandas`, `streamlit`, `dateutil.relativedelta`를 찾지 못한다고 표시
+- 원인:
+  - 시스템 Python(`/usr/local/bin/python`)에는 의존성이 설치되어 있었지만, 프로젝트 로컬 `.venv`에는 핵심 패키지가 비어 있거나 설치가 중간 상태였음
+  - `.vscode/settings.json`에 Python 인터프리터 경로가 없어 Pylance가 올바른 환경을 보지 못할 수 있는 상태였음
 - 수정 내용:
-  - 세션 상태에 `rollup_dirty_token`, `rollup_sync_signature`를 추가해 같은 계좌/같은 날짜/같은 세션 상태에서는 롤업을 한 번만 수행하도록 조정
-  - 계좌 생성, 데모 시드, 현금 조정, 거래 저장, 현금 흐름 저장, 계좌 이체 저장, 현재가 새로고침 후에는 롤업이 다시 필요하므로 `mark_rollup_dirty()`로 재동기화 플래그를 올리도록 연결
-  - `Dashboard > 추이`에서 스냅샷 데이터가 있으면 먼저 스냅샷 차트만 렌더하고, 종목별 비교 추이는 `종목별 비교 추이 불러오기` 토글을 눌렀을 때만 외부 시세 이력을 조회하도록 변경
+  - 중단된 `.venv` 패키지 설치 프로세스를 정리
+  - `.venv/pyvenv.cfg`의 `include-system-site-packages`를 `true`로 변경해 로컬 가상환경이 시스템에 이미 설치된 패키지를 참조하도록 조정
+  - `.vscode/settings.json`의 `python.defaultInterpreterPath`를 `/workspaces/retirement-portfolio-streamlit/.venv/bin/python`으로 설정
 - 검증:
+  - `.venv/bin/python` 기준 import 확인
   - `python -m compileall app.py src scripts tests`
   - `python -m unittest discover -s tests -p "test_*.py"`
-  - `python -m streamlit run app.py --server.port 8521 --server.headless true`
-  - `curl -I http://127.0.0.1:8521`
-  - 결과:
-    - `compileall` 완료
-    - 단위 테스트 39건 통과
-    - 로컬 Streamlit 서버 기동 후 HTTP `200 OK` 확인
-- 계측 메모:
-  - 로컬 데모 데이터 기준 `snapshot_trend_frame` 경로는 약 `0.706s`
-  - 같은 조건의 외부 종목 이력 로드는 약 `1.286s`
-  - 초기 대시보드 추정 시간은 약 `1.992s -> 0.706s` 수준으로 감소
-- 미완료/제약:
-  - 실제 브라우저 E2E 계측은 로컬 Playwright 설치 경로 문제로 이번 턴에 완료하지 못함
-  - 배포 환경에서의 체감 속도와 네트워크 편차는 별도 브라우저 검증이 필요함
-- 현재 프로젝트 상태:
-  - `진행 중`
-  - 코드 차원의 주요 병목 완화는 반영했지만, 배포 환경 실측은 아직 미완료
-- 다음 작업 후보:
-  - 배포 URL에서 실제 첫 접속 시간과 `데모 접속` 후 대시보드 표시 시간을 브라우저로 실측
-  - 필요 시 `build_portfolio_trend()`의 종목별 시세 조회를 병렬화하거나 서버측 캐시 전략 추가 검토
-  - 필요 시 `sync_account_rollup()` 내부 DB 호출 수 자체를 더 줄일 수 있는지 별도 점검
+  - 결과: `altair`, `pandas`, `streamlit`, `dateutil` import 성공, 단위 테스트 41건 통과
+- 미완료:
+  - VS Code 창에서 Pylance 진단 갱신 여부 직접 확인 필요
 
-## 2026-05-08 자산 배분 하이라이트 깜빡임 수정
-- [x] 자산 배분 깜빡임 원인 확인
-- [x] 우측 수익률 차트/범례 하이라이트 제어 방식 수정
-- [x] 회귀 테스트 실행
-- 변경 파일:
-  - `app.py`
-  - `Memory.md`
-- 증상:
-  - `자산 배분` 트리맵과 우측 `보유 종목 수익률` 차트가 ECharts 클릭 이벤트와 `st.rerun()`에 의존하면서 화면이 반복 깜빡이는 문제 발생
-  - 요청했던 하단 하이라이트 조절 UX 대신 우측 차트와 범례 표시가 불안정해지는 상태로 확인
-- 수정 내용:
-  - 트리맵/우측 막대차트의 클릭 이벤트 기반 선택 로직을 제거
-  - 범례 아래에 `하이라이트 종목` 슬라이더를 추가하고, 이 슬라이더를 선택 상태의 단일 기준으로 사용하도록 변경
-  - 슬라이더 값은 수익률 순으로 정렬된 종목 목록을 사용하고, `선택 안 함` 옵션도 함께 제공
-  - 범례 안내 문구도 클릭 안내에서 슬라이더 안내로 변경
-- 기대 효과:
-  - 선택 상태가 ECharts 이벤트 재마운트에 흔들리지 않아 깜빡임 감소
-  - 우측 `보유 종목 수익률` 차트와 트리맵 하이라이트가 같은 슬라이더 기준으로 안정적으로 유지
-- 검증:
-  - `python -m compileall app.py src scripts tests`
-  - `python -m unittest discover -s tests -p "test_*.py"`
-  - 결과: 테스트 39건 통과
-- 현재 프로젝트 상태:
-  - `진행 중`
-  - 코드 수정과 테스트는 완료했지만, 실제 브라우저에서 슬라이더 조작 UX 최종 확인은 남아 있음
-- 다음 작업 후보:
-  - 실제 브라우저에서 `하이라이트 종목` 슬라이더 조작 시 트리맵/우측 차트 동기화 확인
-  - 필요 시 슬라이더 위치, 라벨 길이, 선택 없음 상태 표현을 UI 기준에 맞게 미세 조정
+## 2026-05-09 로컬 Streamlit 브라우저 검증
+- 변경 파일: `Memory.md`
+- 설치:
+  - `.venv`에 `playwright` 설치
+  - `PLAYWRIGHT_BROWSERS_PATH=/workspaces/retirement-portfolio-streamlit/.playwright-browsers` 기준 `chromium` 설치
+- 검증 내용:
+  - `.venv/bin/python -m streamlit run app.py --server.port 8511 --server.headless true`로 로컬 서버 기동
+  - `http://127.0.0.1:8511/_stcore/health` 응답 `ok` 확인
+  - Playwright headless로 `http://127.0.0.1:8511/` 접속 후 8초 대기
+  - 본문 텍스트에 `RETIREMENT PORTFOLIO`, `로그인`, `데모 작업공간` 포함 여부 확인
+  - 콘솔 오류 0건, 페이지 오류 0건 확인
+- 산출물:
+  - `artifacts/local-streamlit-8511-ready.png`
+  - `artifacts/local-streamlit-8511-ready.txt`
+- 비고:
+  - 초기 1차 캡처는 Streamlit 스켈레톤만 잡혀 `Deploy`만 보였고, 추가 대기 후 정상 렌더링을 확인함
+  - 검증 종료 후 8511 포트 서버 세션 정리 완료
 
-## 2026-05-08 자산 배분 treemap-visual 패턴 적용
-- [x] `streamlit-echarts` / Apache ECharts treemap 예제 패턴 확인
-- [x] 자산 배분 트리맵을 `visualMap` 기반 구조로 교체
-- [x] 우측 수익률 차트 유지 확인
-- [x] 검증 및 기록 업데이트
-- 변경 파일:
-  - `app.py`
-  - `Memory.md`
-- 참고한 예제:
-  - `streamlit-echarts-demo`의 `demo_echarts/treemap.py`
-  - Apache ECharts `treemap-visual` 예제 패턴
+## 2026-05-09 보유 현금 카드 수정/취소 반응 개선
+- 변경 파일: `app.py`, `Memory.md`
 - 변경 내용:
-  - 기존 커스텀 범례/슬라이더 방식 대신 treemap 내부 `visualDimension` + 하단 `visualMap` 조합으로 교체
-  - leaf 노드 value를 `[평가금액, 수익률, 시각화용 스케일 값]` 구조로 바꿔, 타일 크기와 색상 매핑을 분리
-  - 수익률 극단값 때문에 색상이 뭉개지지 않도록 `treemap-visual` 예제처럼 시각화용 스케일 값을 별도로 계산
-  - tooltip을 흰색 카드 스타일로 바꾸고 `경로 / 평가금액 / 수익률` 정보를 표시하도록 정리
-  - 우측 `보유 종목 수익률` 차트는 선택 상태 의존성을 제거하고 항상 정적으로 렌더되도록 복구
+  - `보유 현금` 카드의 실제 클릭 요소를 카드 전체 오버레이가 아닌 우측 상단의 실제 `수정` 버튼으로 분리
+  - 카드 hover는 전체 카드에 유지하고, `수정` 열기와 `취소`는 `@st.fragment` 부분 리런으로 처리
+  - `저장`은 현금 조정 기록과 롤업 갱신이 필요하므로 전체 리런을 유지
 - 검증:
-  - `python -m compileall app.py src scripts tests`
+  - `python -m compileall app.py`
   - `python -m unittest discover -s tests -p "test_*.py"`
-  - `python -m streamlit run app.py --server.port 8522 --server.headless true`
-  - `curl -I http://127.0.0.1:8522`
+  - 로컬 SQLite 데모 모드 서버 `8512` 포트에서 Playwright headless 재검증
   - 결과:
-    - `compileall` 완료
-    - 단위 테스트 39건 통과
-    - 로컬 Streamlit 서버 기동 및 HTTP `200 OK` 확인
-- 현재 프로젝트 상태:
-  - `진행 중`
-  - 코드와 서버 기동은 확인했지만, 실제 브라우저에서 treemap 하단 `visualMap` 조작감은 추가 확인이 필요
-- 다음 작업 후보:
-  - 실제 브라우저에서 하단 `visualMap` 핸들 드래그 시 타일 강조 범위가 의도대로 보이는지 확인
-  - 필요 시 `visualMap` 텍스트(`높은 수익률/낮은 수익률`) 위치와 타일 border 스타일을 더 예제에 가깝게 미세 조정
+    - 카드 hover 배경 변경 확인: `rgba(0, 0, 0, 0)` -> `rgba(15, 118, 110, 0.05)`
+    - `수정` 열기: `0.423s`
+    - `취소`: `0.475s`
+    - `저장`: `3.461s`
+    - 추가 검증에서 `수정` 버튼 DOM이 실제 `button` 요소로 렌더링되고, 클릭 후 숫자 입력과 `저장`/`취소` 버튼 표시 확인
+    - 콘솔 오류 0건, 페이지 오류 0건
+- 산출물:
+  - `artifacts/dashboard-cash-card-hover-and-latency-fixed.png`
+  - `artifacts/dashboard-cash-card-hover-and-latency-fixed.json`
+  - `artifacts/dashboard-cash-card-before-click.png`
+  - `artifacts/dashboard-cash-card-after-click.png`
 
-## 2026-05-08 현금 이자 자동 누적 제거 및 현금 수정 반영 전환
-- [x] 현금 예상 이자/누적 이자 자동 반영 제거
-- [x] 당일 자산 스냅샷만 유지하도록 메인 동작 조정
-- [x] 데이터 페이지를 현금 수정 기준으로 정리
-- [x] 검증 및 기록 업데이트
-- 변경 파일:
-  - `app.py`
-  - `Memory.md`
-- 요청 배경:
-  - 현금에 붙는 누적 이자 계산 대신 사용자가 `현금 수정`으로 직접 현금 잔액을 맞추는 흐름으로 전환 요청
-- 수정 내용:
-  - 대시보드와 데이터 페이지에서 `projected_today_interest`, `daily_interest` 기반 가산 표시 제거
-  - 앱 시작 시 `sync_account_rollup()` 자동 이자 롤업 대신 현재 계좌 기준 당일 자산 스냅샷만 저장하도록 변경
-  - `보유 현금`, `현재 평가액`, `원금 대비 평가손익`이 자동 이자 예측치 없이 실제 현금 잔액과 수동 조정 기준으로 표시되도록 정리
-  - 데이터 페이지 운영 상태에 `현금 수정 순반영` 지표를 추가하고, 원금 누적 표의 이자 관련 열과 안내 문구를 제거
-  - 데모 진입/데모 모드 안내 문구에서 자동 이자 예시 설명 제거
-- 검증:
-  - `python -m compileall app.py src scripts tests`
-  - `python -m unittest discover -s tests -p "test_*.py"`
-  - `python -m streamlit run app.py --server.port 8523 --server.headless true`
-  - `curl -I http://127.0.0.1:8523`
-  - 결과:
-    - `compileall` 완료
-    - 단위 테스트 39건 통과
-    - 로컬 Streamlit 서버 HTTP `200 OK` 확인
-- 미완료/제약:
-  - 실제 브라우저에서 로그인 후 멈춤 현상이 완전히 해소됐는지는 별도 시각 검증 전
-  - 기존 `daily_interest` 원본 데이터와 CSV 내보내기 테이블은 삭제하지 않고 유지
-- 현재 프로젝트 상태:
-  - `진행 중`
-  - 자동 이자 누적은 제거했지만, 브라우저 상 최종 체감 확인은 남아 있음
-- 다음 작업 후보:
-  - 로그인 후 대시보드 진입, `현금 수정` 저장 직후 반영, 데이터 페이지 지표 변화를 실제 브라우저에서 확인
-  - 필요 시 `daily_interest` CSV 내보내기 노출 유지 여부를 UX 기준으로 정리
-
-## 2026-05-08 자산 배분 visualMap 좌표 보정
-- [x] 스크린샷 기준 visualMap 겹침 원인 확인
-- [x] visualMap 길이/두께 좌표값 보정
-- [x] 트리맵 하단 여백 재조정
-- [x] 검증 및 기록 업데이트
-- 변경 파일:
-  - `app.py`
-  - `Memory.md`
-- 증상:
-  - 모바일 폭에서 `자산 배분` 하단 수익률 막대가 트리맵 위로 겹쳐 올라오고, 손잡이처럼 보이는 컨트롤이 세로로 비정상 확대되는 현상 확인
-- 확인한 원인:
-  - `visualMap`의 `itemWidth`/`itemHeight` 설정이 현재 렌더러 동작 기준과 맞지 않아 슬라이더 길이가 과도하게 줄고 손잡이 크기만 커진 상태로 해석됨
-  - `series.bottom` 여백이 부족해 하단 컨트롤이 트리맵 영역을 침범함
-- 수정 내용:
-  - `visualMap`의 `itemWidth`를 두께 기준인 `14`, `itemHeight`를 길이 기준인 `220`으로 조정
-  - `handleSize`를 `20`으로 제한하고 `bottom`을 `8`로 내려 하단 정렬 보정
-  - 트리맵 `series.bottom`을 `68`로 늘려 하단 막대와 본문 타일이 겹치지 않도록 변경
-- 검증:
-  - `python -m compileall app.py src scripts tests`
-  - `python -m unittest discover -s tests -p "test_*.py"`
-  - `python -m streamlit run app.py --server.port 8524 --server.headless true`
-  - `curl -I http://127.0.0.1:8524`
-  - 결과:
-    - `compileall` 완료
-    - 단위 테스트 39건 통과
-    - 로컬 Streamlit 서버 HTTP `200 OK` 확인
-- 현재 프로젝트 상태:
-  - `진행 중`
-  - 코드상 좌표 보정은 반영했지만, 실제 모바일 브라우저에서 겹침이 완전히 사라졌는지는 재확인 필요
-- 다음 작업 후보:
-  - 실제 모바일 폭에서 `visualMap` 위치와 손잡이 크기를 다시 확인
-  - 필요 시 `itemHeight`, `series.bottom`, `textGap`을 모바일 기준으로 한 번 더 미세 조정
-
-## 2026-05-08 로그인 계정 대시보드 멈춤 조사 및 안정 모드 전환
-- [x] 로그인 계정과 데모 계정 경로 차이 조사
-- [x] 대시보드 전용 느린 경로 및 차트 경로 재점검
-- [x] Playwright 로컬 설치 준비
-- [x] 로그인 계정 대시보드 기본 차트 안정 모드 적용
-- [x] 검증 및 기록 업데이트
-- 변경 파일:
-  - `app.py`
-  - `Memory.md`
-- 재현 제보:
-  - 데모 접속은 즉시 열리지만, 일반 로그인 계정으로 들어가면 `대시보드`만 멈추고 `거래`, `데이터` 등 다른 페이지는 정상이라는 제보
-- 조사 과정과 확인 내용:
-  - 런타임 로그에는 즉시 드러나는 Python 예외가 없었음
-  - 대시보드는 `추이` 구간에서 스냅샷이 비면 외부 시세 이력을 즉시 조회하는 경로가 있었고, 해당 호출은 `yfinance.Ticker(...).history()`에 별도 타임아웃 제어가 없음
-  - 로컬 SQLite에 남아 있는 동일 계열 계좌(`IRP (신한)`, account id `6`)는 보유 종목 `3`, 거래 `73`, 스냅샷 `1`건으로 확인돼 데이터 자체가 완전히 비어 있는 상태는 아님
-  - `streamlit_echarts` 기반 자산 배분/보유 종목 수익률 차트는 대시보드에만 존재하므로, 로그인 계정에서만 발생하는 렌더 정지 후보로 계속 남음
-  - 배포/로컬 로그인 자동 재현용 `scripts/verify_streamlit_deployment.py`는 확인했지만, 현재 작업 환경에는 `STREAMLIT_VERIFY_EMAIL`, `STREAMLIT_VERIFY_PASSWORD`가 없어 실제 로그인 계정 재현은 완료하지 못함
-  - 대신 로컬 브라우저 검증 준비를 위해 Playwright 패키지 경로와 Chromium 브라우저를 프로젝트 로컬에 설치 완료
-- 수정 내용:
-  - `Dashboard` 상단에 `고급 차트 사용` 토글을 추가
-  - 로그인 계정은 기본값을 안정 모드(`False`)로 두고, 데모 세션만 기존처럼 고급 차트(ECharts) 기본 활성화
-  - 안정 모드에서는 `자산 배분`과 `보유 종목 수익률`을 Altair fallback 차트로 렌더링
-  - 고급 차트가 필요하면 사용자가 직접 토글을 켜도록 변경
-  - 이전에 넣은 `스냅샷 없음 시 외부 시세 자동 조회 차단` 로직은 유지
-- 기대 효과:
-  - 로그인 계정에서 대시보드 진입 시 ECharts 렌더/상호작용 때문에 멈추는 경우를 우회
-  - 문제 구간을 `고급 차트 사용` 토글 하나로 분리해, 기본 진입 안정성을 우선 확보
-- 검증:
-  - `python -m compileall app.py src scripts tests`
-  - `python -m unittest discover -s tests -p "test_*.py"`
-  - `python -m streamlit run app.py --server.port 8526 --server.headless true`
-  - `curl -I http://127.0.0.1:8526`
-  - 결과:
-    - `compileall` 완료
-    - 단위 테스트 39건 통과
-    - 로컬 Streamlit 서버 HTTP `200 OK` 확인
-- 설치/도구 메모:
-  - `playwright` 패키지는 로컬 경로 `.playtools2`에서 사용 가능 확인
-  - 브라우저 바이너리는 프로젝트 로컬 `.playwright-browsers/` 아래에 설치
-- 미완료/제약:
-  - 실제 로그인 자격 증명이 없어 `scripts/verify_streamlit_deployment.py --page dashboard` 자동 재현은 미완료
-  - 사용자가 보고한 `지금도 마찬가지` 증상에 대해, 이번 안정 모드 기본값 전환 이후 실제 체감 결과를 다시 확인해야 함
-- 현재 프로젝트 상태:
-  - `진행 중`
-  - 코드상 가장 가능성 높은 대시보드 전용 위험 경로는 완화했지만, 실제 로그인 계정 브라우저 확인은 아직 필요
-- 다음 작업 후보:
-  - 사용자가 로그인 계정으로 다시 열어 안정 모드 기본 대시보드가 즉시 뜨는지 확인
-  - 여전히 멈추면 `고급 차트 사용` 토글이 꺼진 상태에서도 재현되는지 먼저 분리
-  - 필요 시 대시보드의 Altair 추이 차트나 `st.dataframe`까지 단계적으로 지연 렌더링하도록 추가 분리
-
-## 2026-05-08 현재 상태 점검 및 인계 요약
-- [x] 프로젝트 구조 재확인
-- [x] `Memory.md` 최신 작업 이력 검토
-- [x] 현재 워크트리 변경 파일 확인
-- [x] 실행/검증 기준 문서 확인
-- 변경 파일:
-  - `Memory.md`
-- 확인 범위:
-  - `ls -la`
-  - `tree -a -L 3 -I '.git|.venv|__pycache__|node_modules|dist|build'`
-  - `git status --short`
-  - `README.md`
-  - `.streamlit/config.toml`
-  - `requirements.txt`
-  - `Memory.md`
-- 현재 워크트리 상태:
-  - 수정됨: `.devcontainer/devcontainer.json`, `.streamlit/secrets.example.toml`, `Memory.md`, `README.md`, `app.py`, `data/portfolio.db`, `docs/progress-memory.md`, `requirements.txt`, `setup_supabase.sql`, `src/db.py`
-  - 신규 미추적: `.playtools/`, `.playtools2/`, `.playwright-browsers/`, `.vscode/`, `AGENTS.md`, `artifacts/`, `post-migration-dashboard.txt`, `streamlit_echarts/`, `tmp_source.png`
-- 현재 판단:
-  - 최근 구현의 중심은 `app.py` 대시보드 안정 모드 전환, 자산 배분 treemap/visualMap 조정, 현금 수정 기준 표시 정리
-  - `.streamlit/config.toml`은 `theme.base = "light"`, `server.headless = true` 상태이며 이번 점검에서는 변경하지 않음
-  - 최상단 미완료 체크 항목은 `현금 카드 직접 수정 UI 브라우저 재검증`, ``docs/progress-memory.md` 최신 상태 동기화`` 2건
-- 실행 방법:
-  - `python -m pip install -r requirements.txt`
-  - `streamlit run app.py`
-- 검증 메모:
-  - 이번 턴에서는 새 테스트/실행을 추가로 수행하지 않음
-  - 직전 기록 기준 최신 검증은 `python -m compileall app.py src scripts tests`, `python -m unittest discover -s tests -p "test_*.py"`, `python -m streamlit run app.py --server.port 8526 --server.headless true`, `curl -I http://127.0.0.1:8526`
-  - 직전 기록 결과는 단위 테스트 39건 통과, 로컬 Streamlit HTTP `200 OK`
-- 다음 작업 후보:
-  - 로그인 계정 기준으로 안정 모드 기본 대시보드가 즉시 열리는지 브라우저 재검증
-  - `현금 수정` 저장 직후 대시보드/데이터 페이지 반영 흐름 재검증
-  - `docs/progress-memory.md`를 `Memory.md` 최신 상태와 동기화할지 범위 확인 후 반영
-
-## 2026-05-08 배포 웹 반영 상태 재확인
-- [x] 배포 URL 응답 확인
-- [x] 원격 브랜치와 로컬 워크트리 차이 확인
-- [x] 기존 배포 검증 산출물과 현재 코드 문자열 대조
-- [x] 배포 실시간 브라우저/웹소켓 점검 시도
-- 변경 파일:
-  - `Memory.md`
+## 2026-05-09 README 점검 및 정리
+- 변경 파일: `README.md`, `Memory.md`
 - 확인 내용:
-  - 배포 URL `https://retirement-portfolio-app-nh2vq9ferqnpehsslbykbe.streamlit.app/` 는 HTTP `200`으로 응답함
-  - Git 기준 `HEAD`와 `origin/main`은 둘 다 `5d786cf`(`Harden dashboard import compatibility`)로 같음
-  - 하지만 현재 워크트리에는 `app.py`, `src/db.py`, `README.md`, `requirements.txt`, `Memory.md`, `docs/progress-memory.md`, `setup_supabase.sql` 미커밋 변경이 남아 있음
-  - 현재 `app.py`에는 `고급 차트 사용`, `현금 수정 순반영`, `데모 접속`, `visualMap` 관련 문자열이 존재함
-  - 기존 배포 캡처 산출물(`artifacts/web-dashboard-current.txt`, `artifacts/post-migration-dashboard.txt`)에는 `WORKSPACE CONTEXT`, `현금 조정` 등 이전 화면 텍스트가 남아 있어 로컬 최신 작업과 차이가 있음
-- 판단:
-  - 지금 로컬에서 아직 커밋/푸시되지 않은 변경은 웹에 반영될 수 없음
-  - 사용자가 보고 있는 웹이 최신 로컬 작업과 다르게 보인다는 제보는 현재 워크트리 상태와 일치함
-- 검증/제약:
-  - Playwright 브라우저 실행은 시스템 라이브러리 `libatk-1.0.so.0` 부재로 실패
-  - Streamlit Cloud WebSocket 직접 점검은 `/_stcore/stream` 요청이 `https://share.streamlit.io/-/auth/app` 로 HTTP `303` 리다이렉트되며 인증을 요구해 중단
-  - 현재 환경의 `.streamlit/secrets.toml`에는 `STREAMLIT_VERIFY_EMAIL`, `STREAMLIT_VERIFY_PASSWORD`, `DEMO_LOGIN_EMAIL`, `DEMO_LOGIN_PASSWORD` 가 없음
-- 결론:
-  - 서비스 자체는 살아 있으나, 현재 작업공간의 최신 미커밋 변경은 웹에 반영되지 않은 상태로 보는 것이 맞음
-  - 실시간 배포 화면 최종 확인은 검증용 로그인 자격 증명 또는 배포 플랫폼 세션이 있어야 재개 가능
-- 다음 작업 후보:
-  - 사용자 요청 시 현재 `app.py` 중심 변경을 정리해 선택 커밋/푸시 범위 확정
-  - 푸시 후 Streamlit 재배포 완료 시점에 검증 계정으로 `scripts/verify_streamlit_deployment.py` 재실행
+  - 실제처럼 보이는 Supabase URL/키 예시와 배포 검증 계정 예시가 섞여 있던 구간을 placeholder 값으로 정리
+  - 롤업 예시 블록에 섞여 있던 무관한 프롬프트 텍스트 제거
+  - 로컬 실행 예시의 사용자 개인 절대 경로를 `cd <프로젝트_루트>`로 일반화
+- 비고:
+  - 현재 README 기준으로 위 이상 텍스트와 민감해 보이는 예시는 제거된 상태
+  - 배포 명령과 검증 명령은 유지
 
-## 2026-05-08 예수금 표시/수익률 차트/데모 시드 확장
-- [x] 예수금 표시를 정수 원 기준으로 정리
-- [x] 보유 종목 수익률 차트 정렬 기준을 수익률 우선으로 변경
-- [x] 데모 시드를 5년 투자 이력 형태로 확장
-- [x] 회귀 테스트 추가 및 실행
-- 변경 파일:
-  - `app.py`
-  - `src/analytics.py`
-  - `src/db.py`
-  - `tests/test_analytics.py`
-  - `tests/test_db.py`
-  - `Memory.md`
+## 2026-05-09 상단 요약 카드 hover 색상 제거 및 높이 재정렬
+- 변경 파일: `app.py`, `Memory.md`
 - 변경 내용:
-  - 대시보드 `목표 현금 잔액`, 시작 현금, 현금 흐름 금액, 이체 금액 입력을 정수 원 단위 입력 흐름으로 정리
-  - treemap/막대차트 tooltip의 금액 표시는 `Math.round(...)` 기준으로 맞춰 `예수금`에 소수점이 노출되지 않도록 조정
-  - `holdings_overview_frame()`와 대시보드 수익률 차트 입력 프레임을 `profit_rate DESC, current_value DESC` 기준으로 재정렬해 수익률이 높은 종목이 왼쪽에 오도록 변경
-  - 데모 워크스페이스 블루프린트를 오늘 기준 약 5년 전부터 이어지는 장기 투자 이력으로 확장
-  - 데모 계좌에 부분 매도, 전량 매도, 국내주식, 해외주식, 지수 ETF, 배당 ETF, 채권 ETF, 금 ETF, 계좌 간 이체, 과거 이자 기록을 함께 포함
+  - `보유 현금` 카드의 hover 시 카드 본문에 뜨던 초록 배경 강조를 제거
+  - `수정` 버튼 hover 색상도 초록 계열 대신 중립 톤으로 조정
+  - `입금 원금`, `현재 평가액`, `원금 대비 평가손익`, `원금 대비 수익률` 4개 카드 높이를 `보유 현금` 카드와 같은 높이로 확장
+- 검증:
+  - `.venv/bin/python -m compileall app.py`
+  - 로컬 SQLite 데모 모드 서버 `8512` 포트에서 Playwright headless 재검증
+  - 결과:
+    - `수정` 버튼 hover 전후 `보유 현금` 카드 본문 배경 모두 `rgba(0, 0, 0, 0)` 유지
+    - `수정` 버튼 hover 배경은 `rgba(248, 250, 252, 0.98)`의 중립 톤으로 변경
+    - 상단 5개 요약 카드 높이 모두 `123.188px`로 동일
+    - 콘솔 오류 0건, 페이지 오류 0건
+- 산출물:
+  - `artifacts/dashboard-summary-cards-neutral-hover.png`
+
+## 2026-05-09 접속 화면 상단 제거 및 실시간 버튼 재배치
+- 변경 파일: `app.py`, `Memory.md`
+- 변경 내용:
+  - 접속 화면 상단의 기존 히어로/설명 영역을 제거하고 제목을 `자산관리 대장`만 남기도록 단순화
+  - `로그인`, `계정 만들기`, `데모 체험` 탭 구조는 유지하고 상단 장식 영역만 삭제
+  - 대시보드의 `시장 업데이트` 패널을 제거
+  - `현재가 새로고침` 버튼을 `실시간`으로 변경하고 `현재 평가액` 카드 우상단으로 이동
+  - 상단 5개 요약 카드 높이를 다시 맞춰 `보유 현금`과 같은 행 카드가 모두 동일 높이로 유지되게 조정
+- 검증:
+  - `.venv/bin/python -m compileall app.py src scripts tests`
+  - `.venv/bin/python -m unittest discover -s tests -p 'test_*.py'`
+  - 로컬 SQLite 데모 모드 서버 `8512` 포트에서 Playwright headless 재검증
+  - 결과:
+    - 접속 화면 제목 `자산관리 대장` 확인
+    - 접속 화면에서 `Retirement Portfolio` 텍스트 미노출 확인
+    - `로그인`/`계정 만들기`/`데모 체험` 탭 유지 확인
+    - 대시보드에서 `시장 업데이트` 텍스트 미노출 확인
+    - `실시간` 버튼이 `현재 평가액` 카드 우상단에 표시 확인
+    - 상단 5개 요약 카드 높이 모두 `123.188px`로 동일
+    - 콘솔 오류 0건, 페이지 오류 0건
+- 산출물:
+  - `artifacts/auth-page-simple-title.png`
+  - `artifacts/dashboard-live-button-top-card.png`
+
+## 2026-05-09 상단 요약 카드 값 위치 정렬
+- 변경 파일: `app.py`, `Memory.md`
+- 변경 내용:
+  - `입금 원금`, `원금 대비 평가손익`, `원금 대비 수익률` 카드의 값 영역을 상단 정렬로 조정
+  - 카드 전체 높이는 유지하면서 값 시작 위치를 `보유 현금` 카드와 맞춤
+- 검증:
+  - `.venv/bin/python -m compileall app.py`
+  - 사용자 실화면 확인 완료
+- 비고:
+  - 로컬 브라우저 자동 검증은 실행 중 사용자가 실화면 확인 완료를 알려 중단
+  - 상단 카드 높이 동일화 조정은 유지
+
+## 2026-05-09 데모 5년 거래 시드 확장 및 이자 적립 제거
+- 변경 파일: `src/db.py`, `src/sqlite_db.py`, `src/analytics.py`, `src/auth.py`, `app.py`, `scripts/run_daily_rollup.py`, `.github/workflows/daily-rollup.yml`, `scripts/verify_streamlit_deployment.py`, `tests/test_db.py`, `tests/test_analytics.py`, `tests/test_verify_streamlit_deployment.py`, `README.md`, `Memory.md`
+- 변경 내용:
+  - 데모 워크스페이스 블루프린트를 약 5년치 투자 일지 형태로 확장하고 반도체, 원자력, 방산, 2차전지, 배당, 채권, 미국 기술주 등 다양한 테마와 수익/손실 사례를 섞어 재구성
+  - 로컬 데모 세션 표시 주소를 `demo@local`에서 `test`로 변경
+  - 자동 일별 이자 적립 로직을 비활성화하고, 공개 이자 조회/기록 함수는 더 이상 데이터를 만들지 않도록 차단
+  - 일별 롤업 배치는 스냅샷 저장 전용으로 단순화하고, 데이터 내보내기/배포 검증 파서/문서를 현재 동작에 맞게 정리
 - 검증:
   - `python -m compileall app.py src scripts tests`
   - `python -m unittest discover -s tests -p "test_*.py"`
-  - `python -m streamlit run app.py --server.port 8528 --server.headless true`
-  - `curl -I http://127.0.0.1:8528`
-- 결과:
-  - 문법 컴파일 성공
-  - 단위 테스트 41건 통과
-  - 로컬 Streamlit 서버 HTTP `200 OK` 확인
-- 설치 메모:
-  - 이번 턴은 추가 프로그램 설치 없이 기존 환경으로 처리
-- 미완료/다음 확인:
-  - 실제 브라우저에서 데모 계좌 진입 후 확장된 5년 거래 히스토리가 사용성 측면에서 과하지 않은지 시각 확인 필요
-  - 필요 시 데모 계좌의 거래 건수와 최근 1년 활동 밀도를 한 번 더 조절할 수 있음
+  - 결과: 컴파일 성공, 단위 테스트 `39`건 통과
+- 남은 작업:
+  - 필요 시 실제 Streamlit 데모 진입 후 새 5년 시드가 화면에서 의도대로 보이는지 브라우저 실검증 추가 가능
 
-## 2026-05-09 계좌 이체 박스 정렬 및 ECharts 기본값 조정
-- [x] `계좌 간 이체` 박스 크기/리듬 보정
-- [x] `보유 현금` 카드 입력 높이와 이체 입력 높이 공통화
-- [x] ECharts 기본값을 상시 사용 쪽으로 조정
-- [x] 검증 및 기록 업데이트
-- 변경 파일:
-  - `app.py`
-  - `Memory.md`
-- 변경 내용:
-  - `계좌 간 이체` 섹션을 별도 `border=True` 컨테이너로 감싸 `보유 현금` 카드와 비슷한 박스 리듬으로 정리
-  - `보유 현금` 카드와 `계좌 간 이체` 섹션의 `number_input`, 버튼, 셀렉트 박스 높이를 공통 CSS로 보정
-  - 대시보드 `고급 차트 사용`은 첫 진입 시 기본값을 `True`로 바꿔 ECharts가 기본적으로 켜진 상태에서 시작하도록 변경
-  - ECharts가 없는 환경에서는 기존 fallback 차트 경로를 그대로 유지
+## 2026-05-10 Memory.md 기준 변경분 리뷰
+- 검토 범위:
+  - `Memory.md`에 기록된 최근 변경 중 `데모 5년 거래 시드 확장 및 이자 적립 제거` 관련 코드/테스트/문서
+  - 확인 파일: `src/db.py`, `src/sqlite_db.py`, `src/analytics.py`, `src/auth.py`, `app.py`, `scripts/run_daily_rollup.py`, `scripts/verify_streamlit_deployment.py`, `tests/test_db.py`, `tests/test_analytics.py`, `tests/test_verify_streamlit_deployment.py`, `README.md`
+- 검토 결과:
+  - 코드 리뷰 관점에서 기능 회귀 가능성이 있는 이슈 2건 확인
+  - 1) 백데이트 입력 후 과거 스냅샷 재계산 부재
+  - 2) 레거시 `daily_interest`/`interest` 데이터가 분석값에서 0으로 고정되어 과거 이자 반영이 사라질 가능성
 - 검증:
-  - `python -m compileall app.py src scripts tests`
-  - `python -m unittest discover -s tests -p "test_*.py"`
-- 결과:
-  - 문법 컴파일 성공
-  - 단위 테스트 41건 통과
-- 미완료/다음 확인:
-  - 사용자가 말한 `echart가 항시 ...` 요청은 문장이 중간에 끊겨 있어, 이번 턴에서는 `기본값 상시 켜짐`으로 해석해 반영
-  - 사용자가 원한 의미가 `항시 켜짐`이 아니라 다른 동작이었다면 그 기준에 맞춰 후속 미세조정 필요
+  - `python -m unittest discover -s tests -p "test_*.py"` 성공
+  - 결과: 39건 통과
+- 비고:
+  - 이번 작업에서는 리뷰만 수행했고 코드 수정은 하지 않음
 
-## 2026-05-09 대시보드 차트 ECharts 전용 고정
-- [x] 대시보드 차트 토글 제거
-- [x] Altair fallback 차트 노출 제거
-- [x] 문법/단위 테스트 재검증
-- 변경 파일:
-  - `app.py`
-  - `Memory.md`
+## 2026-05-10 데모 계정/리셋 및 스냅샷 보정 반영
+- 변경 파일: `src/auth.py`, `src/db.py`, `src/sqlite_db.py`, `src/analytics.py`, `app.py`, `scripts/verify_streamlit_deployment.py`, `tests/test_auth.py`, `tests/test_db.py`, `tests/test_analytics.py`, `tests/test_verify_streamlit_deployment.py`, `Memory.md`
 - 변경 내용:
-  - 대시보드 `고급 차트 사용` 토글과 상태 키를 제거
-  - `자산 배분`, `보유 종목 수익률` 패널은 ECharts만 렌더링하도록 정리
-  - `streamlit-echarts`를 불러오지 못하는 환경에서는 기본 차트로 대체하지 않고 안내 문구만 표시하도록 변경
+  - 초기 화면 데모 진입이 `STREAMLIT_VERIFY_EMAIL` 같은 운영 검증 계정으로 자동 로그인하지 않도록 분리하고, 전용 `DEMO_LOGIN_*`이 없으면 로컬 데모 세션 `test`로 고정
+  - `seed_demo_workspace()`가 기존 `데모 IRP`/`데모 일반계좌`를 재사용하지 않고 항상 삭제 후 다시 만들어 내부 계좌를 전부 리셋하도록 변경
+  - `list_daily_interest()`를 읽기 전용으로 복구해 기존 `daily_interest` 데이터를 다시 조회하도록 조정하고, 신규 이자 적립은 계속 차단 유지
+  - `account_summary()`, `snapshot_trend_frame()`, `cumulative_contribution_frame()`가 레거시 이자 데이터를 다시 누적 반영하도록 수정
+  - 메인 화면 롤업이 당일 스냅샷만 쓰는 대신, 기존 과거 스냅샷도 가능한 범위에서 다시 맞춘 뒤 당일 스냅샷을 저장하도록 `sync_account_rollup()` 연결
+  - 배포 검증 스크립트가 `SUPABASE_URL 설정: 예 (secret)` 형식에서도 `secret` 출처를 안정적으로 파싱하도록 보정
 - 검증:
-  - `python -m compileall app.py src scripts tests`
-  - `python -m unittest discover -s tests -p "test_*.py"`
-- 결과:
-  - 문법 컴파일 성공
-  - 단위 테스트 41건 통과
-- 미완료/다음 확인:
-  - 실제 브라우저에서 대시보드 첫 진입 시 토글이 사라지고 ECharts만 보이는지 시각 확인 필요
-  - 웹 반영이 필요하면 현재 로컬 변경 범위를 정리해 커밋/푸시 진행
+  - `python -m compileall app.py src scripts tests` 성공
+  - `python -m unittest discover -s tests -p "test_*.py"` 성공
+  - 결과: 단위 테스트 `39`건 통과
+- 남은 작업:
+  - 필요 시 실제 Streamlit 화면에서 데모 진입 시 사이드바 로그인 계정이 `test`로 보이는지 브라우저 실검증 가능
+  - 필요 시 백데이트 매매/입금 입력 후 과거 추이 화면이 기대 범위로 갱신되는지 수동 점검 가능
 
-## 2026-05-09 랜딩 페이지 디자인 개편
-- [x] 인증 진입 랜딩 히어로/기능 카드 추가
-- [x] 로그인/계정 만들기/데모 체험 탭형 레이아웃으로 재구성
-- [x] 로컬 문법/테스트 재검증
-- [x] 로컬 브라우저 검증 환경 설치 시도
-- 변경 파일:
-  - `app.py`
-  - `Memory.md`
-- 변경 내용:
-  - 전역 스타일에 Pretendard 웹폰트와 인증 랜딩 전용 CSS를 추가
-  - 초기 인증 화면을 히어로, 3개 기능 카드, 탭형 진입 패널 구조로 변경
-  - 기존 로그인/회원가입/데모 접속 동작은 유지하고 배치와 문구만 랜딩 화면 흐름에 맞게 재정리
-  - 데모 진입 패널을 `auth-demo-panel` 카드형 레이아웃으로 바꾸고 5년 예시 데이터 설명을 강화
-- 검증:
-  - `python -m compileall app.py src scripts tests`
-  - `python -m unittest discover -s tests -p "test_*.py"`
-  - `python -m streamlit run app.py --server.port 8530 --server.headless true`
-  - `curl -I http://127.0.0.1:8530`
-- 결과:
-  - 문법 컴파일 성공
-  - 단위 테스트 41건 통과
-  - 로컬 Streamlit 서버 HTTP `200 OK` 확인
-- 설치 메모:
-  - 로컬 `.venv`를 정상화하고 `playwright` 패키지 및 Chromium 런타임을 설치함
-- 검증 제약:
-  - Playwright 브라우저 실행은 시스템 라이브러리 `libatk-1.0.so.0` 부재로 실패
-  - 따라서 랜딩 화면 스크린샷/실브라우저 시각 검증은 이 환경에서 완료하지 못함
-- 미완료/다음 확인:
-  - `libatk-1.0.so.0` 등 Linux GUI 런타임이 있는 환경에서 랜딩 화면 시각 검증 재실행
-  - 필요 시 웹 배포 반영 후 실제 Streamlit Cloud 랜딩 화면 기준 미세 여백 조정
-
-## 2026-05-09 웹 배포 반영 및 의존성 고정
-- [x] 배포 의존성에 `streamlit-echarts` 버전 고정 추가
-- [x] 사용자 요청 범위 파일만 선택 커밋
-- [x] `main` 브랜치 원격 푸시로 Streamlit 배포 트리거
-- 변경 파일:
-  - `requirements.txt`
-  - `Memory.md`
-- 배포 커밋:
-  - `763d709` `Refresh landing page and dashboard charts`
-- 변경 내용:
-  - 배포 서버가 로컬 미추적 `streamlit_echarts/` 폴더에 의존하지 않도록 `requirements.txt`에 `streamlit-echarts==0.6.0`을 명시
-  - `app.py`, `src/analytics.py`, `src/db.py`, 테스트 2건, `Memory.md`, `requirements.txt`만 선택 스테이징 후 푸시
-- 검증:
-  - `python -m compileall app.py src scripts tests`
-  - `python -m unittest discover -s tests -p "test_*.py"`
-  - `git push origin main`
-  - `curl -I https://retirement-portfolio-app-nh2vq9ferqnpehsslbykbe.streamlit.app/`
-- 결과:
-  - 문법 컴파일 성공
-  - 단위 테스트 41건 통과
-  - `origin/main`이 `763d7098a89643b45de8f2428c78fe0151de39b4`로 갱신됨
-  - 배포 URL은 HTTP `303`으로 `https://share.streamlit.io/-/auth/app?...` 인증 리다이렉트를 반환해 앱 보호 상태는 확인됨
-- 검증 제약:
-  - 현재 환경에는 `STREAMLIT_VERIFY_EMAIL`, `STREAMLIT_VERIFY_PASSWORD`가 없어 보호된 배포 화면 내부까지 자동 검증하지 못함
-  - Playwright 브라우저는 여전히 시스템 라이브러리 `libatk-1.0.so.0` 부재로 실행 불가
-- 다음 작업 후보:
-  - 검증 계정이 준비되면 `python scripts/verify_streamlit_deployment.py --page dashboard --expect-backend supabase` 또는 `--click-demo`로 배포 화면 재검증
-  - 웹 화면에서 랜딩 레이아웃과 ECharts 대시보드가 기대대로 보이는지 수동 확인
+## 다음 작업 후보
+- 로컬 `streamlit run app.py` 실사용 흐름에서 현금 조정 저장 후 데이터 반영 체감 속도 재확인
+- 배포 점검 스크립트 실행 여부 검토
+- `docs/progress-memory.md`와 필요 시 내용 동기화 검토

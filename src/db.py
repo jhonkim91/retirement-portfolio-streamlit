@@ -41,7 +41,7 @@ CASH_EVENT_LABELS = {
     "transfer_in": "계좌 이체 입금",
     "cash_adjustment": "현금 조정",
 }
-EXPORTABLE_TABLES = {"accounts", "holdings", "trade_logs", "daily_interest", "daily_account_snapshot"}
+EXPORTABLE_TABLES = {"accounts", "holdings", "trade_logs", "daily_account_snapshot"}
 DEFAULT_ANNUAL_INTEREST_RATE = 0.05
 DEFAULT_ROLLUP_TIMEZONE = "Asia/Seoul"
 AUTO_DAILY_INTEREST_NOTE = "일별 이자 적립"
@@ -783,18 +783,9 @@ def seed_demo_workspace() -> dict[str, Any]:
     existing_by_name = {str(account.get("name") or ""): account for account in existing_accounts}
     demo_names = [str(item["name"]) for item in blueprint["accounts"]]
     existing_demo_accounts = [existing_by_name[name] for name in demo_names if name in existing_by_name]
-
-    if existing_demo_accounts:
-        if _existing_demo_workspace_is_complete(existing_demo_accounts, blueprint):
-            return {
-                "created": False,
-                "selected_account_id": int(existing_demo_accounts[0]["id"]),
-                "account_ids": [int(account["id"]) for account in existing_demo_accounts],
-                "message": "이미 데모 계좌가 있어 기존 데이터를 그대로 사용합니다.",
-            }
-
-        for account in sorted(existing_demo_accounts, key=lambda row: int(row["id"]), reverse=True):
-            _delete_account(int(account["id"]))
+    reset_existing_workspace = bool(existing_demo_accounts)
+    for account in sorted(existing_demo_accounts, key=lambda row: int(row["id"]), reverse=True):
+        _delete_account(int(account["id"]))
 
     created_account_ids: dict[str, int] = {}
     for account_spec in blueprint["accounts"]:
@@ -838,13 +829,6 @@ def seed_demo_workspace() -> dict[str, Any]:
 
     for account_spec in blueprint["accounts"]:
         account_id = created_account_ids[str(account_spec["name"])]
-        for entry in account_spec["interest"]:
-            record_daily_interest(
-                account_id,
-                interest_date=str(entry["interest_date"]),
-                amount=float(entry["amount"]),
-            )
-
         holdings = list_holdings(account_id, include_closed=True)
         holdings_by_symbol = {str(item.get("symbol") or "").upper(): item for item in holdings}
         for symbol, current_price in account_spec["price_updates"].items():
@@ -864,11 +848,14 @@ def seed_demo_workspace() -> dict[str, Any]:
         )
 
     selected_account_id = created_account_ids[demo_names[0]]
+    message = "데모 계좌와 샘플 거래 데이터를 만들었습니다."
+    if reset_existing_workspace:
+        message = "기존 데모 계좌를 초기화하고 샘플 거래 데이터를 다시 만들었습니다."
     return {
         "created": True,
         "selected_account_id": selected_account_id,
         "account_ids": list(created_account_ids.values()),
-        "message": "데모 계좌와 샘플 거래 데이터를 만들었습니다.",
+        "message": message,
     }
 
 
@@ -955,10 +942,30 @@ def _demo_workspace_blueprint() -> dict[str, Any]:
                         "product_name": "TIGER 미국S&P500",
                         "trade_type": "buy",
                         "asset_type": "risk",
-                        "quantity": 10,
+                        "quantity": 20,
                         "price": 121_000,
                         "trade_date": demo_date(years=4, months=11),
-                        "notes": "장기 적립 시작",
+                        "notes": "미국 대표지수 장기 적립 시작",
+                    },
+                    {
+                        "symbol": "381170",
+                        "product_name": "TIGER 미국테크TOP10 INDXX",
+                        "trade_type": "buy",
+                        "asset_type": "risk",
+                        "quantity": 18,
+                        "price": 78_000,
+                        "trade_date": demo_date(years=4, months=5),
+                        "notes": "AI·빅테크 비중 확대",
+                    },
+                    {
+                        "symbol": "434730",
+                        "product_name": "HANARO 원자력 iSelect",
+                        "trade_type": "buy",
+                        "asset_type": "risk",
+                        "quantity": 16,
+                        "price": 24_000,
+                        "trade_date": demo_date(years=3, months=10),
+                        "notes": "원자력 밸류체인 테마 첫 편입",
                     },
                     {
                         "symbol": "148070",
@@ -967,82 +974,99 @@ def _demo_workspace_blueprint() -> dict[str, Any]:
                         "asset_type": "safe",
                         "quantity": 25,
                         "price": 112_000,
-                        "trade_date": demo_date(years=4, months=6),
-                        "notes": "방어 자산 편입",
-                    },
-                    {
-                        "symbol": "381170",
-                        "product_name": "TIGER 미국테크TOP10 INDXX",
-                        "trade_type": "buy",
-                        "asset_type": "risk",
-                        "quantity": 14,
-                        "price": 78_000,
-                        "trade_date": demo_date(years=3, months=11),
-                        "notes": "성장주 비중 확대",
-                    },
-                    {
-                        "symbol": "305080",
-                        "product_name": "TIGER 미국채10년선물",
-                        "trade_type": "buy",
-                        "asset_type": "safe",
-                        "quantity": 18,
-                        "price": 47_000,
-                        "trade_date": demo_date(years=3, months=3),
-                        "notes": "채권 듀레이션 보강",
-                    },
-                    {
-                        "symbol": "148070",
-                        "product_name": "KOSEF 국고채10년",
-                        "trade_type": "sell",
-                        "asset_type": "safe",
-                        "quantity": 6,
-                        "price": 115_000,
-                        "trade_date": demo_date(years=2, months=7),
-                        "notes": "채권 비중 일부 축소",
-                    },
-                    {
-                        "symbol": "360750",
-                        "product_name": "TIGER 미국S&P500",
-                        "trade_type": "buy",
-                        "asset_type": "risk",
-                        "quantity": 8,
-                        "price": 149_000,
-                        "trade_date": demo_date(years=2, months=2),
-                        "notes": "조정 구간 추가 매수",
+                        "trade_date": demo_date(years=3, months=8),
+                        "notes": "채권 방어 자산 편입",
                     },
                     {
                         "symbol": "411060",
                         "product_name": "ACE KRX금현물",
                         "trade_type": "buy",
                         "asset_type": "safe",
-                        "quantity": 20,
+                        "quantity": 14,
                         "price": 49_800,
-                        "trade_date": demo_date(years=1, months=6),
-                        "notes": "대체자산 편입",
+                        "trade_date": demo_date(years=2, months=11),
+                        "notes": "지정학 리스크 대응용 금 비중 추가",
                     },
                     {
                         "symbol": "381170",
                         "product_name": "TIGER 미국테크TOP10 INDXX",
                         "trade_type": "sell",
                         "asset_type": "risk",
-                        "quantity": 4,
-                        "price": 93_000,
-                        "trade_date": demo_date(months=11),
-                        "notes": "리밸런싱 차익 실현",
+                        "quantity": 6,
+                        "price": 95_000,
+                        "trade_date": demo_date(years=2, months=1),
+                        "notes": "기술주 급등 구간 일부 차익 실현",
+                    },
+                    {
+                        "symbol": "434730",
+                        "product_name": "HANARO 원자력 iSelect",
+                        "trade_type": "buy",
+                        "asset_type": "risk",
+                        "quantity": 10,
+                        "price": 28_000,
+                        "trade_date": demo_date(years=1, months=9),
+                        "notes": "원자력 수주 뉴스 이후 추가 매수",
+                    },
+                    {
+                        "symbol": "360750",
+                        "product_name": "TIGER 미국S&P500",
+                        "trade_type": "buy",
+                        "asset_type": "risk",
+                        "quantity": 7,
+                        "price": 149_000,
+                        "trade_date": demo_date(years=1, months=4),
+                        "notes": "조정 구간 추가 적립",
+                    },
+                    {
+                        "symbol": "148070",
+                        "product_name": "KOSEF 국고채10년",
+                        "trade_type": "sell",
+                        "asset_type": "safe",
+                        "quantity": 8,
+                        "price": 109_000,
+                        "trade_date": demo_date(years=1, months=1),
+                        "notes": "채권 비중 일부 축소로 소폭 손실 확정",
+                    },
+                    {
+                        "symbol": "475080",
+                        "product_name": "TIGER AI반도체핵심공정",
+                        "trade_type": "buy",
+                        "asset_type": "risk",
+                        "quantity": 22,
+                        "price": 15_000,
+                        "trade_date": demo_date(months=10),
+                        "notes": "AI 반도체 테마 테스트 편입",
+                    },
+                    {
+                        "symbol": "329200",
+                        "product_name": "TIGER 리츠부동산인프라",
+                        "trade_type": "buy",
+                        "asset_type": "safe",
+                        "quantity": 30,
+                        "price": 5_000,
+                        "trade_date": demo_date(months=6),
+                        "notes": "현금흐름형 자산 다변화",
+                    },
+                    {
+                        "symbol": "411060",
+                        "product_name": "ACE KRX금현물",
+                        "trade_type": "sell",
+                        "asset_type": "safe",
+                        "quantity": 5,
+                        "price": 62_000,
+                        "trade_date": demo_date(months=2),
+                        "notes": "금 가격 상승분 일부 수익 실현",
                     },
                 ),
-                "interest": (
-                    {"interest_date": demo_date(years=1, months=11), "amount": 22_000},
-                    {"interest_date": demo_date(years=1, months=5), "amount": 28_000},
-                    {"interest_date": demo_date(months=6), "amount": 31_000},
-                    {"interest_date": demo_date(months=2), "amount": 33_000},
-                ),
+                "interest": (),
                 "price_updates": {
-                    "360750": 176_000,
-                    "148070": 108_500,
-                    "381170": 102_000,
-                    "305080": 49_500,
+                    "360750": 177_500,
+                    "381170": 104_000,
+                    "434730": 31_500,
+                    "148070": 107_000,
                     "411060": 61_200,
+                    "475080": 18_600,
+                    "329200": 4_650,
                 },
                 "snapshot_date": snapshot_date,
             },
@@ -1070,27 +1094,27 @@ def _demo_workspace_blueprint() -> dict[str, Any]:
                         "quantity": 25,
                         "price": 81_000,
                         "trade_date": demo_date(years=4, months=9),
-                        "notes": "국내 대형주 적립",
+                        "notes": "반도체 대표주 장기 적립",
                     },
                     {
                         "symbol": "000660",
                         "product_name": "SK하이닉스",
                         "trade_type": "buy",
                         "asset_type": "risk",
-                        "quantity": 10,
+                        "quantity": 8,
                         "price": 124_000,
-                        "trade_date": demo_date(years=4, months=5),
-                        "notes": "반도체 업황 기대",
+                        "trade_date": demo_date(years=4, months=4),
+                        "notes": "HBM 수요 기대 반도체 추가",
                     },
                     {
-                        "symbol": "069500",
-                        "product_name": "KODEX 200",
+                        "symbol": "034020",
+                        "product_name": "두산에너빌리티",
                         "trade_type": "buy",
                         "asset_type": "risk",
                         "quantity": 40,
-                        "price": 31_000,
+                        "price": 17_000,
                         "trade_date": demo_date(years=3, months=11),
-                        "notes": "국내 지수 ETF 적립",
+                        "notes": "원자력 주기기 테마 선매수",
                     },
                     {
                         "symbol": "035720",
@@ -1099,8 +1123,8 @@ def _demo_workspace_blueprint() -> dict[str, Any]:
                         "asset_type": "risk",
                         "quantity": 18,
                         "price": 121_000,
-                        "trade_date": demo_date(years=3, months=4),
-                        "notes": "성장주 기대 매수",
+                        "trade_date": demo_date(years=3, months=5),
+                        "notes": "플랫폼 반등 기대 매수",
                     },
                     {
                         "symbol": "035720",
@@ -1109,28 +1133,28 @@ def _demo_workspace_blueprint() -> dict[str, Any]:
                         "asset_type": "risk",
                         "quantity": 18,
                         "price": 58_000,
-                        "trade_date": demo_date(years=2, months=6),
-                        "notes": "손절 및 포트폴리오 교체",
+                        "trade_date": demo_date(years=2, months=7),
+                        "notes": "플랫폼 업황 둔화로 손절",
                     },
                     {
                         "symbol": "133690",
                         "product_name": "TIGER 미국나스닥100",
                         "trade_type": "buy",
                         "asset_type": "risk",
-                        "quantity": 30,
+                        "quantity": 20,
                         "price": 58_000,
                         "trade_date": demo_date(years=2, months=10),
-                        "notes": "해외 지수 비중 확대",
+                        "notes": "미국 성장주 지수 비중 확대",
                     },
                     {
                         "symbol": "035420",
                         "product_name": "NAVER",
                         "trade_type": "buy",
                         "asset_type": "risk",
-                        "quantity": 8,
+                        "quantity": 6,
                         "price": 220_000,
                         "trade_date": demo_date(years=2, months=8),
-                        "notes": "국내 플랫폼주 편입",
+                        "notes": "국내 AI 검색 기대감 반영",
                     },
                     {
                         "symbol": "005930",
@@ -1140,17 +1164,37 @@ def _demo_workspace_blueprint() -> dict[str, Any]:
                         "quantity": 5,
                         "price": 76_000,
                         "trade_date": demo_date(years=2, months=2),
-                        "notes": "일부 차익 실현",
+                        "notes": "실적 둔화 구간 비중 조절로 소폭 손실 확정",
                     },
                     {
-                        "symbol": "035420",
-                        "product_name": "NAVER",
-                        "trade_type": "sell",
+                        "symbol": "012450",
+                        "product_name": "한화에어로스페이스",
+                        "trade_type": "buy",
                         "asset_type": "risk",
                         "quantity": 4,
-                        "price": 190_000,
+                        "price": 81_000,
                         "trade_date": demo_date(years=1, months=11),
-                        "notes": "비중 조절 매도",
+                        "notes": "방산 수출 모멘텀 대응",
+                    },
+                    {
+                        "symbol": "247540",
+                        "product_name": "에코프로비엠",
+                        "trade_type": "buy",
+                        "asset_type": "risk",
+                        "quantity": 3,
+                        "price": 435_000,
+                        "trade_date": demo_date(years=1, months=8),
+                        "notes": "2차전지 테마 추세 추종",
+                    },
+                    {
+                        "symbol": "247540",
+                        "product_name": "에코프로비엠",
+                        "trade_type": "sell",
+                        "asset_type": "risk",
+                        "quantity": 1,
+                        "price": 252_000,
+                        "trade_date": demo_date(months=11),
+                        "notes": "변동성 확대 구간 손실 축소 매도",
                     },
                     {
                         "symbol": "161510",
@@ -1159,28 +1203,28 @@ def _demo_workspace_blueprint() -> dict[str, Any]:
                         "asset_type": "risk",
                         "quantity": 40,
                         "price": 15_500,
-                        "trade_date": demo_date(years=1, months=7),
-                        "notes": "배당 ETF 편입",
-                    },
-                    {
-                        "symbol": "148070",
-                        "product_name": "KOSEF 국고채10년",
-                        "trade_type": "buy",
-                        "asset_type": "safe",
-                        "quantity": 12,
-                        "price": 108_000,
-                        "trade_date": demo_date(years=1, months=3),
-                        "notes": "현금성 대기 자금 일부 채권 편입",
+                        "trade_date": demo_date(months=9),
+                        "notes": "배당 테마 현금흐름 방어용 편입",
                     },
                     {
                         "symbol": "AAPL",
                         "product_name": "Apple",
                         "trade_type": "buy",
                         "asset_type": "risk",
-                        "quantity": 6,
+                        "quantity": 4,
                         "price": 185_000,
-                        "trade_date": demo_date(months=10),
-                        "notes": "해외 개별주 테스트용 편입",
+                        "trade_date": demo_date(months=8),
+                        "notes": "미국 빅테크 분산 편입",
+                    },
+                    {
+                        "symbol": "003670",
+                        "product_name": "포스코퓨처엠",
+                        "trade_type": "buy",
+                        "asset_type": "risk",
+                        "quantity": 3,
+                        "price": 381_000,
+                        "trade_date": demo_date(months=6),
+                        "notes": "양극재 테마 반등 기대",
                     },
                     {
                         "symbol": "000660",
@@ -1190,19 +1234,32 @@ def _demo_workspace_blueprint() -> dict[str, Any]:
                         "quantity": 3,
                         "price": 240_000,
                         "trade_date": demo_date(months=4),
-                        "notes": "반도체 급등 구간 일부 매도",
+                        "notes": "반도체 급등 구간 일부 차익 실현",
+                    },
+                    {
+                        "symbol": "148070",
+                        "product_name": "KOSEF 국고채10년",
+                        "trade_type": "buy",
+                        "asset_type": "safe",
+                        "quantity": 10,
+                        "price": 108_000,
+                        "trade_date": demo_date(months=3),
+                        "notes": "변동성 완충용 채권 버퍼 확보",
                     },
                 ),
                 "interest": (),
                 "price_updates": {
                     "005930": 78_400,
                     "000660": 216_000,
-                    "069500": 39_200,
+                    "034020": 28_500,
                     "133690": 90_800,
                     "035420": 224_000,
+                    "012450": 296_000,
+                    "247540": 212_000,
                     "161510": 16_850,
-                    "148070": 108_500,
                     "AAPL": 296_000,
+                    "003670": 276_000,
+                    "148070": 108_500,
                 },
                 "snapshot_date": snapshot_date,
             },
@@ -2413,7 +2470,7 @@ def list_trade_logs(account_id: int) -> list[dict[str, Any]]:
 
 
 def list_daily_interest(account_id: int) -> list[dict[str, Any]]:
-    """계좌의 일별 이자 기록을 조회한다."""
+    """기존 저장소에 남아 있는 일별 이자 기록을 조회한다."""
 
     if _current_backend() == BACKEND_SQLITE:
         return _sqlite_list_daily_interest(account_id)
@@ -2537,20 +2594,9 @@ def adjust_cash_balance(
 
 
 def record_daily_interest(account_id: int, *, interest_date: str, amount: float) -> None:
-    """일별 이자를 상세 테이블과 거래 원장에 함께 기록한다."""
+    """이자 기능 제거 이후 호출을 차단한다."""
 
-    _run_with_fallback(
-        supabase_call=lambda: _supabase_record_daily_interest(
-            account_id,
-            interest_date=interest_date,
-            amount=amount,
-        ),
-        sqlite_call=lambda: _sqlite_record_daily_interest(
-            account_id,
-            interest_date=interest_date,
-            amount=amount,
-        ),
-    )
+    raise RuntimeError("현금 이자 적립 기능은 제거되었습니다.")
 
 
 def _replace_interest_history(
@@ -2613,81 +2659,46 @@ def sync_account_rollup(
     today_date: str | None = None,
     timezone_name: str = DEFAULT_ROLLUP_TIMEZONE,
 ) -> dict[str, Any]:
-    """원장 기준으로 자동 일별 이자를 보정하고 오늘 스냅샷을 맞춘다."""
+    """자동 이자 적립 없이 오늘 스냅샷만 최신 값으로 맞춘다."""
 
     account = get_account(account_id)
     if not account:
         raise ValueError("계좌를 찾을 수 없습니다.")
 
     today = date.fromisoformat(today_date) if today_date else _rollup_today(timezone_name)
-    target_date = today - timedelta(days=1)
-    interest_rows_added = 0
-    interest_rows_updated = 0
-    interest_rows_removed = 0
-    historical_snapshots_updated = 0
-    interest_amount_added = 0.0
-    changed_interest_dates: set[str] = set()
-
     trade_logs = list_trade_logs(account_id)
     interest_rows = list_daily_interest(account_id)
-    if target_date >= date.min:
-        desired_entries = _build_interest_schedule(
-            account,
-            trade_logs,
-            interest_rows,
-            target_date=target_date,
-            annual_rate=float(annual_rate or 0),
-        )
-        diff = _interest_sync_diff(
-            desired_entries,
-            trade_logs,
-            interest_rows,
-            target_date=target_date,
-        )
-        if diff["requires_rebuild"]:
-            changed_interest_dates = set(diff["added_dates"]) | set(diff["updated_dates"]) | set(diff["removed_dates"]) | set(
-                diff["inconsistent_dates"]
-            )
-            _replace_interest_history(
-                account_id,
-                target_date=target_date.isoformat(),
-                desired_entries=desired_entries,
-            )
-            rebuild_counts = _replace_interest_history_counts(diff)
-            interest_rows_added = rebuild_counts["interest_rows_added"]
-            interest_rows_updated = rebuild_counts["interest_rows_updated"]
-            interest_rows_removed = rebuild_counts["interest_rows_removed"]
-            interest_amount_added = float(diff["net_amount_delta"] or 0)
-        else:
-            added_dates = set(diff["added_dates"])
-            changed_interest_dates = set(added_dates)
-            for interest_date, amount in desired_entries:
-                if interest_date not in added_dates:
-                    continue
-                record_daily_interest(account_id, interest_date=interest_date, amount=amount)
-                interest_rows_added += 1
-                interest_amount_added += amount
+    snapshot_rows = list_account_snapshots(account_id)
+    historical_snapshots_updated = 0
 
-    if changed_interest_dates:
-        account = get_account(account_id) or account
-        trade_logs = list_trade_logs(account_id)
-        interest_rows = list_daily_interest(account_id)
-        historical_start_date = date.fromisoformat(min(changed_interest_dates))
-        snapshot_rows = list_account_snapshots(account_id, start_date=historical_start_date.isoformat())
+    historical_target_date = today - timedelta(days=1)
+    historical_snapshot_dates = sorted(
+        {
+            str(row.get("snapshot_date") or "").strip()
+            for row in snapshot_rows
+            if _parse_iso_date(row.get("snapshot_date")) is not None
+            and date.fromisoformat(str(row.get("snapshot_date"))) <= historical_target_date
+        }
+    )
+    if historical_snapshot_dates:
         historical_snapshots_updated = _sync_historical_snapshots(
             account_id,
             account=account,
             trade_logs=trade_logs,
             interest_rows=interest_rows,
             snapshot_rows=snapshot_rows,
-            start_date=historical_start_date,
-            target_date=target_date,
+            start_date=date.fromisoformat(historical_snapshot_dates[0]),
+            target_date=historical_target_date,
         )
 
     cash_balance, market_value, total_cost = _demo_account_totals(account_id)
     total_value = cash_balance + market_value
     snapshot_date = today.isoformat()
-    existing_snapshots = list_account_snapshots(account_id, start_date=snapshot_date)
+    existing_snapshots = [
+        row
+        for row in snapshot_rows
+        if str(row.get("snapshot_date") or "").strip() >= snapshot_date
+    ]
     existing_snapshot = next(
         (
             row
@@ -2717,11 +2728,11 @@ def sync_account_rollup(
         )
 
     return {
-        "interest_rows_added": interest_rows_added,
-        "interest_rows_updated": interest_rows_updated,
-        "interest_rows_removed": interest_rows_removed,
+        "interest_rows_added": 0,
+        "interest_rows_updated": 0,
+        "interest_rows_removed": 0,
         "historical_snapshots_updated": historical_snapshots_updated,
-        "interest_amount_added": round(interest_amount_added, 4),
+        "interest_amount_added": 0.0,
         "snapshot_date": snapshot_date,
         "snapshot_updated": snapshot_updated,
     }

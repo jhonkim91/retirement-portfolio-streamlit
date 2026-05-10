@@ -151,7 +151,7 @@ def account_summary(
     trade_logs: list[dict[str, Any]] | None = None,
     interest_rows: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """계좌 요약을 원금/순유입/누적 이자 기준까지 포함해 계산한다."""
+    """계좌 요약을 원금/순유입 기준으로 계산한다."""
 
     frame = holdings_frame(holdings)
     total_cost = float(frame["cost_basis"].sum()) if not frame.empty else 0.0
@@ -292,20 +292,9 @@ def projected_today_interest(
     annual_rate: float = DEFAULT_ANNUAL_INTEREST_RATE,
     as_of: date | None = None,
 ) -> float:
-    """오늘 이자가 아직 적립되지 않았다면 현재 현금 기준 예상 이자를 계산한다."""
+    """이자 자동 적립 기능 제거 이후 항상 0을 반환한다."""
 
-    if annual_rate <= 0:
-        return 0.0
-
-    current_date = as_of or date.today()
-    current_iso = current_date.isoformat()
-    if any(str(row.get("date") or "").strip() == current_iso for row in interest_rows or []):
-        return 0.0
-
-    cash_balance = float(account.get("cash_balance") or 0)
-    if cash_balance <= 0:
-        return 0.0
-    return round(cash_balance * annual_rate / 365, 4)
+    return 0.0
 
 
 def realized_summary(trade_logs: list[dict[str, Any]]) -> dict[str, Any]:
@@ -468,6 +457,9 @@ def _cash_flow_event_frame(
         event_rows.append(
             {
                 "date": pd.to_datetime(interest_date),
+                "personal_deposit_delta": 0.0,
+                "employer_deposit_delta": 0.0,
+                "withdraw_delta": 0.0,
                 "principal_delta": 0.0,
                 "flow_delta": 0.0,
                 "interest_delta": float(row.get("interest_amount") or 0),

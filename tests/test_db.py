@@ -208,53 +208,21 @@ class DemoWorkspaceSeedTests(unittest.TestCase):
 
     @patch("src.db._demo_workspace_blueprint")
     @patch("src.db.list_accounts")
-    @patch("src.db.list_account_snapshots")
-    @patch("src.db.list_daily_interest", return_value=[])
-    @patch("src.db.list_holdings", return_value=[])
-    @patch("src.db.create_account")
-    def test_seed_demo_workspace_reuses_complete_existing_workspace(
-        self,
-        create_account_mock,
-        _list_holdings_mock,
-        _list_daily_interest_mock,
-        list_snapshots_mock,
-        list_accounts_mock,
-        blueprint_mock,
-    ) -> None:
-        """데모 계좌와 스냅샷이 모두 있으면 재생성하지 않는다."""
-
-        blueprint_mock.return_value = self._blueprint()
-        list_accounts_mock.return_value = [
-            {"id": 10, "name": "데모 IRP"},
-            {"id": 11, "name": "데모 일반계좌"},
-        ]
-        list_snapshots_mock.return_value = [{"snapshot_date": "2026-05-08"}]
-
-        result = seed_demo_workspace()
-
-        self.assertFalse(result["created"])
-        self.assertEqual(result["selected_account_id"], 10)
-        create_account_mock.assert_not_called()
-
-    @patch("src.db._demo_workspace_blueprint")
-    @patch("src.db.list_accounts")
     @patch("src.db._delete_account")
     @patch("src.db.create_account")
     @patch("src.db.record_cash_flow")
     @patch("src.db.record_trade")
     @patch("src.db.record_account_transfer")
-    @patch("src.db.record_daily_interest")
     @patch("src.db.set_holding_price")
     @patch("src.db.record_account_snapshot")
     @patch("src.db._demo_account_totals", return_value=(0.0, 0.0, 0.0))
     @patch("src.db.list_holdings", return_value=[])
-    def test_seed_demo_workspace_rebuilds_partial_workspace(
+    def test_seed_demo_workspace_resets_existing_demo_accounts_before_rebuild(
         self,
         _list_holdings_mock,
         _demo_totals_mock,
         record_snapshot_mock,
         _set_holding_price_mock,
-        _record_daily_interest_mock,
         _record_transfer_mock,
         _record_trade_mock,
         _record_cash_flow_mock,
@@ -263,19 +231,29 @@ class DemoWorkspaceSeedTests(unittest.TestCase):
         list_accounts_mock,
         blueprint_mock,
     ) -> None:
-        """데모 계좌가 일부만 남아 있으면 정리 후 처음부터 다시 만든다."""
+        """데모 계좌가 하나라도 있으면 기존 내부 계좌를 지우고 처음부터 다시 만든다."""
 
         blueprint_mock.return_value = self._blueprint()
-        list_accounts_mock.return_value = [{"id": 18, "name": "데모 IRP"}]
+        list_accounts_mock.return_value = [
+            {"id": 18, "name": "데모 IRP"},
+            {"id": 19, "name": "데모 일반계좌"},
+        ]
         create_account_mock.side_effect = [21, 22]
 
         result = seed_demo_workspace()
 
-        delete_account_mock.assert_called_once_with(18)
+        self.assertEqual(
+            delete_account_mock.call_args_list,
+            [
+                unittest.mock.call(19),
+                unittest.mock.call(18),
+            ],
+        )
         self.assertTrue(result["created"])
         self.assertEqual(result["selected_account_id"], 21)
         self.assertEqual(create_account_mock.call_count, 2)
         self.assertEqual(record_snapshot_mock.call_count, 2)
+        self.assertIn("초기화", str(result["message"]))
 
     def test_demo_workspace_blueprint_spans_five_years_with_diverse_activity(self) -> None:
         """기본 데모 블루프린트가 장기 투자 히스토리와 다양한 이벤트를 포함하는지 확인한다."""
@@ -294,7 +272,6 @@ class DemoWorkspaceSeedTests(unittest.TestCase):
         for account_spec in accounts:
             trade_dates.extend(str(item["trade_date"]) for item in account_spec["cash_flows"])
             trade_dates.extend(str(item["trade_date"]) for item in account_spec["trades"])
-            trade_dates.extend(str(item["interest_date"]) for item in account_spec["interest"])
             trade_types.update(str(item["trade_type"]) for item in account_spec["trades"])
             asset_types.update(str(item["asset_type"]) for item in account_spec["trades"])
             flow_types.update(str(item["flow_type"]) for item in account_spec["cash_flows"])
@@ -307,235 +284,43 @@ class DemoWorkspaceSeedTests(unittest.TestCase):
         self.assertIn("sell", trade_types)
         self.assertIn("withdraw", flow_types)
         self.assertEqual(asset_types, {"risk", "safe"})
-        self.assertGreaterEqual(len(traded_symbols), 8)
+        self.assertGreaterEqual(len(traded_symbols), 10)
+        all_product_names = {
+            str(item["product_name"])
+            for account_spec in accounts
+            for item in account_spec["trades"]
+        }
+        self.assertIn("삼성전자", all_product_names)
+        self.assertIn("SK하이닉스", all_product_names)
+        self.assertIn("두산에너빌리티", all_product_names)
+        self.assertTrue(any("원자력" in name for name in all_product_names))
         self.assertGreaterEqual(len(blueprint["transfers"]), 2)
 
 
 class SyncAccountRollupTests(unittest.TestCase):
-    """원장 기준 누락 이자 자동 보정 동작을 검증한다."""
+    """이자 적립 없이 당일 스냅샷만 갱신하는 동작을 검증한다."""
 
     @patch("src.db.record_account_snapshot")
     @patch("src.db.list_account_snapshots", return_value=[])
-    @patch("src.db._demo_account_totals", return_value=(802.6028, 200.0, 200.0))
-    @patch("src.db.record_daily_interest")
     @patch("src.db.list_daily_interest", return_value=[])
-    @patch("src.db.list_trade_logs")
+    @patch("src.db.list_trade_logs", return_value=[])
+    @patch("src.db._demo_account_totals", return_value=(802.6028, 200.0, 200.0))
     @patch("src.db.get_account")
-    def test_sync_account_rollup_backfills_missing_interest_to_previous_day(
+    def test_sync_account_rollup_records_today_snapshot_when_missing(
         self,
         get_account_mock,
-        list_trade_logs_mock,
-        _list_daily_interest_mock,
-        record_daily_interest_mock,
         _demo_account_totals_mock,
+        _list_trade_logs_mock,
+        _list_daily_interest_mock,
         _list_account_snapshots_mock,
         record_snapshot_mock,
     ) -> None:
-        """입금/매매 원장을 바탕으로 전일까지의 누락 이자를 순차 적립한다."""
+        """당일 스냅샷이 없으면 현재 평가값으로 한 건 저장한다."""
 
-        get_account_mock.return_value = {
-            "id": 7,
-            "cash_balance": 800.0,
-            "created_at": "2026-05-06T09:00:00",
-        }
-        list_trade_logs_mock.return_value = [
-            {"trade_type": "personal_deposit", "trade_date": "2026-05-06", "cash_delta": 1000.0, "total_amount": 1000.0},
-            {"trade_type": "buy", "trade_date": "2026-05-07", "cash_delta": -200.0, "total_amount": 200.0},
-        ]
+        get_account_mock.return_value = {"id": 7, "cash_balance": 800.0}
 
-        result = sync_account_rollup(7, annual_rate=0.365, today_date="2026-05-09")
+        result = sync_account_rollup(7, today_date="2026-05-09")
 
-        self.assertEqual(
-            record_daily_interest_mock.call_args_list,
-            [
-                unittest.mock.call(7, interest_date="2026-05-06", amount=1.0),
-                unittest.mock.call(7, interest_date="2026-05-07", amount=0.801),
-                unittest.mock.call(7, interest_date="2026-05-08", amount=0.8018),
-            ],
-        )
-        record_snapshot_mock.assert_called_once_with(
-            7,
-            snapshot_date="2026-05-09",
-            cash_balance=802.6028,
-            market_value=200.0,
-            total_value=1002.6028,
-            total_cost=200.0,
-        )
-        self.assertEqual(result["interest_rows_added"], 3)
-        self.assertEqual(result["historical_snapshots_updated"], 0)
-        self.assertEqual(result["interest_amount_added"], 2.6028)
-        self.assertEqual(result["snapshot_date"], "2026-05-09")
-        self.assertTrue(result["snapshot_updated"])
-
-    @patch("src.db.record_account_snapshot")
-    @patch("src.db.list_account_snapshots")
-    @patch("src.db._demo_account_totals", return_value=(802.6028, 200.0, 200.0))
-    @patch("src.db.record_daily_interest")
-    @patch("src.db.list_daily_interest")
-    @patch("src.db.list_trade_logs")
-    @patch("src.db.get_account")
-    def test_sync_account_rollup_updates_existing_historical_snapshots_after_backfill(
-        self,
-        get_account_mock,
-        list_trade_logs_mock,
-        list_daily_interest_mock,
-        record_daily_interest_mock,
-        _demo_account_totals_mock,
-        list_account_snapshots_mock,
-        record_snapshot_mock,
-    ) -> None:
-        """누락 이자를 채운 뒤 기존 historical snapshot도 원장 기준 값으로 다시 맞춘다."""
-
-        get_account_mock.side_effect = [
-            {
-                "id": 7,
-                "cash_balance": 800.0,
-                "created_at": "2026-05-06T09:00:00",
-            },
-            {
-                "id": 7,
-                "cash_balance": 802.6028,
-                "created_at": "2026-05-06T09:00:00",
-            },
-        ]
-        list_trade_logs_mock.side_effect = [
-            [
-                {"trade_type": "personal_deposit", "trade_date": "2026-05-06", "cash_delta": 1000.0, "total_amount": 1000.0},
-                {"trade_type": "buy", "trade_date": "2026-05-07", "cash_delta": -200.0, "total_amount": 200.0, "quantity": 1.0, "price": 200.0, "symbol": "AAA"},
-            ],
-            [
-                {"trade_type": "personal_deposit", "trade_date": "2026-05-06", "cash_delta": 1000.0, "total_amount": 1000.0},
-                {"trade_type": "buy", "trade_date": "2026-05-07", "cash_delta": -200.0, "total_amount": 200.0, "quantity": 1.0, "price": 200.0, "symbol": "AAA"},
-                {"trade_type": "interest", "trade_date": "2026-05-06", "cash_delta": 1.0, "total_amount": 1.0, "notes": "일별 이자 적립"},
-                {"trade_type": "interest", "trade_date": "2026-05-07", "cash_delta": 0.801, "total_amount": 0.801, "notes": "일별 이자 적립"},
-                {"trade_type": "interest", "trade_date": "2026-05-08", "cash_delta": 0.8018, "total_amount": 0.8018, "notes": "일별 이자 적립"},
-            ],
-        ]
-        list_daily_interest_mock.side_effect = [
-            [],
-            [
-                {"date": "2026-05-06", "interest_amount": 1.0},
-                {"date": "2026-05-07", "interest_amount": 0.801},
-                {"date": "2026-05-08", "interest_amount": 0.8018},
-            ],
-        ]
-
-        def snapshot_side_effect(account_id: int, start_date: str | None = None) -> list[dict[str, float | str]]:
-            if start_date == "2026-05-06":
-                return [
-                    {"snapshot_date": "2026-05-06", "cash_balance": 1000.0, "market_value": 0.0, "total_value": 1000.0, "total_cost": 0.0},
-                    {"snapshot_date": "2026-05-07", "cash_balance": 801.0, "market_value": 200.0, "total_value": 1001.0, "total_cost": 0.0},
-                    {"snapshot_date": "2026-05-08", "cash_balance": 802.0, "market_value": 200.0, "total_value": 1002.0, "total_cost": 0.0},
-                ]
-            if start_date == "2026-05-09":
-                return []
-            return []
-
-        list_account_snapshots_mock.side_effect = snapshot_side_effect
-
-        result = sync_account_rollup(7, annual_rate=0.365, today_date="2026-05-09")
-
-        self.assertEqual(
-            record_daily_interest_mock.call_args_list,
-            [
-                unittest.mock.call(7, interest_date="2026-05-06", amount=1.0),
-                unittest.mock.call(7, interest_date="2026-05-07", amount=0.801),
-                unittest.mock.call(7, interest_date="2026-05-08", amount=0.8018),
-            ],
-        )
-        self.assertEqual(
-            record_snapshot_mock.call_args_list,
-            [
-                unittest.mock.call(
-                    7,
-                    snapshot_date="2026-05-06",
-                    cash_balance=1001.0,
-                    market_value=0.0,
-                    total_value=1001.0,
-                    total_cost=0.0,
-                ),
-                unittest.mock.call(
-                    7,
-                    snapshot_date="2026-05-07",
-                    cash_balance=801.801,
-                    market_value=200.0,
-                    total_value=1001.801,
-                    total_cost=200.0,
-                ),
-                unittest.mock.call(
-                    7,
-                    snapshot_date="2026-05-08",
-                    cash_balance=802.6028,
-                    market_value=200.0,
-                    total_value=1002.6028,
-                    total_cost=200.0,
-                ),
-                unittest.mock.call(
-                    7,
-                    snapshot_date="2026-05-09",
-                    cash_balance=802.6028,
-                    market_value=200.0,
-                    total_value=1002.6028,
-                    total_cost=200.0,
-                ),
-            ],
-        )
-        self.assertEqual(result["interest_rows_added"], 3)
-        self.assertEqual(result["historical_snapshots_updated"], 3)
-        self.assertEqual(result["interest_amount_added"], 2.6028)
-        self.assertEqual(result["snapshot_date"], "2026-05-09")
-        self.assertTrue(result["snapshot_updated"])
-
-    @patch("src.db.record_account_snapshot")
-    @patch("src.db.list_account_snapshots", return_value=[])
-    @patch("src.db._demo_account_totals", return_value=(802.6028, 200.0, 200.0))
-    @patch("src.db._replace_interest_history")
-    @patch(
-        "src.db.list_daily_interest",
-        return_value=[
-            {"date": "2026-05-06", "interest_amount": 1.0},
-            {"date": "2026-05-07", "interest_amount": 1.001},
-            {"date": "2026-05-08", "interest_amount": 1.002},
-        ],
-    )
-    @patch("src.db.list_trade_logs")
-    @patch("src.db.get_account")
-    def test_sync_account_rollup_rebuilds_interest_when_backdated_trade_changes_existing_days(
-        self,
-        get_account_mock,
-        list_trade_logs_mock,
-        _list_daily_interest_mock,
-        replace_interest_history_mock,
-        _demo_account_totals_mock,
-        _list_account_snapshots_mock,
-        record_snapshot_mock,
-    ) -> None:
-        """과거 거래가 추가되어 기존 이자 금액이 틀어지면 기간 이자를 재구성한다."""
-
-        get_account_mock.return_value = {
-            "id": 7,
-            "cash_balance": 803.003,
-            "created_at": "2026-05-06T09:00:00",
-        }
-        list_trade_logs_mock.return_value = [
-            {"trade_type": "personal_deposit", "trade_date": "2026-05-06", "cash_delta": 1000.0, "total_amount": 1000.0, "notes": ""},
-            {"trade_type": "buy", "trade_date": "2026-05-07", "cash_delta": -200.0, "total_amount": 200.0, "notes": ""},
-            {"trade_type": "interest", "trade_date": "2026-05-06", "cash_delta": 1.0, "total_amount": 1.0, "notes": "일별 이자 적립"},
-            {"trade_type": "interest", "trade_date": "2026-05-07", "cash_delta": 1.001, "total_amount": 1.001, "notes": "일별 이자 적립"},
-            {"trade_type": "interest", "trade_date": "2026-05-08", "cash_delta": 1.002, "total_amount": 1.002, "notes": "일별 이자 적립"},
-        ]
-
-        result = sync_account_rollup(7, annual_rate=0.365, today_date="2026-05-09")
-
-        replace_interest_history_mock.assert_called_once_with(
-            7,
-            target_date="2026-05-08",
-            desired_entries=[
-                ("2026-05-06", 1.0),
-                ("2026-05-07", 0.801),
-                ("2026-05-08", 0.8018),
-            ],
-        )
         record_snapshot_mock.assert_called_once_with(
             7,
             snapshot_date="2026-05-09",
@@ -545,11 +330,142 @@ class SyncAccountRollupTests(unittest.TestCase):
             total_cost=200.0,
         )
         self.assertEqual(result["interest_rows_added"], 0)
-        self.assertEqual(result["interest_rows_updated"], 2)
+        self.assertEqual(result["interest_rows_updated"], 0)
         self.assertEqual(result["interest_rows_removed"], 0)
         self.assertEqual(result["historical_snapshots_updated"], 0)
-        self.assertEqual(result["interest_amount_added"], -0.4002)
+        self.assertEqual(result["interest_amount_added"], 0.0)
         self.assertEqual(result["snapshot_date"], "2026-05-09")
+        self.assertTrue(result["snapshot_updated"])
+
+    @patch("src.db.record_account_snapshot")
+    @patch(
+        "src.db.list_account_snapshots",
+        return_value=[
+            {
+                "snapshot_date": "2026-05-09",
+                "cash_balance": 802.6028,
+                "market_value": 200.0,
+                "total_value": 1002.6028,
+                "total_cost": 200.0,
+            }
+        ],
+    )
+    @patch("src.db.list_daily_interest", return_value=[])
+    @patch("src.db.list_trade_logs", return_value=[])
+    @patch("src.db._demo_account_totals", return_value=(802.6028, 200.0, 200.0))
+    @patch("src.db.get_account")
+    def test_sync_account_rollup_skips_snapshot_when_same_day_values_match(
+        self,
+        get_account_mock,
+        _demo_account_totals_mock,
+        _list_trade_logs_mock,
+        _list_daily_interest_mock,
+        _list_account_snapshots_mock,
+        record_snapshot_mock,
+    ) -> None:
+        """당일 스냅샷이 이미 최신 값과 같으면 다시 저장하지 않는다."""
+
+        get_account_mock.return_value = {"id": 7, "cash_balance": 800.0}
+
+        result = sync_account_rollup(7, today_date="2026-05-09")
+
+        record_snapshot_mock.assert_not_called()
+        self.assertFalse(result["snapshot_updated"])
+
+    @patch("src.db.record_account_snapshot")
+    @patch(
+        "src.db.list_account_snapshots",
+        return_value=[
+            {
+                "snapshot_date": "2026-05-06",
+                "cash_balance": 999.0,
+                "market_value": 0.0,
+                "total_value": 999.0,
+                "total_cost": 0.0,
+            },
+            {
+                "snapshot_date": "2026-05-07",
+                "cash_balance": 700.0,
+                "market_value": 200.0,
+                "total_value": 900.0,
+                "total_cost": 0.0,
+            },
+            {
+                "snapshot_date": "2026-05-08",
+                "cash_balance": 700.0,
+                "market_value": 200.0,
+                "total_value": 900.0,
+                "total_cost": 0.0,
+            },
+        ],
+    )
+    @patch("src.db.list_daily_interest", return_value=[])
+    @patch(
+        "src.db.list_trade_logs",
+        return_value=[
+            {"trade_type": "personal_deposit", "trade_date": "2026-05-06", "cash_delta": 1000.0, "total_amount": 1000.0},
+            {"trade_type": "buy", "trade_date": "2026-05-07", "cash_delta": -200.0, "total_amount": 200.0, "quantity": 1.0, "price": 200.0, "symbol": "AAA"},
+        ],
+    )
+    @patch("src.db._demo_account_totals", return_value=(800.0, 200.0, 200.0))
+    @patch("src.db.get_account")
+    def test_sync_account_rollup_refreshes_existing_historical_snapshots_when_ledger_changed(
+        self,
+        get_account_mock,
+        _demo_account_totals_mock,
+        _list_trade_logs_mock,
+        _list_daily_interest_mock,
+        _list_account_snapshots_mock,
+        record_snapshot_mock,
+    ) -> None:
+        """기존 과거 스냅샷이 현재 원장과 다르면 가능한 범위에서 다시 맞춘다."""
+
+        get_account_mock.return_value = {
+            "id": 7,
+            "cash_balance": 800.0,
+            "created_at": "2026-05-06T09:00:00",
+        }
+
+        result = sync_account_rollup(7, today_date="2026-05-09")
+
+        self.assertEqual(
+            record_snapshot_mock.call_args_list,
+            [
+                unittest.mock.call(
+                    7,
+                    snapshot_date="2026-05-06",
+                    cash_balance=1000.0,
+                    market_value=0.0,
+                    total_value=1000.0,
+                    total_cost=0.0,
+                ),
+                unittest.mock.call(
+                    7,
+                    snapshot_date="2026-05-07",
+                    cash_balance=800.0,
+                    market_value=200.0,
+                    total_value=1000.0,
+                    total_cost=200.0,
+                ),
+                unittest.mock.call(
+                    7,
+                    snapshot_date="2026-05-08",
+                    cash_balance=800.0,
+                    market_value=200.0,
+                    total_value=1000.0,
+                    total_cost=200.0,
+                ),
+                unittest.mock.call(
+                    7,
+                    snapshot_date="2026-05-09",
+                    cash_balance=800.0,
+                    market_value=200.0,
+                    total_value=1000.0,
+                    total_cost=200.0,
+                ),
+            ],
+        )
+        self.assertEqual(result["historical_snapshots_updated"], 3)
         self.assertTrue(result["snapshot_updated"])
 
 

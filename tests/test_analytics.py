@@ -219,26 +219,14 @@ class SnapshotTrendFrameTests(unittest.TestCase):
 
 
 class ProjectedTodayInterestTests(unittest.TestCase):
-    """오늘 예상 이자 계산을 검증한다."""
+    """이자 자동 적립 제거 이후 호환 동작을 검증한다."""
 
-    def test_projected_today_interest_uses_current_cash_when_today_row_is_missing(self) -> None:
+    def test_projected_today_interest_always_returns_zero(self) -> None:
         account = {"cash_balance": 1_000_000}
 
         value = projected_today_interest(
             account,
             interest_rows=[{"date": "2026-05-07", "interest_amount": 123.4}],
-            annual_rate=0.05,
-            as_of=date(2026, 5, 8),
-        )
-
-        self.assertEqual(value, round(1_000_000 * 0.05 / 365, 4))
-
-    def test_projected_today_interest_returns_zero_when_today_is_already_recorded(self) -> None:
-        account = {"cash_balance": 1_000_000}
-
-        value = projected_today_interest(
-            account,
-            interest_rows=[{"date": "2026-05-08", "interest_amount": 123.4}],
             annual_rate=0.05,
             as_of=date(2026, 5, 8),
         )

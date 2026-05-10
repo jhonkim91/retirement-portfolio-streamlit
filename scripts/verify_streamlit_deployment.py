@@ -5,6 +5,7 @@ import json
 import os
 import sys
 import time
+import tomllib
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
@@ -30,6 +31,7 @@ PAGE_LABEL_INDEX = {
     "trades": 3,
     "data": 4,
 }
+LOCAL_SECRETS_PATH = Path(".streamlit/secrets.toml")
 
 
 @dataclass
@@ -43,9 +45,9 @@ class DeploymentSummary:
     status_panel_visible: bool
     backend_storage: str
     backend_storage_code: str
-    total_interest: str
-    interest_rollup: str
-    latest_interest_date: str
+    trade_log_count: str
+    latest_trade_date: str
+    cash_adjustment_net: str
     snapshot_count: str
     latest_snapshot_date: str
     supabase_config_status: str
@@ -65,13 +67,41 @@ class DeploymentSummary:
     screenshot_output: str | None = None
 
 
+def load_local_streamlit_secrets() -> dict[str, Any]:
+    """로컬 `.streamlit/secrets.toml` 값을 읽어 검증 기본값에 사용한다."""
+
+    if not LOCAL_SECRETS_PATH.exists():
+        return {}
+
+    try:
+        with LOCAL_SECRETS_PATH.open("rb") as file:
+            data = tomllib.load(file)
+    except (OSError, tomllib.TOMLDecodeError):
+        return {}
+
+    return data if isinstance(data, dict) else {}
+
+
+def verify_secret(name: str, default: str = "") -> str:
+    """환경 변수 우선, 없으면 로컬 Streamlit 시크릿에서 검증 값을 읽는다."""
+
+    env_value = str(os.getenv(name, "")).strip()
+    if env_value:
+        return env_value
+
+    local_value = load_local_streamlit_secrets().get(name)
+    if local_value not in (None, ""):
+        return str(local_value).strip()
+    return str(default).strip()
+
+
 def parse_args() -> argparse.Namespace:
     """명령행 인자를 해석한다."""
 
     parser = argparse.ArgumentParser(description="배포된 Streamlit 앱에 로그인해 저장소 상태를 검증한다.")
     parser.add_argument("--url", default=str(os.getenv("STREAMLIT_APP_URL", DEFAULT_APP_URL)).strip(), help="검증할 앱 URL")
-    parser.add_argument("--email", default=str(os.getenv("STREAMLIT_VERIFY_EMAIL", "")).strip(), help="로그인 이메일")
-    parser.add_argument("--password", default=str(os.getenv("STREAMLIT_VERIFY_PASSWORD", "")).strip(), help="로그인 비밀번호")
+    parser.add_argument("--email", default=verify_secret("STREAMLIT_VERIFY_EMAIL"), help="로그인 이메일")
+    parser.add_argument("--password", default=verify_secret("STREAMLIT_VERIFY_PASSWORD"), help="로그인 비밀번호")
     parser.add_argument(
         "--page",
         choices=tuple(PAGE_LABELS),
@@ -156,6 +186,20 @@ def find_prefixed_value(lines: list[str], prefix: str) -> str:
         if line.startswith(prefix):
             return line.removeprefix(prefix).strip(" `")
     return ""
+
+
+def find_config_source(lines: list[str], prefix: str) -> str:
+    """설정 표시 줄에서 실제 값 출처만 추출한다."""
+
+    value = find_prefixed_value(lines, prefix)
+    if not value:
+        return ""
+
+    if "(" in value and ")" in value:
+        suffix = value.split("(", 1)[1].split(")", 1)[0].strip()
+        if suffix:
+            return suffix
+    return value
 
 
 def normalize_backend_code(value: str) -> str:
@@ -325,7 +369,7 @@ def build_summary(url: str, target_page: str, text: str) -> DeploymentSummary:
     backend_storage = find_value_after_label(lines, "데이터 저장소")
     if not backend_storage:
         backend_storage = find_prefixed_value(lines, "현재 저장소:")
-    interest_rollup, latest_interest_date = find_values_after_label(lines, "이자 롤업")
+    trade_log_count, latest_trade_date = find_values_after_label(lines, "거래 기록")
     snapshot_count, latest_snapshot_date = find_values_after_label(lines, "자산 스냅샷")
     onboarding_visible = has_onboarding_context(text)
     onboarding_error = extract_onboarding_error(lines)
@@ -345,14 +389,14 @@ def build_summary(url: str, target_page: str, text: str) -> DeploymentSummary:
         status_panel_visible="운영 상태" in text,
         backend_storage=backend_storage,
         backend_storage_code=normalize_backend_code(backend_storage),
-        total_interest=find_value_after_label(lines, "누적 이자"),
-        interest_rollup=interest_rollup,
-        latest_interest_date=latest_interest_date,
+        trade_log_count=trade_log_count,
+        latest_trade_date=latest_trade_date,
+        cash_adjustment_net=find_value_after_label(lines, "현금 수정 순반영"),
         snapshot_count=snapshot_count,
         latest_snapshot_date=latest_snapshot_date,
         supabase_config_status=find_prefixed_value(lines, "Supabase 설정 감지:"),
-        supabase_url_status=find_prefixed_value(lines, "SUPABASE_URL 설정:"),
-        supabase_key_status=find_prefixed_value(lines, "SUPABASE_KEY 설정:"),
+        supabase_url_status=find_config_source(lines, "SUPABASE_URL 설정:"),
+        supabase_key_status=find_config_source(lines, "SUPABASE_KEY 설정:"),
         supabase_project=find_prefixed_value(lines, "Supabase 프로젝트:"),
         missing_config=find_prefixed_value(lines, "누락 설정:"),
         backend_override=find_prefixed_value(lines, "백엔드 강제 설정:"),

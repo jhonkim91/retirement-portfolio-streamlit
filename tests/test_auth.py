@@ -21,8 +21,8 @@ class DemoAuthHelperTests(unittest.TestCase):
         with patch("src.auth._get_config_value", side_effect=lambda name, default="": values.get(name, default)):
             self.assertEqual(auth.get_demo_credentials(), ("demo@example.com", "demo-password"))
 
-    def test_get_demo_credentials_falls_back_to_verify_credentials(self) -> None:
-        """전용 데모 자격 증명이 없으면 기존 검증 자격 증명을 재사용한다."""
+    def test_get_demo_credentials_ignores_verify_credentials(self) -> None:
+        """데모 진입은 운영 검증 계정 대신 전용 데모 자격 증명만 사용한다."""
 
         values = {
             "DEMO_LOGIN_EMAIL": "",
@@ -31,8 +31,8 @@ class DemoAuthHelperTests(unittest.TestCase):
             "STREAMLIT_VERIFY_PASSWORD": "verify-password",
         }
         with patch("src.auth._get_config_value", side_effect=lambda name, default="": values.get(name, default)):
-            self.assertEqual(auth.get_demo_credentials(), ("verify@example.com", "verify-password"))
-            self.assertTrue(auth.has_demo_credentials())
+            self.assertEqual(auth.get_demo_credentials(), ("", ""))
+            self.assertFalse(auth.has_demo_credentials())
 
     def test_sign_in_demo_user_uses_resolved_credentials_when_available(self) -> None:
         """설정된 데모 계정이 있으면 일반 로그인 흐름으로 진입한다."""

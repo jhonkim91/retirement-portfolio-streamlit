@@ -28,7 +28,7 @@ CASH_EVENT_LABELS = {
     "cash_adjustment": "현금 조정",
 }
 CASH_EVENT_TYPES = set(CASH_EVENT_LABELS)
-EXPORTABLE_TABLES = {"accounts", "holdings", "trade_logs", "daily_interest", "daily_account_snapshot"}
+EXPORTABLE_TABLES = {"accounts", "holdings", "trade_logs", "daily_account_snapshot"}
 
 
 def now_iso() -> str:
@@ -432,7 +432,7 @@ def list_trade_logs(account_id: int) -> list[dict[str, Any]]:
 
 
 def list_daily_interest(account_id: int) -> list[dict[str, Any]]:
-    """계좌의 일별 이자 기록을 날짜순으로 반환한다."""
+    """계좌의 기존 일별 이자 기록을 날짜순으로 반환한다."""
 
     return _fetch_all(
         """
@@ -708,47 +708,9 @@ def adjust_cash_balance(
 
 
 def record_daily_interest(account_id: int, *, interest_date: str, amount: float) -> None:
-    """일별 이자를 상세 테이블과 거래 원장에 함께 기록한다."""
+    """이자 기능 제거 이후 호출을 차단한다."""
 
-    interest_amount = float(amount or 0)
-    if interest_amount <= 0:
-        raise ValueError("이자 금액은 0보다 커야 합니다.")
-
-    timestamp = now_iso()
-    with connect() as connection:
-        account_row = _require_account(connection, account_id)
-        current_cash = float(account_row["cash_balance"] or 0)
-        next_cash = current_cash + interest_amount
-
-        try:
-            connection.execute(
-                """
-                INSERT INTO daily_interest (account_id, date, interest_amount, created_at)
-                VALUES (?, ?, ?, ?)
-                """,
-                (account_id, str(interest_date), interest_amount, timestamp),
-            )
-        except sqlite3.IntegrityError as exc:
-            raise ValueError("해당 일자의 이자가 이미 기록되어 있습니다.") from exc
-
-        _update_account_cash_balance(connection, account_id, next_cash, timestamp)
-        _insert_trade_log(
-            connection,
-            account_id=account_id,
-            symbol="",
-            product_name=_cash_event_label("interest"),
-            trade_type="interest",
-            asset_type="cash",
-            quantity=0,
-            price=0,
-            total_amount=interest_amount,
-            cash_delta=interest_amount,
-            trade_date=interest_date,
-            notes="일별 이자 적립",
-            created_at=timestamp,
-            metadata_json=_metadata_json(),
-        )
-        connection.commit()
+    raise RuntimeError("현금 이자 적립 기능은 제거되었습니다.")
 
 
 def record_account_snapshot(

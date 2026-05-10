@@ -9,11 +9,6 @@ on:
         description: "처리 기준일(YYYY-MM-DD). 비우면 시간대 기준 전일"
         required: false
         type: string
-      annual_rate:
-        description: "연이율. 예: 0.05"
-        required: false
-        default: "0.05"
-        type: string
       backend:
         description: "실행 백엔드"
         required: false
@@ -36,7 +31,6 @@ jobs:
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
       ROLLUP_TIMEZONE: Asia/Seoul
-      ROLLUP_ANNUAL_RATE: ${{ github.event.inputs.annual_rate }}
       ROLLUP_TARGET_DATE: ${{ github.event.inputs.target_date }}
       ROLLUP_BACKEND: ${{ github.event.inputs.backend }}
       ROLLUP_DRY_RUN: ${{ github.event.inputs.dry_run }}
@@ -68,9 +62,8 @@ jobs:
       - name: 일별 롤업 실행
         shell: bash
         run: |
-          ANNUAL_RATE="${ROLLUP_ANNUAL_RATE:-0.05}"
           BACKEND="${ROLLUP_BACKEND:-supabase}"
-          ARGS=(scripts/run_daily_rollup.py --backend "${BACKEND}" --annual-rate "${ANNUAL_RATE}" --timezone "${ROLLUP_TIMEZONE}")
+          ARGS=(scripts/run_daily_rollup.py --backend "${BACKEND}" --timezone "${ROLLUP_TIMEZONE}")
           if [ -n "${ROLLUP_TARGET_DATE}" ]; then
             ARGS+=(--date "${ROLLUP_TARGET_DATE}")
           fi

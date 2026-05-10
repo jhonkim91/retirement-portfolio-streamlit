@@ -13,7 +13,7 @@ SESSION_STATE_KEY = "auth_session"
 BACKEND_STATE_KEY = "db_backend_state"
 DEMO_SESSION_MODE = "local_demo"
 DEMO_USER_ID = "local-demo-user"
-DEMO_USER_EMAIL = "demo@local"
+DEMO_USER_EMAIL = "test"
 _FALLBACK_STATE: dict[str, Any] = {}
 
 
@@ -55,8 +55,8 @@ def _email_redirect_to() -> str:
 def get_demo_credentials() -> tuple[str, str]:
     """초기 화면 데모 접속에 사용할 이메일과 비밀번호를 반환한다."""
 
-    email = _get_config_value("DEMO_LOGIN_EMAIL") or _get_config_value("STREAMLIT_VERIFY_EMAIL")
-    password = _get_config_value("DEMO_LOGIN_PASSWORD") or _get_config_value("STREAMLIT_VERIFY_PASSWORD")
+    email = _get_config_value("DEMO_LOGIN_EMAIL")
+    password = _get_config_value("DEMO_LOGIN_PASSWORD")
     return str(email).strip(), str(password)
 
 

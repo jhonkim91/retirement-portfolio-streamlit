@@ -26,14 +26,14 @@ SERVICE_ROLE_ENV_NAMES = ("SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_ADMIN_KEY")
 
 @dataclass
 class RollupResult:
-    """계좌별 일별 롤업 처리 결과를 담는다."""
+    """계좌별 스냅샷 처리 결과를 담는다."""
 
     account_id: int
     account_name: str
-    interest_added: float
     cash_balance: float
     market_value: float
     total_value: float
+    snapshot_updated: bool
     dry_run: bool = False
 
 
@@ -46,9 +46,8 @@ def now_iso() -> str:
 def parse_args() -> argparse.Namespace:
     """명령행 인자를 해석한다."""
 
-    parser = argparse.ArgumentParser(description="퇴직 포트폴리오의 일별 이자와 자산 스냅샷을 적립한다.")
+    parser = argparse.ArgumentParser(description="퇴직 포트폴리오의 일별 자산 스냅샷을 저장한다.")
     parser.add_argument("--date", dest="target_date", help="처리 기준일(YYYY-MM-DD). 기본값은 전일.")
-    parser.add_argument("--annual-rate", dest="annual_rate", type=float, default=0.05, help="연이율. 기본값은 0.05")
     parser.add_argument(
         "--timezone",
         dest="rollup_timezone",
@@ -175,65 +174,6 @@ class SupabaseAdminClient:
         rows = self.request("GET", "holdings", filters={"account_id": f"eq.{account_id}"}) or []
         return list(rows) if isinstance(rows, list) else []
 
-    def has_interest_for_date(self, account_id: int, target_date: str) -> bool:
-        """해당 일자의 이자 기록 존재 여부를 확인한다."""
-
-        rows = self.request(
-            "GET",
-            "daily_interest",
-            filters={
-                "account_id": f"eq.{account_id}",
-                "date": f"eq.{target_date}",
-            },
-        ) or []
-        return bool(rows)
-
-    def update_account_cash(self, account_id: int, cash_balance: float) -> None:
-        """계좌 현금 잔액을 갱신한다."""
-
-        self.request(
-            "PATCH",
-            "accounts",
-            data={"cash_balance": float(cash_balance), "updated_at": now_iso()},
-            filters={"id": f"eq.{account_id}"},
-        )
-
-    def record_interest(self, account_id: int, target_date: str, amount: float) -> None:
-        """일별 이자를 상세 테이블과 거래 원장에 함께 기록한다."""
-
-        timestamp = now_iso()
-        self.request(
-            "POST",
-            "daily_interest",
-            data={
-                "account_id": account_id,
-                "date": target_date,
-                "interest_amount": float(amount),
-                "created_at": timestamp,
-            },
-        )
-        self.request(
-            "POST",
-            "trade_logs",
-            data={
-                "account_id": account_id,
-                "symbol": "",
-                "product_name": "일별 이자",
-                "trade_type": "interest",
-                "asset_type": "cash",
-                "quantity": 0,
-                "price": 0,
-                "total_amount": float(amount),
-                "cash_delta": float(amount),
-                "event_group_id": None,
-                "counterparty_account_id": None,
-                "metadata_json": {},
-                "trade_date": target_date,
-                "notes": "일별 이자 적립",
-                "created_at": timestamp,
-            },
-        )
-
     def upsert_snapshot(
         self,
         account_id: int,
@@ -277,8 +217,8 @@ class SupabaseAdminClient:
         self.request("POST", "daily_account_snapshot", data=payload)
 
 
-def run_sqlite_rollup(target_date: date, annual_rate: float, dry_run: bool = False) -> list[RollupResult]:
-    """SQLite 백엔드에 대해 일별 롤업을 수행한다."""
+def run_sqlite_rollup(target_date: date, dry_run: bool = False) -> list[RollupResult]:
+    """SQLite 백엔드에 대해 일별 스냅샷 저장을 수행한다."""
 
     sqlite_db.initialize_database()
     results: list[RollupResult] = []
@@ -288,21 +228,26 @@ def run_sqlite_rollup(target_date: date, annual_rate: float, dry_run: bool = Fal
         account_id = int(account["id"])
         account_name = str(account.get("name") or account_id)
         cash_balance = float(account.get("cash_balance") or 0)
-        interest_added = 0.0
-        interest_rows = sqlite_db.list_daily_interest(account_id)
-        already_recorded = any(str(row.get("date")) == target_iso for row in interest_rows)
-
-        if not already_recorded and cash_balance > 0 and annual_rate > 0:
-            interest_added = round(cash_balance * annual_rate / 365, 4)
-            if interest_added > 0:
-                cash_balance += interest_added
-                if not dry_run:
-                    sqlite_db.record_daily_interest(account_id, interest_date=target_iso, amount=interest_added)
-
         holdings = sqlite_db.list_holdings(account_id, include_closed=True)
         market_value, total_cost = compute_position_totals(holdings)
         total_value = round(cash_balance + market_value, 4)
-        if not dry_run:
+        snapshot_rows = sqlite_db.list_account_snapshots(account_id, start_date=target_iso)
+        existing_snapshot = next(
+            (
+                row
+                for row in snapshot_rows
+                if str(row.get("snapshot_date") or "").strip() == target_iso
+            ),
+            None,
+        )
+        snapshot_updated = not (
+            existing_snapshot
+            and round(float(existing_snapshot.get("cash_balance") or 0), 4) == round(cash_balance, 4)
+            and round(float(existing_snapshot.get("market_value") or 0), 4) == market_value
+            and round(float(existing_snapshot.get("total_value") or 0), 4) == total_value
+            and round(float(existing_snapshot.get("total_cost") or 0), 4) == total_cost
+        )
+        if snapshot_updated and not dry_run:
             sqlite_db.record_account_snapshot(
                 account_id,
                 snapshot_date=target_iso,
@@ -315,18 +260,18 @@ def run_sqlite_rollup(target_date: date, annual_rate: float, dry_run: bool = Fal
             RollupResult(
                 account_id=account_id,
                 account_name=account_name,
-                interest_added=interest_added,
                 cash_balance=round(cash_balance, 4),
                 market_value=market_value,
                 total_value=total_value,
+                snapshot_updated=snapshot_updated,
                 dry_run=dry_run,
             )
         )
     return results
 
 
-def run_supabase_rollup(target_date: date, annual_rate: float, dry_run: bool = False) -> list[RollupResult]:
-    """Supabase 관리자 모드에서 일별 롤업을 수행한다."""
+def run_supabase_rollup(target_date: date, dry_run: bool = False) -> list[RollupResult]:
+    """Supabase 관리자 모드에서 일별 스냅샷 저장을 수행한다."""
 
     client = SupabaseAdminClient(get_supabase_url(), get_service_role_key())
     results: list[RollupResult] = []
@@ -336,20 +281,26 @@ def run_supabase_rollup(target_date: date, annual_rate: float, dry_run: bool = F
         account_id = int(account["id"])
         account_name = str(account.get("name") or account_id)
         cash_balance = float(account.get("cash_balance") or 0)
-        interest_added = 0.0
-
-        if not client.has_interest_for_date(account_id, target_iso) and cash_balance > 0 and annual_rate > 0:
-            interest_added = round(cash_balance * annual_rate / 365, 4)
-            if interest_added > 0:
-                cash_balance += interest_added
-                if not dry_run:
-                    client.record_interest(account_id, target_iso, interest_added)
-                    client.update_account_cash(account_id, cash_balance)
-
         holdings = client.list_holdings(account_id)
         market_value, total_cost = compute_position_totals(holdings)
         total_value = round(cash_balance + market_value, 4)
-        if not dry_run:
+        existing = client.request(
+            "GET",
+            "daily_account_snapshot",
+            filters={
+                "account_id": f"eq.{account_id}",
+                "snapshot_date": f"eq.{target_iso}",
+            },
+        ) or []
+        existing_snapshot = existing[0] if existing else None
+        snapshot_updated = not (
+            existing_snapshot
+            and round(float(existing_snapshot.get("cash_balance") or 0), 4) == round(cash_balance, 4)
+            and round(float(existing_snapshot.get("market_value") or 0), 4) == market_value
+            and round(float(existing_snapshot.get("total_value") or 0), 4) == total_value
+            and round(float(existing_snapshot.get("total_cost") or 0), 4) == total_cost
+        )
+        if snapshot_updated and not dry_run:
             client.upsert_snapshot(
                 account_id,
                 snapshot_date=target_iso,
@@ -362,10 +313,10 @@ def run_supabase_rollup(target_date: date, annual_rate: float, dry_run: bool = F
             RollupResult(
                 account_id=account_id,
                 account_name=account_name,
-                interest_added=interest_added,
                 cash_balance=round(cash_balance, 4),
                 market_value=market_value,
                 total_value=total_value,
+                snapshot_updated=snapshot_updated,
                 dry_run=dry_run,
             )
         )
@@ -383,10 +334,10 @@ def print_results(results: list[RollupResult], target_date: date, backend: str, 
                 [
                     f"account_id={item.account_id}",
                     f"name={item.account_name}",
-                    f"interest_added={item.interest_added:.4f}",
                     f"cash_balance={item.cash_balance:.4f}",
                     f"market_value={item.market_value:.4f}",
                     f"total_value={item.total_value:.4f}",
+                    f"snapshot_updated={'yes' if item.snapshot_updated else 'no'}",
                 ]
             )
         )
@@ -401,9 +352,9 @@ def main() -> None:
     dry_run = bool(args.dry_run)
 
     if backend == "supabase":
-        results = run_supabase_rollup(target_date, args.annual_rate, dry_run=dry_run)
+        results = run_supabase_rollup(target_date, dry_run=dry_run)
     else:
-        results = run_sqlite_rollup(target_date, args.annual_rate, dry_run=dry_run)
+        results = run_sqlite_rollup(target_date, dry_run=dry_run)
 
     print_results(results, target_date, backend, dry_run)
 

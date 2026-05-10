@@ -59,27 +59,27 @@ class DeploymentSummaryParserTests(unittest.TestCase):
         text = textwrap.dedent(
             """
             로그인 계정
-            jhonkim2025@gmail.com
+            test
             로그아웃
             운영 상태
             데이터 저장소
             Supabase
-            누적 이자
-            12,345원
-            이자 롤업
-            7건
+            거래 기록
+            42건
             2026-05-07
+            현금 수정 순반영
+            -15,000원
             자산 스냅샷
             9건
             2026-05-07
             Supabase 설정 감지: 예
-            SUPABASE_URL 설정: secret
-            SUPABASE_KEY 설정: secret
+            SUPABASE_URL 설정: 예 (secret)
+            SUPABASE_KEY 설정: 예 (secret)
             Supabase 프로젝트: demo-project.supabase.co
             누락 설정: 없음
             백엔드 강제 설정: auto
             감지 사유: secrets configured
-            현재 배포본은 Supabase 운영 모드입니다.
+            현재 배포본은 Supabase를 사용 중입니다.
             """
         ).strip()
 
@@ -90,9 +90,9 @@ class DeploymentSummaryParserTests(unittest.TestCase):
         self.assertTrue(summary.status_panel_visible)
         self.assertFalse(summary.onboarding_visible)
         self.assertEqual(summary.backend_storage_code, "supabase")
-        self.assertEqual(summary.total_interest, "12,345원")
-        self.assertEqual(summary.interest_rollup, "7건")
-        self.assertEqual(summary.latest_interest_date, "2026-05-07")
+        self.assertEqual(summary.trade_log_count, "42건")
+        self.assertEqual(summary.latest_trade_date, "2026-05-07")
+        self.assertEqual(summary.cash_adjustment_net, "-15,000원")
         self.assertEqual(summary.snapshot_count, "9건")
         self.assertEqual(summary.latest_snapshot_date, "2026-05-07")
         self.assertEqual(summary.supabase_config_status, "예")
@@ -102,7 +102,7 @@ class DeploymentSummaryParserTests(unittest.TestCase):
         self.assertEqual(summary.missing_config, "없음")
         self.assertEqual(summary.backend_override, "auto")
         self.assertEqual(summary.reason, "secrets configured")
-        self.assertEqual(summary.status_message, "현재 배포본은 Supabase 운영 모드입니다.")
+        self.assertEqual(summary.status_message, "현재 배포본은 Supabase를 사용 중입니다.")
         self.assertTrue(summary.demo_seeded)
 
 

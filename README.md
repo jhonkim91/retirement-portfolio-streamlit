@@ -11,7 +11,7 @@
 - 현재가 갱신과 수익률 계산
 - 자산 배분 대시보드
 - 실현손익 요약
-- 일별 이자 적립 및 자산 스냅샷 저장
+- 일별 자산 스냅샷 저장
 - 로컬 SQLite 데이터 CSV 내보내기
 
 ## 기술 구조
@@ -24,7 +24,7 @@
 ## 로컬 실행
 
 ```powershell
-cd C:\Users\JKKIM\retirement-portfolio-streamlit
+cd <프로젝트_루트>
 python -m pip install -r requirements.txt
 streamlit run app.py
 ```
@@ -95,9 +95,9 @@ $env:SUPABASE_KEY = "your-anon-public-key"
 streamlit run app.py
 ```
 
-### 일별 롤업 자동 실행
+### 일별 스냅샷 자동 실행
 
-일별 이자 적립과 일별 자산 스냅샷 저장은 GitHub Actions 워크플로 [`.github/workflows/daily-rollup.yml`](.github/workflows/daily-rollup.yml)로 자동 실행할 수 있습니다.
+일별 자산 스냅샷 저장은 GitHub Actions 워크플로 [`.github/workflows/daily-rollup.yml`](.github/workflows/daily-rollup.yml)로 자동 실행할 수 있습니다.
 
 - 기본 스케줄: 한국 시간 기준 매일 00:10
 - 실행 스크립트: `scripts/run_daily_rollup.py`
@@ -120,12 +120,12 @@ SUPABASE_SERVICE_ROLE_KEY
 
 ```powershell
 # SQLite 로컬 테스트
-python scripts/run_daily_rollup.py --backend sqlite --date 2026-05-10 --annual-rate 0.05 --timezone Asia/Seoul --dry-run
+python scripts/run_daily_rollup.py --backend sqlite --date 2026-05-10 --timezone Asia/Seoul --dry-run
 
 # Supabase 관리자 실행
 $env:SUPABASE_URL = "https://your-project.supabase.co"
 $env:SUPABASE_SERVICE_ROLE_KEY = "your-service-role-key"
-python scripts/run_daily_rollup.py --backend supabase --date 2026-05-10 --annual-rate 0.05 --timezone Asia/Seoul --dry-run
+python scripts/run_daily_rollup.py --backend supabase --date 2026-05-10 --timezone Asia/Seoul --dry-run
 ```
 
 ---

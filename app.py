@@ -42,6 +42,7 @@ get_account = _db.get_account
 initialize_database = _db.initialize_database
 list_accounts = _db.list_accounts
 list_account_snapshots = _db.list_account_snapshots
+list_daily_interest = _db.list_daily_interest
 list_holdings = _db.list_holdings
 list_trade_logs = _db.list_trade_logs
 record_account_snapshot = _db.record_account_snapshot
@@ -52,6 +53,7 @@ seed_demo_workspace = _db.seed_demo_workspace
 set_holding_price = _db.set_holding_price
 backend_status = _db.backend_status
 is_accounts_hotfix_error = _db.is_accounts_hotfix_error
+sync_account_rollup = _db.sync_account_rollup
 
 
 def holdings_overview_frame(
@@ -137,7 +139,6 @@ CASH_FLOW_TYPE_LABELS = {
     "personal_deposit": "개인 입금",
     "employer_deposit": "회사 납입금",
     "withdraw": "일반 출금",
-    "interest": "일별 이자",
     "transfer_out": "계좌 이체 출금",
     "transfer_in": "계좌 이체 입금",
     "cash_adjustment": "현금 조정",
@@ -146,7 +147,6 @@ TABLE_LABELS = {
     "accounts": "계좌",
     "holdings": "보유 종목",
     "trade_logs": "거래 기록",
-    "daily_interest": "일별 이자",
     "daily_account_snapshot": "일별 자산 스냅샷",
 }
 DETAIL_MEASURE_LABELS = {
@@ -608,6 +608,15 @@ def inject_app_styles() -> None:
             margin: 0.4rem 0 1rem;
         }
 
+        .auth-simple-title {
+            color: #103b42;
+            font-size: clamp(2rem, 3.2vw, 3rem);
+            font-weight: 900;
+            line-height: 1.05;
+            letter-spacing: -0.05em;
+            margin: 0 0 1.2rem;
+        }
+
         .auth-demo-points {
             display: grid;
             grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -876,25 +885,94 @@ def inject_app_styles() -> None:
 
         .dashboard-summary-card__header {
             display: flex;
-            align-items: flex-start;
+            align-items: center;
             justify-content: space-between;
-            gap: 0.7rem;
-            min-height: 2.35rem;
-            margin-bottom: 0.85rem;
+            gap: 0.55rem;
+            min-height: 0;
+            margin: 0;
+        }
+
+        .dashboard-summary-card__action {
+            border: 1px solid rgba(15, 59, 102, 0.16);
+            border-radius: 999px;
+            padding: 0.28rem 0.78rem;
+            font-size: 0.82rem;
+            font-weight: 700;
+            color: #0f3b66;
+            background: rgba(255, 255, 255, 0.96);
+            white-space: nowrap;
+            line-height: 1.1;
         }
 
         .dashboard-summary-card__field {
             display: flex;
             flex-direction: column;
             justify-content: space-between;
-            min-height: 5.1rem;
+            min-height: 5.7rem;
         }
 
-        .st-key-dashboard-card-cash [data-testid="stButton"] > button {
-            min-height: 2.4rem;
-            padding: 0.1rem 1rem;
+        .st-key-dashboard-card-principal .dashboard-summary-card__field,
+        .st-key-dashboard-card-profit .dashboard-summary-card__field,
+        .st-key-dashboard-card-profit-rate .dashboard-summary-card__field {
+            min-height: 6.7rem;
+            justify-content: flex-start;
+            gap: 1.6rem;
+        }
+
+        .dashboard-summary-card__field--actionable {
+            border-radius: 0.85rem;
+        }
+
+        .st-key-dashboard-card-cash,
+        .st-key-dashboard-card-total-value {
+            position: relative;
+        }
+
+        .st-key-dashboard-cash-card-overlay,
+        .st-key-dashboard-total-value-refresh-overlay {
+            position: absolute;
+            top: 0.55rem;
+            right: 0.8rem;
+            z-index: 2;
+            width: auto;
+            height: auto;
+        }
+
+        .st-key-dashboard-cash-card-overlay [data-testid="stElementContainer"],
+        .st-key-dashboard-total-value-refresh-overlay [data-testid="stElementContainer"] {
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+
+        .st-key-dashboard-cash-card-overlay [data-testid="stButton"],
+        .st-key-dashboard-total-value-refresh-overlay [data-testid="stButton"] {
+            width: auto;
+        }
+
+        .st-key-dashboard-cash-card-overlay button,
+        .st-key-dashboard-total-value-refresh-overlay button {
+            min-height: 0;
+            padding: 0.28rem 0.78rem;
+            border: 1px solid rgba(15, 59, 102, 0.16);
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.96);
+            box-shadow: none;
+            color: #0f3b66;
+            font-size: 0.82rem;
             font-weight: 700;
-            white-space: nowrap;
+            line-height: 1.1;
+        }
+
+        .st-key-dashboard-cash-card-overlay button:hover,
+        .st-key-dashboard-cash-card-overlay button:focus,
+        .st-key-dashboard-cash-card-overlay button:focus-visible,
+        .st-key-dashboard-total-value-refresh-overlay button:hover,
+        .st-key-dashboard-total-value-refresh-overlay button:focus,
+        .st-key-dashboard-total-value-refresh-overlay button:focus-visible {
+            border-color: rgba(15, 59, 102, 0.24);
+            background: rgba(248, 250, 252, 0.98);
+            outline: none;
+            box-shadow: none;
         }
 
         .st-key-dashboard-card-cash [data-testid="stNumberInput"] input,
@@ -998,66 +1076,9 @@ def render_auth_feedback() -> None:
 
 
 def render_auth_landing_header() -> None:
-    """초기 인증 화면의 히어로와 핵심 기능 소개를 렌더링한다."""
+    """초기 인증 화면 상단 제목을 렌더링한다."""
 
-    st.markdown(
-        """
-        <section class="auth-hero">
-            <div class="auth-hero__eyebrow">Retirement Portfolio</div>
-            <h1 class="auth-hero__title">흩어진 계좌를 한 화면으로 묶고, 은퇴 준비는 흐름으로 관리합니다.</h1>
-            <p class="auth-hero__caption">
-                연금 계좌와 일반 계좌의 원금, 현금, 손익, 일별 스냅샷을 한곳에서 보고
-                로그인하거나 데모 작업공간으로 바로 진입할 수 있습니다.
-            </p>
-            <div class="auth-hero__metrics">
-                <div class="auth-hero__metric">
-                    <div class="auth-hero__metric-label">계좌 통합</div>
-                    <div class="auth-hero__metric-value">연금 · 일반 계좌를 하나의 대시보드로 정리</div>
-                </div>
-                <div class="auth-hero__metric">
-                    <div class="auth-hero__metric-label">일별 기록</div>
-                    <div class="auth-hero__metric-value">이자와 자산 스냅샷을 날짜 기준으로 누적</div>
-                </div>
-                <div class="auth-hero__metric">
-                    <div class="auth-hero__metric-label">즉시 체험</div>
-                    <div class="auth-hero__metric-value">5년치 예시 투자 이력으로 바로 테스트 가능</div>
-                </div>
-            </div>
-        </section>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    feature_cards = [
-        {
-            "index": "01",
-            "title": "통합 대시보드",
-            "description": "보유 현금, 원금, 평가손익, 자산 배분을 계좌 단위로 빠르게 확인합니다.",
-        },
-        {
-            "index": "02",
-            "title": "스냅샷 추적",
-            "description": "일별 스냅샷과 이자 롤업이 쌓여 자산 변화 흐름을 시점별로 따라갈 수 있습니다.",
-        },
-        {
-            "index": "03",
-            "title": "데모 작업공간",
-            "description": "실제 계정이 없어도 장기 투자 예시 데이터로 거래, 이체, 차트 화면을 바로 테스트할 수 있습니다.",
-        },
-    ]
-    columns = st.columns(3, gap="small")
-    for column, feature in zip(columns, feature_cards):
-        with column:
-            st.markdown(
-                (
-                    '<div class="auth-feature-card">'
-                    f'<div class="auth-feature-card__index">{html.escape(feature["index"])}</div>'
-                    f'<div class="auth-feature-card__title">{html.escape(feature["title"])}</div>'
-                    f'<div class="auth-feature-card__desc">{html.escape(feature["description"])}</div>'
-                    "</div>"
-                ),
-                unsafe_allow_html=True,
-            )
+    st.markdown('<h1 class="auth-simple-title">자산관리 대장</h1>', unsafe_allow_html=True)
 
 
 def render_demo_access_entry() -> None:
@@ -1074,12 +1095,12 @@ def render_demo_access_entry() -> None:
             """
             <div class="auth-demo-points">
                 <div class="auth-demo-point">
-                    <div class="auth-demo-point__title">장기 투자 예시</div>
-                    <div class="auth-demo-point__desc">여러 자산군과 부분 매도 기록이 이미 들어 있습니다.</div>
+                    <div class="auth-demo-point__title">5년 투자 일지</div>
+                    <div class="auth-demo-point__desc">입금, 매수, 매도, 계좌 이체까지 약 5년치 흐름이 이미 채워져 있습니다.</div>
                 </div>
                 <div class="auth-demo-point">
-                    <div class="auth-demo-point__title">화면 흐름 점검</div>
-                    <div class="auth-demo-point__desc">대시보드, 거래, 데이터 탭을 바로 열어볼 수 있습니다.</div>
+                    <div class="auth-demo-point__title">테마 분산 예시</div>
+                    <div class="auth-demo-point__desc">반도체, 원자력, 방산, 배당, 채권 등 손익이 섞인 샘플 포지션을 바로 볼 수 있습니다.</div>
                 </div>
                 <div class="auth-demo-point">
                     <div class="auth-demo-point__title">계정 없이 테스트</div>
@@ -1209,21 +1230,112 @@ def render_dashboard_metric_strip(cards: list[dict[str, str]]) -> None:
             st.markdown(card_html, unsafe_allow_html=True)
 
 
-def render_dashboard_summary_card(label: str, value: str, *, tone: str = "") -> None:
+def render_dashboard_summary_card(label: str, value: str, *, tone: str = "", action: str = "", actionable: bool = False) -> None:
     """기본 요약 카드 본문을 렌더링한다."""
 
     value_class = "dashboard-summary-card__value"
     if tone == "accent":
         value_class += " dashboard-summary-card__value--accent"
+    field_class = "dashboard-summary-card__field"
+    if actionable:
+        field_class += " dashboard-summary-card__field--actionable"
+    action_html = ""
+    if action:
+        action_html = (
+            '<div class="dashboard-summary-card__header">'
+            f'<div class="dashboard-summary-card__label">{html.escape(label)}</div>'
+            f'<div class="dashboard-summary-card__action">{html.escape(action)}</div>'
+            "</div>"
+        )
+    else:
+        action_html = f'<div class="dashboard-summary-card__label">{html.escape(label)}</div>'
     st.markdown(
         (
-            '<div class="dashboard-summary-card__field">'
-            f'<div class="dashboard-summary-card__label">{html.escape(label)}</div>'
+            f'<div class="{field_class}">'
+            f"{action_html}"
             f'<div class="{value_class}">{html.escape(value)}</div>'
             "</div>"
         ),
         unsafe_allow_html=True,
     )
+
+
+@st.fragment
+def render_dashboard_cash_card(account_id: int, display_cash: float) -> None:
+    """보유 현금 카드 편집 UI를 부분 리런 단위로 렌더링한다."""
+
+    cash_edit_state_key = f"dashboard-cash-editing:{account_id}"
+    cash_edit_amount_key = f"dashboard-cash-edit-amount:{account_id}"
+
+    with st.container(border=True, key="dashboard-card-cash"):
+        if st.session_state.get(cash_edit_state_key, False):
+            if cash_edit_amount_key not in st.session_state:
+                st.session_state[cash_edit_amount_key] = int(round(display_cash))
+            st.markdown(
+                '<div class="dashboard-summary-card__label">보유 현금</div>',
+                unsafe_allow_html=True,
+            )
+            st.number_input(
+                "목표 현금 잔액",
+                min_value=0,
+                step=100000,
+                key=cash_edit_amount_key,
+                label_visibility="collapsed",
+            )
+            save_col, cancel_col = st.columns(2, gap="small")
+            with save_col:
+                if st.button("저장", key=f"dashboard-cash-save:{account_id}", width="stretch"):
+                    try:
+                        adjust_cash_balance(
+                            account_id,
+                            target_amount=float(int(st.session_state.get(cash_edit_amount_key, round(display_cash)) or 0)),
+                            trade_date=date.today().isoformat(),
+                            notes="대시보드 현금 카드 조정",
+                        )
+                    except ValueError as exc:
+                        st.error(str(exc))
+                    else:
+                        st.session_state[cash_edit_state_key] = False
+                        mark_rollup_dirty()
+                        st.rerun()
+            with cancel_col:
+                if st.button("취소", key=f"dashboard-cash-cancel:{account_id}", width="stretch"):
+                    st.session_state[cash_edit_state_key] = False
+                    st.rerun(scope="fragment")
+        else:
+            render_dashboard_summary_card("보유 현금", format_won(display_cash), actionable=True)
+            with st.container(key="dashboard-cash-card-overlay"):
+                if st.button(
+                    "수정",
+                    key=f"dashboard-cash-card-trigger-button:{account_id}",
+                ):
+                    st.session_state[cash_edit_state_key] = True
+                    st.session_state[cash_edit_amount_key] = int(round(display_cash))
+                    st.rerun(scope="fragment")
+
+
+def render_dashboard_total_value_card(account_id: int, display_total_value: float, holdings: list[dict[str, Any]]) -> None:
+    """현재 평가액 카드와 실시간 가격 갱신 버튼을 함께 렌더링한다."""
+
+    with st.container(border=True, key="dashboard-card-total-value"):
+        render_dashboard_summary_card("현재 평가액", format_won(display_total_value), actionable=True)
+        with st.container(key="dashboard-total-value-refresh-overlay"):
+            refresh_submitted = st.button(
+                "실시간",
+                key=f"dashboard-live-refresh:{account_id}",
+                disabled=not bool(holdings),
+            )
+
+    if not refresh_submitted:
+        return
+
+    updated, errors = refresh_prices(holdings)
+    if updated:
+        mark_rollup_dirty()
+        st.success(f"{updated}개 종목 가격을 갱신했습니다.")
+    if errors:
+        st.warning("\n".join(errors))
+    st.rerun()
 
 
 def render_dashboard_section_header(title: str, description: str, *, compact: bool = False) -> None:
@@ -1968,10 +2080,6 @@ def auth_page(auth_enabled: bool = True) -> None:
                 else:
                     st.success(f"{pending_email} 주소로 새 확인 메일을 보냈습니다.")
 
-    st.markdown(
-        '<div class="auth-entry-intro">계정이 있다면 바로 로그인하고, 처음이라면 계정을 만든 뒤 같은 화면에서 이어서 진입할 수 있습니다.</div>',
-        unsafe_allow_html=True,
-    )
     sign_in_tab, sign_up_tab, demo_tab = st.tabs(["로그인", "계정 만들기", "데모 체험"])
 
     with sign_in_tab:
@@ -1985,16 +2093,16 @@ def auth_page(auth_enabled: bool = True) -> None:
             if not auth_enabled:
                 st.info("Supabase 인증 설정이 없어 실제 로그인은 잠시 비활성 상태입니다. 데모 체험은 바로 사용할 수 있습니다.")
             with st.form("sign-in-form", clear_on_submit=False):
-                email = st.text_input("이메일", key="sign-in-email")
-                password = st.text_input("비밀번호", type="password", key="sign-in-password")
-                submitted = st.form_submit_button("로그인", width="stretch", disabled=not auth_enabled)
-        if submitted:
+                sign_in_email = st.text_input("이메일", key="sign-in-email")
+                sign_in_password = st.text_input("비밀번호", type="password", key="sign-in-password")
+                sign_in_submitted = st.form_submit_button("로그인", width="stretch", disabled=not auth_enabled)
+        if sign_in_submitted:
             try:
-                app_auth.sign_in(email=email, password=password)
+                app_auth.sign_in(email=sign_in_email, password=sign_in_password)
             except Exception as exc:  # noqa: BLE001
                 message = str(exc)
                 if "Email not confirmed" in message:
-                    st.session_state[PENDING_CONFIRMATION_EMAIL_KEY] = str(email or "").strip()
+                    st.session_state[PENDING_CONFIRMATION_EMAIL_KEY] = str(sign_in_email or "").strip()
                     set_auth_feedback("warning", "이 이메일은 아직 확인되지 않았습니다. 위의 버튼으로 확인 메일을 다시 보내고, 가장 최근 메일의 링크를 열어 주세요.")
                     st.rerun()
                 st.error(message)
@@ -2014,16 +2122,16 @@ def auth_page(auth_enabled: bool = True) -> None:
             if not auth_enabled:
                 st.info("Supabase 인증 설정이 없어 실제 계정 만들기는 잠시 비활성 상태입니다. 설정 전에는 데모 체험만 사용할 수 있습니다.")
             with st.form("sign-up-form", clear_on_submit=False):
-                email = st.text_input("이메일", key="sign-up-email")
-                password = st.text_input("비밀번호", type="password", key="sign-up-password")
+                sign_up_email = st.text_input("이메일", key="sign-up-email")
+                sign_up_password = st.text_input("비밀번호", type="password", key="sign-up-password")
                 confirm_password = st.text_input("비밀번호 확인", type="password", key="sign-up-password-confirm")
-                submitted = st.form_submit_button("계정 만들기", width="stretch", disabled=not auth_enabled)
-        if submitted:
-            if password != confirm_password:
+                sign_up_submitted = st.form_submit_button("계정 만들기", width="stretch", disabled=not auth_enabled)
+        if sign_up_submitted:
+            if sign_up_password != confirm_password:
                 st.error("비밀번호가 서로 다릅니다.")
             else:
                 try:
-                    response = app_auth.sign_up(email=email, password=password)
+                    response = app_auth.sign_up(email=sign_up_email, password=sign_up_password)
                 except Exception as exc:  # noqa: BLE001
                     st.error(str(exc))
                 else:
@@ -2032,7 +2140,7 @@ def auth_page(auth_enabled: bool = True) -> None:
                         st.success("계정을 만들고 바로 로그인했습니다.")
                         st.rerun()
                     else:
-                        st.session_state[PENDING_CONFIRMATION_EMAIL_KEY] = str(email or "").strip()
+                        st.session_state[PENDING_CONFIRMATION_EMAIL_KEY] = str(sign_up_email or "").strip()
                         set_auth_feedback(
                             "info",
                             "계정을 만들었습니다. 확인 메일을 열어 주세요. 예전 링크가 안 되면 위의 버튼으로 새 메일을 다시 보내면 됩니다.",
@@ -2157,7 +2265,8 @@ def sidebar(accounts: list[dict[str, Any]], selected_account_id: int | None, use
 def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]], rollup_state: dict[str, Any] | None = None) -> None:
     frame = holdings_frame(holdings)
     trade_logs = list_trade_logs(int(account["id"]))
-    summary = account_summary(account, holdings, trade_logs=trade_logs)
+    interest_rows = list_daily_interest(int(account["id"]))
+    summary = account_summary(account, holdings, trade_logs=trade_logs, interest_rows=interest_rows)
     display_cash = float(summary["cash"] or 0)
     display_total_value = float(summary["total_value"] or 0)
     display_principal_profit_loss = float(summary["principal_profit_loss"] or 0)
@@ -2169,8 +2278,6 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]], roll
     echarts_available = st_echarts is not None
     selected_symbol = None
     overview_frame = holdings_overview_frame(holdings, selected_symbol=None, limit=10)
-    cash_edit_state_key = f"dashboard-cash-editing:{account['id']}"
-    cash_edit_amount_key = f"dashboard-cash-edit-amount:{account['id']}"
     summary_cols = st.columns(5, gap="small", vertical_alignment="top")
 
     with summary_cols[0]:
@@ -2178,65 +2285,10 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]], roll
             render_dashboard_summary_card("입금 원금", format_won(summary["total_principal"]))
 
     with summary_cols[1]:
-        with st.container(border=True, key="dashboard-card-cash"):
-            header_col, action_col = st.columns((1, 0.52), gap="small", vertical_alignment="top")
-            with header_col:
-                st.markdown(
-                    '<div class="dashboard-summary-card__header"><div class="dashboard-summary-card__label">보유 현금</div></div>',
-                    unsafe_allow_html=True,
-                )
-            with action_col:
-                if st.button(
-                    "수정" if not st.session_state.get(cash_edit_state_key, False) else "닫기",
-                    key=f"dashboard-cash-edit-toggle:{account['id']}",
-                    width="stretch",
-                ):
-                    st.session_state[cash_edit_state_key] = not bool(st.session_state.get(cash_edit_state_key, False))
-                    if st.session_state[cash_edit_state_key]:
-                        st.session_state[cash_edit_amount_key] = int(round(display_cash))
-                    st.rerun()
-            st.markdown(
-                (
-                    '<div class="dashboard-summary-card__field">'
-                    f'<div class="dashboard-summary-card__value">{html.escape(format_won(display_cash))}</div>'
-                    "</div>"
-                ),
-                unsafe_allow_html=True,
-            )
-
-            if st.session_state.get(cash_edit_state_key, False):
-                st.number_input(
-                    "목표 현금 잔액",
-                    min_value=0,
-                    value=int(round(float(st.session_state.get(cash_edit_amount_key, display_cash) or 0.0))),
-                    step=100000,
-                    key=cash_edit_amount_key,
-                )
-                save_col, cancel_col = st.columns(2, gap="small")
-                with save_col:
-                    if st.button("저장", key=f"dashboard-cash-save:{account['id']}", width="stretch"):
-                        try:
-                            adjust_cash_balance(
-                                int(account["id"]),
-                                target_amount=float(int(st.session_state.get(cash_edit_amount_key, round(display_cash)) or 0)),
-                                trade_date=date.today().isoformat(),
-                                notes="대시보드 현금 카드 조정",
-                            )
-                        except ValueError as exc:
-                            st.error(str(exc))
-                        else:
-                            st.session_state[cash_edit_state_key] = False
-                            mark_rollup_dirty()
-                            st.success("현금 조정을 기록했습니다.")
-                            st.rerun()
-                with cancel_col:
-                    if st.button("취소", key=f"dashboard-cash-cancel:{account['id']}", width="stretch"):
-                        st.session_state[cash_edit_state_key] = False
-                        st.rerun()
+        render_dashboard_cash_card(int(account["id"]), display_cash)
 
     with summary_cols[2]:
-        with st.container(border=True, key="dashboard-card-total-value"):
-            render_dashboard_summary_card("현재 평가액", format_won(display_total_value))
+        render_dashboard_total_value_card(int(account["id"]), display_total_value, holdings)
 
     with summary_cols[3]:
         with st.container(border=True, key="dashboard-card-profit"):
@@ -2280,21 +2332,6 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]], roll
                     key=f"holdings-profit-bar:{account['id']}",
                 )
 
-    with st.container(border=True, key="dashboard-panel-market"):
-        render_dashboard_section_header("시장 업데이트", "가격 갱신과 코드 입력 규칙을 한 영역에서 정리했습니다.", compact=True)
-        if holdings:
-            if st.button("현재가 새로고침", width="stretch"):
-                updated, errors = refresh_prices(holdings)
-                if updated:
-                    mark_rollup_dirty()
-                    st.success(f"{updated}개 종목 가격을 갱신했습니다.")
-                if errors:
-                    st.warning("\n".join(errors))
-                st.rerun()
-        else:
-            st.info("보유 종목이 생기면 여기서 현재가를 한 번에 갱신할 수 있습니다.")
-        st.caption("숫자만 입력한 6자리 한국 종목 코드는 자동으로 `.KS`를 붙여 조회합니다. 코스닥/ETF 등은 필요하면 직접 야후 파이낸스 심볼을 넣어 주세요.")
-
     with st.container(border=True, key="dashboard-panel-holdings-table"):
         render_dashboard_section_header("현재 보유 종목", "계좌 전체 포지션을 표로 읽고, 이후 아래 추이 차트와 이어서 확인합니다.", compact=True)
         show_holdings_table(frame, height=DASHBOARD_HOLDINGS_TABLE_HEIGHT)
@@ -2312,7 +2349,7 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]], roll
                 key=f"trend-period:{account['id']}",
             )
         snapshot_rows = list_account_snapshots(int(account["id"]), start_date=period_start_date(period).isoformat())
-        snapshot_frame = snapshot_trend_frame(snapshot_rows, trade_logs=trade_logs)
+        snapshot_frame = snapshot_trend_frame(snapshot_rows, trade_logs=trade_logs, interest_rows=interest_rows)
         holding_trend = pd.DataFrame()
         if snapshot_frame.empty:
             st.warning("이 계좌는 아직 일별 스냅샷이 없어 대시보드 추이를 바로 계산하지 않습니다.")
@@ -2684,14 +2721,16 @@ def data_page(account: dict[str, Any], rollup_state: dict[str, Any] | None = Non
     status = backend_status()
     holdings = list_holdings(account_id)
     trade_logs = list_trade_logs(account_id)
+    interest_rows = list_daily_interest(account_id)
     snapshot_rows = list_account_snapshots(account_id)
     snapshot_date = str((rollup_state or {}).get("snapshot_date") or date.today().isoformat()).strip()
-    summary = account_summary(account, holdings, trade_logs=trade_logs)
+    summary = account_summary(account, holdings, trade_logs=trade_logs, interest_rows=interest_rows)
     cash_adjustment_logs = [
         row for row in trade_logs if str(row.get("trade_type") or "").strip().lower() == "cash_adjustment"
     ]
     cumulative_frame = cumulative_contribution_frame(
         trade_logs=trade_logs,
+        interest_rows=interest_rows,
         snapshots=snapshot_rows,
         current_total_value=float(summary["total_value"] or 0),
         current_market_value=float(summary["market_value"] or 0),
@@ -2747,7 +2786,7 @@ def data_page(account: dict[str, Any], rollup_state: dict[str, Any] | None = Non
     with st.container(border=True):
         st.subheader("원금 누적 기록")
         st.caption("최초 입금일부터 현재까지 누적 원금과 현재 평가액 기준 수익률을 함께 봅니다.")
-        st.caption("현금 수정과 계좌 이체는 원금이 아닌 순유입 조정으로 반영하며, 현금 이자는 자동 누적하지 않습니다.")
+        st.caption("현금 수정과 계좌 이체는 원금이 아닌 순유입 조정으로 반영하며, 현금 이자 적립 기능은 사용하지 않습니다.")
         st.caption("연금(IRP/퇴직연금) 계좌는 회사 납입금을 투자원금에 포함하고, 현재 수익률은 현재 평가액을 기준으로 계산합니다.")
         if cumulative_frame.empty:
             st.info("누적 원금 기록을 만들 현금 흐름 데이터가 아직 없습니다.")
@@ -2810,7 +2849,7 @@ def data_page(account: dict[str, Any], rollup_state: dict[str, Any] | None = Non
             display_frame["원금 대비 수익률(%)"] = display_frame["원금 대비 수익률(%)"].map(_format_optional_pct)
             st.dataframe(display_frame, width="stretch", hide_index=True, height=320)
 
-    for table_name in ("accounts", "holdings", "trade_logs", "daily_interest", "daily_account_snapshot"):
+    for table_name in ("accounts", "holdings", "trade_logs", "daily_account_snapshot"):
         rows = export_dataframe_rows(table_name)
         frame = pd.DataFrame(rows)
         csv_bytes = frame.to_csv(index=False).encode("utf-8-sig") if not frame.empty else b""
@@ -2871,20 +2910,16 @@ def main() -> None:
     rollup_state: dict[str, Any] = {"snapshot_date": date.today().isoformat(), "snapshot_updated": False}
     if should_sync_rollup(int(account["id"])):
         try:
-            snapshot_summary = account_summary(account, holdings)
-            record_account_snapshot(
-                int(account["id"]),
-                snapshot_date=rollup_state["snapshot_date"],
-                cash_balance=float(snapshot_summary["cash"] or 0),
-                market_value=float(snapshot_summary["market_value"] or 0),
-                total_value=float(snapshot_summary["total_value"] or 0),
-                total_cost=float(snapshot_summary["total_cost"] or 0),
+            rollup_state.update(
+                sync_account_rollup(
+                    int(account["id"]),
+                    today_date=rollup_state["snapshot_date"],
+                )
             )
         except Exception as exc:  # noqa: BLE001
             st.warning(f"당일 자산 스냅샷 저장을 건너뛰었습니다: {exc}")
         else:
             mark_rollup_synced(int(account["id"]))
-            rollup_state["snapshot_updated"] = True
     if active_page == "Dashboard":
         dashboard_page(account, holdings, rollup_state)
     elif active_page == "Trades":
