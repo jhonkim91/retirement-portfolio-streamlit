@@ -378,3 +378,90 @@ python scripts/verify_streamlit_deployment.py --page data --expect-backend supab
 ## 남은 작업
 1. `KIS Realtime Worker`의 다음 자동 스케줄(`UTC 00:00` 또는 `UTC 02:55`)이 실제 `schedule` 이벤트로 생성되고 `success`로 끝나는지 확인
 2. `2026-05-11 03:30 UTC` 기준 자동 `schedule` run이 없으므로, 다음 확인 시각은 `2026-05-12 00:00 UTC` 이후가 우선
+
+## 2026-05-11 현금/데이터 정합성 읽기 전용 점검
+- [x] 저장소 구조, 핵심 문서, `Memory.md`, 현금/거래/스냅샷 관련 코드 경로 확인
+- [x] 로컬 SQLite `data/portfolio.db` 읽기 전용 무결성 점검
+- [x] Supabase 서버 데이터를 service role 및 인증 사용자 기준으로 읽기 전용 점검
+- [x] `python3 -m compileall app.py src scripts tests` 성공
+- [x] `python3 -m unittest discover -s tests -p "test_*.py"` 성공 (`108`건)
+- [ ] 승인 후 보유현금/스냅샷/레거시 현금조정 데이터 수정
+
+### 발견 사항
+- 현재 설계 의도는 `매수는 현금 부족이어도 허용`, `보유현금 수동 수정은 trade_logs에 남기지 않음`, `cash_adjustment는 원금/순유입 계산에서 제외`, `보유현금은 안전자산 비중에 합산`으로 확인됨.
+- 로컬 SQLite는 외래키 깨짐, 중복 보유종목, 음수 수량/단가, `cash_delta` 부호 오류는 발견되지 않음.
+- 로컬 SQLite에는 레거시 `cash_adjustment` 로그 2건이 남아 있음.
+- 운영 Supabase에는 계좌 4개, 보유종목 14개, 거래 71건, 스냅샷 9건이 조회됐고 외래키 깨짐, 중복 보유종목, 음수 수량/단가, `cash_delta` 부호 오류는 발견되지 않음.
+- 운영 Supabase에는 레거시 `cash_adjustment` 로그 3건이 남아 있음: 계좌 23 1건, 계좌 24 2건.
+- 운영 Supabase의 과거 스냅샷 중 계좌 23의 `2026-05-09`, `2026-05-10` 현금이 현재 원장 흐름과 크게 어긋나 보임.
+- `src/db.py`의 과거 스냅샷 현금 재계산 경로는 현재 현금에서 모든 거래 델타를 뺀 뒤 과거 날짜 델타를 다시 누적하는 구조라, 오늘/미래 거래 또는 계좌 생성일보다 과거인 거래일이 있으면 과거 현금이 왜곡될 수 있음.
+- `setup_supabase.sql`에는 `CREATE POLICY holdings_update_own` 중복 구문처럼 보이는 부분과 `daily_interest_update_own` 부근 괄호 불일치처럼 보이는 부분이 있어 재적용 전 수정 검토 필요.
+
+### 다음 수정 계획
+- `src/db.py` 과거 현금 스냅샷 재계산 로직을 현재 현금에서 스냅샷일 이후 거래 델타를 역산하는 방식으로 보정하고, 계좌 생성일보다 과거인 거래일/당일 거래가 있는 회귀 테스트를 추가한다.
+- 레거시 `cash_adjustment` 로그는 현재 설계와 맞지 않으므로 서버/로컬 정리 SQL을 별도 스크립트 또는 일회성 절차로 준비하되, `accounts.cash_balance`는 변경하지 않는다.
+- 운영 Supabase의 잘못된 과거 스냅샷은 수정 로직 적용 후 대상 계좌만 재계산하거나 명시 SQL로 보정한다.
+- `setup_supabase.sql` 정책 구문 오류 후보를 수정하고 SQL 적용 전 문법 검증을 수행한다.
+- 수정 후 `compileall`, 전체 unittest, 배포 데이터 페이지 검증, Supabase 읽기 전용 재점검을 수행한다.
+
+## 2026-05-11 현금 스냅샷 계산 수정
+- [x] 과거 현금 스냅샷 계산에서 기준일 이후 거래가 과거 현금에 섞이던 문제 수정
+- [x] 계좌 생성일보다 과거로 backdate된 거래가 과거 현금 스냅샷에서 누락되던 문제 수정
+- [x] 회귀 테스트 2건 추가
+- [x] 로컬 SQLite 스냅샷 재검산 후 추가 보정 필요 없음 확인
+- [x] 운영 Supabase 스냅샷 재대조 후 추가 보정 필요 없음 확인
+
+### 변경 내용
+- `src/db.py`
+  - `_daily_interest_row_amount_by_date()`, `_trade_interest_amount_by_date()`, `_cash_delta_by_date()`가 `target_date=None`인 전체 기간 계산을 지원하도록 확장
+  - `_historical_cash_balance_by_date()`가 현재 현금에서 전체 원장/고아 이자 합계를 기준으로 opening cash를 잡고, `snapshot_date`뿐 아니라 실제 가장 이른 거래일/이자일도 iteration 시작점으로 사용하도록 수정
+- `tests/test_db.py`
+  - 기준일 이후 거래가 과거 스냅샷 현금을 오염시키지 않는 회귀 테스트 추가
+  - 계좌 생성 후 입력했지만 거래일이 더 과거인 backdate 거래를 과거 스냅샷 계산에 포함하는 회귀 테스트 추가
+
+### 검증 결과
+- `python3 -m compileall src/db.py tests/test_db.py` 성공
+- `python3 -m unittest tests.test_db` 성공 (`25`건)
+- `python3 -m compileall app.py src scripts tests` 성공
+- `python3 -m unittest discover -s tests -p "test_*.py"` 성공 (`110`건)
+- 로컬 SQLite 재대조 결과: `sqlite_pending_snapshot_changes=0`
+- 운영 Supabase 재대조 결과:
+  - 계좌 `23` `미래에셋증권`: historical snapshot 추가 보정 필요 없음
+  - 계좌 `24` `IRP (신한)`: historical snapshot 추가 보정 필요 없음
+
+### 비고
+- 운영 Supabase의 레거시 `cash_adjustment` 거래 로그 3건은 현재도 남아 있지만, 현재 계산 로직/스냅샷 재대조 기준으로는 별도 강제 삭제보다 보존이 안전하다고 판단해 이번 턴에는 삭제하지 않음
+- 로컬 `data/portfolio.db`는 재검산 과정에서 다시 저장되어 워크트리에 변경으로 남아 있음
+
+## 2026-05-11 보유현금 수동값 유지 배포
+- [x] 상품 매수/매도 저장이 `보유현금`을 자동으로 깎거나 더하지 않도록 수정
+- [x] 거래 페이지 안내 문구에 현금 규칙 반영
+- [x] 관련 테스트 갱신 및 전체 검증
+- [x] `main` 배포 및 운영 페이지 검증
+
+### 변경 내용
+- `src/sqlite_db.py`
+  - `record_trade()`가 `accounts.cash_balance`를 갱신하지 않고 보유 종목과 거래 로그만 반영하도록 수정
+- `src/db.py`
+  - `_supabase_record_trade()`가 Supabase 계좌 `cash_balance`를 자동 변경하지 않도록 수정
+- `app.py`
+  - 거래 페이지 캡션에 `보유현금은 거래와 연동하지 않고 직접 수정한 값만 유지` 문구 추가
+- `tests/test_db.py`
+  - 매수 저장 후 현금이 자동 음수로 바뀌지 않는 규칙으로 테스트 기대값 갱신
+
+### 검증 결과
+- `python3 -m compileall app.py src/db.py src/sqlite_db.py tests/test_db.py` 성공
+- `python3 -m unittest tests.test_db` 성공 (`25`건)
+- `python3 -m compileall app.py src scripts tests` 성공
+- `python3 -m unittest discover -s tests -p "test_*.py"` 성공 (`110`건)
+- 배포 검증:
+  - 명령: `./.venv/bin/python scripts/verify_streamlit_deployment.py --page trades --expect-backend supabase --text-output artifacts/deploy-trades.txt --screenshot artifacts/deploy-trades.png --debug-dir artifacts/deploy-trades-debug`
+  - 결과: `logged_in=true`, `workspace_visible=true`, `backend_storage=supabase`, `ok=true`
+  - 배포 페이지 본문에서 새 안내 문구 노출 확인
+
+### 배포/커밋
+- 기능 커밋: `ea2fd37` `Keep cash balance manual on trade entry`
+- 배포 방법: `git push origin main`
+
+### 메모
+- 이번 변경은 `매수/매도`와 `보유현금`의 자동 연동만 끊었고, `거래기록 수정/삭제` 기능은 아직 구현하지 않음
