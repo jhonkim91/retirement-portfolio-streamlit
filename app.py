@@ -3941,6 +3941,30 @@ def data_page(account: dict[str, Any], rollup_state: dict[str, Any] | None = Non
         else:
             st.success("현재 배포본은 Supabase를 사용 중입니다.")
 
+        # 보유 종목 정리 버튼
+        st.divider()
+        cleanup_col_1, cleanup_col_2 = st.columns([3, 1])
+        cleanup_col_1.caption(
+            "**보유 종목 정리**: 거래 기록 삭제 후 발생한 orphaned holdings를 정리합니다. "
+            "모든 계좌의 보유 종목을 거래 원장 기준으로 재계산합니다."
+        )
+        if cleanup_col_2.button("🧹 정리 실행", key="cleanup_orphaned_holdings"):
+            from src.cleanup import cleanup_orphaned_holdings  # type: ignore
+
+            with st.spinner("보유 종목을 정리 중입니다..."):
+                result = cleanup_orphaned_holdings()
+
+            if result["success"]:
+                st.success(result["message"])
+                if result["rebuilt_count"] > 0:
+                    st.info(f"대시보드를 새로고침하여 변경 사항을 확인하세요.")
+                if result["errors"]:
+                    with st.expander(f"⚠️ 오류 상세 ({len(result['errors'])}건)"):
+                        for error in result["errors"]:
+                            st.caption(f"• {error}")
+            else:
+                st.error(result["message"])
+
     with st.container(border=True):
         st.subheader("원금 누적 기록")
         st.caption("최초 입금일부터 현재까지 누적 원금과 현재 평가액 기준 수익률을 함께 봅니다.")
