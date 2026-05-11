@@ -16,6 +16,7 @@
 - [x] `config.toml` 기반 디자인 토큰 및 전역 CSS 외부 파일 구조 정리
 - [x] 보유 종목 수익률 음수 막대 모서리 방향 수정
 - [x] 선택 종목 트렌드에 `당일` intraday 구간 추가
+- [x] 선택 종목 `당일` 트렌드가 자산 배분 카드의 금일 시세와 같은 마지막 값을 사용하도록 보정
 - [ ] 다음 장중 자동 스케줄(`UTC 00:00`, `UTC 02:55`) 1회 추가 확인
 - [x] 배포 대시보드에서 자산 배분 상태 칩이 실제로 `실시간 연동 중`으로 보이는지 화면 검증
 
@@ -101,6 +102,7 @@ streamlit run app.py
 - Altair fallback 막대차트도 `cornerRadiusEnd`로 맞춰 ECharts 미사용 환경에서 같은 방향성을 유지하도록 정리
 - 선택 종목 트렌드 기간에 `당일`을 추가하고, `fetch_intraday_price_snapshot()`의 세션 타임라인을 사용해 장 시작부터 장 마감까지의 intraday 누적 손익 흐름을 그리도록 연결
 - KIS/Yahoo intraday 스냅샷 반환값에 `timeline(datetime, close)`를 추가하고, 선택 종목 데이터 보기에서 `당일`일 때 `시간` 컬럼과 `HH:MM` 축 라벨을 함께 노출하도록 정리
+- 선택 종목 `당일` 프레임 생성 시 자산 배분 카드가 쓰는 `current_price/as_of`를 마지막 포인트로 덮어써 화면 간 금일 시세 불일치를 줄이고, 타임라인이 비어도 금일 시세 1포인트를 만들도록 fallback 추가
 
 ## 최신 검증 결과
 - `python3 -m compileall app.py src scripts tests` 성공
@@ -160,6 +162,12 @@ streamlit run app.py
   - `agent-browser`로 `http://localhost:8514` 로그인 화면 렌더, 에러 오버레이 없음, 본문 텍스트 존재 확인
   - 로컬 시각 검증 산출물: `artifacts/selected-trend-local-8514-login.png`, `artifacts/selected-trend-local-8514-after-wait.png`
   - `./.venv/bin/python scripts/verify_streamlit_deployment.py --url http://localhost:8514 ...` 는 로컬 앱 프레임 감지 실패로 중단되어, 로컬 브라우저 검증은 `agent-browser` 기준으로 기록
+- 이번 턴 선택 종목 `당일` 금일 시세 정합 검증:
+  - `python3 -m compileall app.py tests/test_app_dashboard.py` 성공
+  - `python3 -m unittest tests.test_app_dashboard` 성공 (`25`건)
+  - `./.venv/bin/python -m compileall app.py src scripts tests` 성공
+  - `./.venv/bin/python -m unittest discover -s tests -p "test_*.py"` 성공 (`86`건)
+  - `build_selected_holding_trend_frame()` 테스트에서 intraday 타임라인 부재 시 `current_price/as_of` fallback으로 1포인트를 만드는 회귀 검증 추가
 
 ## Git/GitHub 상태
 - 기본 브랜치: `main`

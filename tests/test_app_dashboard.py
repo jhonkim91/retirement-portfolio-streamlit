@@ -564,6 +564,34 @@ class SelectedHoldingTrendFrameTests(unittest.TestCase):
         self.assertEqual(frame["profit_loss"].tolist(), [10.0, 50.0])
         self.assertEqual(frame["profit_rate"].tolist(), [1.0, 5.0])
 
+    def test_build_selected_holding_trend_frame_falls_back_to_allocation_current_price_for_today(self) -> None:
+        """타임라인이 비어도 자산 배분 카드가 쓰는 금일 시세로 `당일` 1포인트를 만든다."""
+
+        holding = {
+            "symbol": "005930",
+            "product_name": "삼성전자",
+            "quantity": 10,
+            "avg_cost": 100.0,
+            "current_price": 107.0,
+        }
+        snapshot = {
+            "timeline": [],
+            "current_price": 108.5,
+            "as_of": "2026-05-11T15:30:00+09:00",
+        }
+
+        original = dashboard_app.fetch_intraday_price_snapshot
+        dashboard_app.fetch_intraday_price_snapshot = lambda symbol, interval="5m": snapshot
+        try:
+            frame = dashboard_app.build_selected_holding_trend_frame([holding], period="today")
+        finally:
+            dashboard_app.fetch_intraday_price_snapshot = original
+
+        self.assertEqual(frame["date"].dt.strftime("%H:%M").tolist(), ["15:30"])
+        self.assertEqual(frame["close"].tolist(), [108.5])
+        self.assertEqual(frame["market_value"].tolist(), [1085.0])
+        self.assertEqual(frame["profit_rate"].tolist(), [8.5])
+
 
 class SelectedHoldingTrendOptionTests(unittest.TestCase):
     """선택 종목 트렌드 ECharts 옵션 구성을 검증한다."""

@@ -2123,17 +2123,42 @@ def build_selected_holding_intraday_trend_frame(holding: dict[str, Any]) -> pd.D
 
     snapshot = fetch_intraday_price_snapshot(symbol)
     timeline = snapshot.get("timeline") or []
-    if not isinstance(timeline, list) or not timeline:
-        return pd.DataFrame()
-
+    current_price = snapshot.get("current_price")
+    as_of_timestamp = pd.to_datetime(snapshot.get("as_of"), errors="coerce")
+    fallback_current_price = holding.get("current_price")
     quantity = float(holding.get("quantity") or 0)
     cost_basis = float(holding.get("avg_cost") or 0) * quantity
+    normalized_points: list[dict[str, Any]] = []
+    if isinstance(timeline, list):
+        for point in timeline:
+            point_datetime = pd.to_datetime(point.get("datetime"), errors="coerce")
+            if pd.isna(point_datetime):
+                continue
+            close_price = float(point.get("close") or 0)
+            normalized_points.append({"date": point_datetime, "close": close_price})
+
+    if current_price not in (None, "") and not pd.isna(as_of_timestamp):
+        normalized_points.append({"date": as_of_timestamp, "close": float(current_price)})
+
+    if not normalized_points:
+        fallback_timestamp = as_of_timestamp if not pd.isna(as_of_timestamp) else pd.Timestamp.now(tz=KST_TIMEZONE)
+        if fallback_current_price in (None, ""):
+            return pd.DataFrame()
+        normalized_points.append({"date": fallback_timestamp, "close": float(fallback_current_price)})
+
+    normalized_frame = (
+        pd.DataFrame(normalized_points)
+        .sort_values("date")
+        .drop_duplicates(subset=["date"], keep="last")
+        .reset_index(drop=True)
+    )
+    if normalized_frame.empty:
+        return pd.DataFrame()
+
     rows: list[dict[str, Any]] = []
-    for point in timeline:
-        point_datetime = pd.to_datetime(point.get("datetime"), errors="coerce")
-        if pd.isna(point_datetime):
-            continue
-        close_price = float(point.get("close") or 0)
+    for point in normalized_frame.itertuples(index=False):
+        point_datetime = pd.to_datetime(point.date, errors="coerce")
+        close_price = float(point.close or 0)
         market_value = close_price * quantity
         profit_loss = market_value - cost_basis
         rows.append(
