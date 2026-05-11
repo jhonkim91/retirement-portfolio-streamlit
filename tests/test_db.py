@@ -10,6 +10,7 @@ from unittest.mock import patch
 
 import requests
 
+import src.db as db_module
 from src import sqlite_db
 from src.db import (
     BACKEND_SQLITE,
@@ -22,8 +23,10 @@ from src.db import (
     _supabase_create_account,
     _supabase_record_trade,
     _supabase_replace_interest_history,
+    clear_data_cache,
     delete_account,
     is_accounts_hotfix_error,
+    mark_data_dirty,
     seed_demo_workspace,
     sync_account_rollup,
 )
@@ -198,6 +201,49 @@ class DeleteAccountTests(unittest.TestCase):
         _, kwargs = run_with_fallback_mock.call_args
         self.assertEqual(kwargs["supabase_call"].__name__, "<lambda>")
         self.assertEqual(kwargs["sqlite_call"].__name__, "<lambda>")
+
+
+class DataCacheTests(unittest.TestCase):
+    """사용자별 조회 캐시와 refresh token 무효화를 검증한다."""
+
+    def setUp(self) -> None:
+        clear_data_cache()
+        db_module._FALLBACK_STATE.pop(db_module.DATA_REFRESH_TOKEN_KEY, None)
+
+    def tearDown(self) -> None:
+        clear_data_cache()
+        db_module._FALLBACK_STATE.pop(db_module.DATA_REFRESH_TOKEN_KEY, None)
+
+    @patch("src.db._current_backend", return_value=BACKEND_SQLITE)
+    @patch("src.db.app_auth.is_demo_user", return_value=False)
+    @patch("src.db._sqlite_list_accounts", return_value=[{"id": 1, "name": "테스트 계좌"}])
+    def test_list_accounts_cache_is_scoped_by_user_and_refresh_token(
+        self,
+        list_accounts_mock,
+        _is_demo_user_mock,
+        _current_backend_mock,
+    ) -> None:
+        """같은 사용자/토큰은 재사용하고, 사용자 또는 refresh token이 바뀌면 다시 조회한다."""
+
+        with patch("src.db.app_auth.get_user_id", return_value="user-a"):
+            first = db_module.list_accounts()
+            second = db_module.list_accounts()
+
+        self.assertEqual(first, second)
+        self.assertEqual(list_accounts_mock.call_count, 1)
+
+        with patch("src.db.app_auth.get_user_id", return_value="user-b"):
+            third = db_module.list_accounts()
+
+        self.assertEqual(third, first)
+        self.assertEqual(list_accounts_mock.call_count, 2)
+
+        with patch("src.db.app_auth.get_user_id", return_value="user-a"):
+            mark_data_dirty()
+            fourth = db_module.list_accounts()
+
+        self.assertEqual(fourth, first)
+        self.assertEqual(list_accounts_mock.call_count, 3)
 
 
 class DemoWorkspaceSeedTests(unittest.TestCase):
@@ -491,6 +537,37 @@ class SyncAccountRollupTests(unittest.TestCase):
         )
         self.assertEqual(result["historical_snapshots_updated"], 3)
         self.assertTrue(result["snapshot_updated"])
+
+
+class RecordTradeInterestRemovalTests(unittest.TestCase):
+    """매수 저장 경로에서 legacy 이자 재동기화가 제거되었는지 검증한다."""
+
+    @patch("src.db.mark_data_dirty")
+    @patch("src.db._run_with_fallback")
+    @patch("src.db._sync_legacy_interest_history_for_buy")
+    def test_record_trade_no_longer_triggers_legacy_interest_sync(
+        self,
+        sync_interest_mock,
+        run_with_fallback_mock,
+        mark_data_dirty_mock,
+    ) -> None:
+        """매수 저장은 더 이상 이자 원장 재구성 훅을 호출하지 않는다."""
+
+        db_module.record_trade(
+            7,
+            symbol="AAPL",
+            product_name="Apple",
+            trade_type="buy",
+            asset_type="risk",
+            quantity=1,
+            price=1000,
+            trade_date="2026-05-11",
+            notes="테스트 매수",
+        )
+
+        sync_interest_mock.assert_not_called()
+        run_with_fallback_mock.assert_called_once()
+        mark_data_dirty_mock.assert_called_once()
 
 
 class LegacyInterestSyncTests(unittest.TestCase):

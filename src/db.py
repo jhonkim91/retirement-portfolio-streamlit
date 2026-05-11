@@ -25,6 +25,7 @@ DEFAULT_BACKEND = BACKEND_AUTO
 BACKEND_SQLITE = "sqlite"
 BACKEND_SUPABASE = "supabase"
 BACKEND_STATE_KEY = "db_backend_state"
+DATA_REFRESH_TOKEN_KEY = "data_refresh_token"
 ACCOUNT_NAMESPACE_SEPARATOR = "::"
 _FALLBACK_STATE: dict[str, Any] = {}
 BUY_SELL_TRADE_TYPES = {"buy", "sell"}
@@ -46,6 +47,11 @@ DEFAULT_ANNUAL_INTEREST_RATE = 0.05
 DEFAULT_ROLLUP_TIMEZONE = "Asia/Seoul"
 AUTO_DAILY_INTEREST_NOTE = "일별 이자 적립"
 INTEREST_AMOUNT_TOLERANCE = 0.0001
+ACCOUNTS_CACHE_TTL_SECONDS = 30
+ACCOUNT_CACHE_TTL_SECONDS = 10
+HOLDINGS_CACHE_TTL_SECONDS = 5
+TRADE_LOGS_CACHE_TTL_SECONDS = 30
+SNAPSHOTS_CACHE_TTL_SECONDS = 30
 
 
 def _state_store() -> dict[str, Any]:
@@ -53,6 +59,28 @@ def _state_store() -> dict[str, Any]:
         return st.session_state
     except Exception:
         return _FALLBACK_STATE
+
+
+def _current_data_refresh_token() -> int:
+    """현재 세션의 데이터 조회 캐시 무효화 토큰을 반환한다."""
+
+    return int(_state_store().get(DATA_REFRESH_TOKEN_KEY, 0) or 0)
+
+
+def _data_cache_scope_key(backend_name: str | None = None) -> str:
+    """전역 캐시에 사용자별 조회 범위를 분리할 키를 만든다."""
+
+    normalized_backend = str(backend_name or _current_backend() or BACKEND_SQLITE).strip().lower() or BACKEND_SQLITE
+    user_id = str(app_auth.get_user_id() or "anonymous").strip() or "anonymous"
+    session_mode = "demo" if app_auth.is_demo_user() else "user"
+    return f"{session_mode}:{user_id}:{normalized_backend}"
+
+
+def mark_data_dirty() -> None:
+    """다음 조회에서 데이터 캐시를 다시 읽도록 세션 토큰을 증가시킨다."""
+
+    store = _state_store()
+    store[DATA_REFRESH_TOKEN_KEY] = _current_data_refresh_token() + 1
 
 
 def _get_config_value(name: str, default: str = "") -> str:
@@ -1644,9 +1672,6 @@ def _supabase_update_cash_balance(account_id: int, amount: float, *, allow_negat
 
 
 def _supabase_list_holdings(account_id: int, include_closed: bool = False) -> list[dict[str, Any]]:
-    if not _supabase_get_account(account_id):
-        return []
-
     result = _supabase_request("GET", "holdings", filters={"account_id": f"eq.{account_id}"})
     holdings = result or []
     if not include_closed:
@@ -1711,8 +1736,6 @@ def _supabase_record_realtime_price_tick(
 
 
 def _supabase_list_realtime_price_ticks(account_id: int, limit: int = 200) -> list[dict[str, Any]]:
-    if not _supabase_get_account(account_id):
-        return []
     result = _supabase_request(
         "GET",
         "realtime_price_ticks",
@@ -1762,15 +1785,11 @@ def _supabase_upsert_realtime_worker_status(
 
 
 def _supabase_get_realtime_worker_status(account_id: int) -> dict[str, Any] | None:
-    if not _supabase_get_account(account_id):
-        return None
     rows = _supabase_request("GET", "realtime_worker_status", filters={"account_id": f"eq.{account_id}"}) or []
     return rows[0] if rows else None
 
 
 def _supabase_latest_realtime_quote_time(account_id: int) -> str:
-    if not _supabase_get_account(account_id):
-        return ""
     rows = _supabase_request(
         "GET",
         "realtime_price_ticks",
@@ -1797,24 +1816,18 @@ def _supabase_latest_realtime_quote_time(account_id: int) -> str:
 
 
 def _supabase_list_trade_logs(account_id: int) -> list[dict[str, Any]]:
-    if not _supabase_get_account(account_id):
-        return []
     result = _supabase_request("GET", "trade_logs", filters={"account_id": f"eq.{account_id}"})
     logs = result or []
     return sorted(logs, key=lambda row: (row.get("trade_date", ""), row.get("id", 0)), reverse=True)
 
 
 def _supabase_list_daily_interest(account_id: int) -> list[dict[str, Any]]:
-    if not _supabase_get_account(account_id):
-        return []
     result = _supabase_request("GET", "daily_interest", filters={"account_id": f"eq.{account_id}"})
     rows = result or []
     return sorted(rows, key=lambda row: (row.get("date", ""), row.get("id", 0)))
 
 
 def _supabase_list_account_snapshots(account_id: int, start_date: str | None = None) -> list[dict[str, Any]]:
-    if not _supabase_get_account(account_id):
-        return []
     filters: dict[str, str | int] = {"account_id": f"eq.{account_id}"}
     if start_date:
         filters["snapshot_date"] = f"gte.{start_date}"
@@ -2402,6 +2415,146 @@ def _sqlite_export_dataframe_rows(table_name: str) -> list[dict[str, Any]]:
     return sorted(filtered, key=lambda row: row.get("id", 0))
 
 
+def _read_accounts_once(backend_name: str) -> list[dict[str, Any]]:
+    """현재 백엔드 기준 계좌 목록을 한 번 조회한다."""
+
+    if backend_name == BACKEND_SQLITE:
+        return _sqlite_list_accounts()
+
+    try:
+        return _supabase_list_accounts()
+    except Exception as exc:
+        if _should_fallback(exc):
+            return _sqlite_list_accounts()
+        raise
+
+
+def _read_account_once(backend_name: str, account_id: int) -> dict[str, Any] | None:
+    """현재 백엔드 기준 단일 계좌를 한 번 조회한다."""
+
+    if backend_name == BACKEND_SQLITE:
+        return _sqlite_get_account(account_id)
+
+    try:
+        return _supabase_get_account(account_id)
+    except Exception as exc:
+        if _should_fallback(exc):
+            return _sqlite_get_account(account_id)
+        raise
+
+
+def _read_holdings_once(backend_name: str, account_id: int, include_closed: bool) -> list[dict[str, Any]]:
+    """현재 백엔드 기준 보유 종목 목록을 한 번 조회한다."""
+
+    if backend_name == BACKEND_SQLITE:
+        return _sqlite_list_holdings(account_id, include_closed)
+
+    try:
+        return _supabase_list_holdings(account_id, include_closed)
+    except Exception as exc:
+        if _should_fallback(exc):
+            return _sqlite_list_holdings(account_id, include_closed)
+        raise
+
+
+def _read_trade_logs_once(backend_name: str, account_id: int) -> list[dict[str, Any]]:
+    """현재 백엔드 기준 거래 원장을 한 번 조회한다."""
+
+    if backend_name == BACKEND_SQLITE:
+        return _sqlite_list_trade_logs(account_id)
+
+    try:
+        return _supabase_list_trade_logs(account_id)
+    except Exception as exc:
+        if _should_fallback(exc):
+            return _sqlite_list_trade_logs(account_id)
+        raise
+
+
+def _read_account_snapshots_once(backend_name: str, account_id: int, start_date: str | None) -> list[dict[str, Any]]:
+    """현재 백엔드 기준 일별 스냅샷을 한 번 조회한다."""
+
+    if backend_name == BACKEND_SQLITE:
+        return _sqlite_list_account_snapshots(account_id, start_date)
+
+    try:
+        return _supabase_list_account_snapshots(account_id, start_date)
+    except Exception as exc:
+        if _should_fallback(exc):
+            return _sqlite_list_account_snapshots(account_id, start_date)
+        raise
+
+
+@st.cache_data(ttl=ACCOUNTS_CACHE_TTL_SECONDS, max_entries=200, show_spinner=False)
+def _cached_list_accounts(scope_key: str, backend_name: str, refresh_token: int) -> list[dict[str, Any]]:
+    """사용자/세션 범위의 계좌 목록 조회를 캐시한다."""
+
+    return _read_accounts_once(backend_name)
+
+
+@st.cache_data(ttl=ACCOUNT_CACHE_TTL_SECONDS, max_entries=300, show_spinner=False)
+def _cached_get_account(
+    scope_key: str,
+    backend_name: str,
+    account_id: int,
+    refresh_token: int,
+) -> dict[str, Any] | None:
+    """사용자/세션 범위의 단일 계좌 조회를 캐시한다."""
+
+    return _read_account_once(backend_name, account_id)
+
+
+@st.cache_data(ttl=HOLDINGS_CACHE_TTL_SECONDS, max_entries=400, show_spinner=False)
+def _cached_list_holdings(
+    scope_key: str,
+    backend_name: str,
+    account_id: int,
+    include_closed: bool,
+    refresh_token: int,
+) -> list[dict[str, Any]]:
+    """사용자/세션 범위의 보유 종목 조회를 짧게 캐시한다."""
+
+    return _read_holdings_once(backend_name, account_id, include_closed)
+
+
+@st.cache_data(ttl=TRADE_LOGS_CACHE_TTL_SECONDS, max_entries=400, show_spinner=False)
+def _cached_list_trade_logs(
+    scope_key: str,
+    backend_name: str,
+    account_id: int,
+    refresh_token: int,
+) -> list[dict[str, Any]]:
+    """사용자/세션 범위의 거래 원장 조회를 캐시한다."""
+
+    return _read_trade_logs_once(backend_name, account_id)
+
+
+@st.cache_data(ttl=SNAPSHOTS_CACHE_TTL_SECONDS, max_entries=400, show_spinner=False)
+def _cached_list_account_snapshots(
+    scope_key: str,
+    backend_name: str,
+    account_id: int,
+    start_date: str | None,
+    refresh_token: int,
+) -> list[dict[str, Any]]:
+    """사용자/세션 범위의 일별 스냅샷 조회를 캐시한다."""
+
+    return _read_account_snapshots_once(backend_name, account_id, start_date)
+
+
+def clear_data_cache() -> None:
+    """DB 조회 캐시를 모두 비운다."""
+
+    for cache_function in (
+        _cached_list_accounts,
+        _cached_get_account,
+        _cached_list_holdings,
+        _cached_list_trade_logs,
+        _cached_list_account_snapshots,
+    ):
+        getattr(cache_function, "clear", lambda: None)()
+
+
 def _sqlite_record_trade(
     account_id: int,
     *,
@@ -2605,24 +2758,31 @@ def initialize_database() -> None:
 
 
 def list_accounts() -> list[dict[str, Any]]:
-    return _run_with_fallback(
-        supabase_call=_supabase_list_accounts,
-        sqlite_call=_sqlite_list_accounts,
+    backend_name = _current_backend()
+    return _cached_list_accounts(
+        _data_cache_scope_key(backend_name),
+        backend_name,
+        _current_data_refresh_token(),
     )
 
 
 def get_account(account_id: int) -> dict[str, Any] | None:
-    return _run_with_fallback(
-        supabase_call=lambda: _supabase_get_account(account_id),
-        sqlite_call=lambda: _sqlite_get_account(account_id),
+    backend_name = _current_backend()
+    return _cached_get_account(
+        _data_cache_scope_key(backend_name),
+        backend_name,
+        int(account_id),
+        _current_data_refresh_token(),
     )
 
 
 def create_account(name: str, account_type: str = "retirement", opening_cash: float = 0) -> int:
-    return _run_with_fallback(
+    account_id = _run_with_fallback(
         supabase_call=lambda: _supabase_create_account(name, account_type, opening_cash),
         sqlite_call=lambda: _sqlite_create_account(name, account_type, opening_cash),
     )
+    mark_data_dirty()
+    return int(account_id)
 
 
 def delete_account(account_id: int) -> None:
@@ -2632,6 +2792,7 @@ def delete_account(account_id: int) -> None:
         supabase_call=lambda: _supabase_delete_account(account_id),
         sqlite_call=lambda: _sqlite_delete_account(account_id),
     )
+    mark_data_dirty()
 
 
 def update_cash_balance(account_id: int, amount: float) -> None:
@@ -2639,12 +2800,17 @@ def update_cash_balance(account_id: int, amount: float) -> None:
         supabase_call=lambda: _supabase_update_cash_balance(account_id, amount),
         sqlite_call=lambda: _sqlite_update_cash_balance(account_id, amount),
     )
+    mark_data_dirty()
 
 
 def list_holdings(account_id: int, include_closed: bool = False) -> list[dict[str, Any]]:
-    return _run_with_fallback(
-        supabase_call=lambda: _supabase_list_holdings(account_id, include_closed),
-        sqlite_call=lambda: _sqlite_list_holdings(account_id, include_closed),
+    backend_name = _current_backend()
+    return _cached_list_holdings(
+        _data_cache_scope_key(backend_name),
+        backend_name,
+        int(account_id),
+        bool(include_closed),
+        _current_data_refresh_token(),
     )
 
 
@@ -2653,6 +2819,7 @@ def set_holding_price(holding_id: int, current_price: float, as_of: str | None =
         supabase_call=lambda: _supabase_set_holding_price(holding_id, current_price, as_of),
         sqlite_call=lambda: _sqlite_set_holding_price(holding_id, current_price, as_of),
     )
+    mark_data_dirty()
 
 
 def record_realtime_price_tick(
@@ -2696,6 +2863,7 @@ def record_realtime_price_tick(
             metadata_json=metadata_json,
         ),
     )
+    mark_data_dirty()
 
 
 def list_realtime_price_ticks(account_id: int, *, limit: int = 200) -> list[dict[str, Any]]:
@@ -2741,6 +2909,7 @@ def upsert_realtime_worker_status(
             metadata_json=metadata_json,
         ),
     )
+    mark_data_dirty()
 
 
 def get_realtime_worker_status(account_id: int) -> dict[str, Any] | None:
@@ -2772,9 +2941,12 @@ def latest_realtime_quote_time(account_id: int) -> str:
 
 
 def list_trade_logs(account_id: int) -> list[dict[str, Any]]:
-    return _run_with_fallback(
-        supabase_call=lambda: _supabase_list_trade_logs(account_id),
-        sqlite_call=lambda: _sqlite_list_trade_logs(account_id),
+    backend_name = _current_backend()
+    return _cached_list_trade_logs(
+        _data_cache_scope_key(backend_name),
+        backend_name,
+        int(account_id),
+        _current_data_refresh_token(),
     )
 
 
@@ -2795,15 +2967,14 @@ def list_daily_interest(account_id: int) -> list[dict[str, Any]]:
 def list_account_snapshots(account_id: int, start_date: str | None = None) -> list[dict[str, Any]]:
     """계좌의 일별 스냅샷을 조회한다."""
 
-    if _current_backend() == BACKEND_SQLITE:
-        return _sqlite_list_account_snapshots(account_id, start_date)
-
-    try:
-        return _supabase_list_account_snapshots(account_id, start_date)
-    except Exception as exc:
-        if _should_fallback(exc):
-            return []
-        raise
+    backend_name = _current_backend()
+    return _cached_list_account_snapshots(
+        _data_cache_scope_key(backend_name),
+        backend_name,
+        int(account_id),
+        str(start_date).strip() if start_date not in (None, "") else None,
+        _current_data_refresh_token(),
+    )
 
 
 def export_dataframe_rows(table_name: str) -> list[dict[str, Any]]:
@@ -2825,8 +2996,6 @@ def record_trade(
     trade_date: str,
     notes: str = "",
 ) -> None:
-    _sync_legacy_interest_history_for_buy(account_id, trade_type=trade_type)
-
     _run_with_fallback(
         supabase_call=lambda: _supabase_record_trade(
             account_id,
@@ -2851,6 +3020,7 @@ def record_trade(
             notes=notes,
         ),
     )
+    mark_data_dirty()
 
 
 def record_cash_flow(
@@ -2877,6 +3047,7 @@ def record_cash_flow(
             notes=notes,
         ),
     )
+    mark_data_dirty()
 
 
 def adjust_cash_balance(
@@ -2902,6 +3073,7 @@ def adjust_cash_balance(
             notes=notes,
         ),
     )
+    mark_data_dirty()
 
 
 def record_daily_interest(account_id: int, *, interest_date: str, amount: float) -> None:
@@ -3002,6 +3174,7 @@ def record_account_snapshot(
             total_cost=total_cost,
         ),
     )
+    mark_data_dirty()
 
 
 def sync_account_rollup(
@@ -3116,3 +3289,4 @@ def record_account_transfer(
             notes=notes,
         ),
     )
+    mark_data_dirty()

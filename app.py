@@ -208,7 +208,6 @@ get_account = _db.get_account
 initialize_database = _db.initialize_database
 list_accounts = _db.list_accounts
 list_account_snapshots = _db.list_account_snapshots
-list_daily_interest = _db.list_daily_interest
 list_holdings = _db.list_holdings
 latest_realtime_quote_time = _db.latest_realtime_quote_time
 list_trade_logs = _db.list_trade_logs
@@ -3024,8 +3023,7 @@ def sidebar(accounts: list[dict[str, Any]], selected_account_id: int | None, use
 def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]], rollup_state: dict[str, Any] | None = None) -> None:
     frame = holdings_frame(holdings)
     trade_logs = list_trade_logs(int(account["id"]))
-    interest_rows = list_daily_interest(int(account["id"]))
-    summary = account_summary(account, holdings, trade_logs=trade_logs, interest_rows=interest_rows)
+    summary = account_summary(account, holdings, trade_logs=trade_logs)
     display_cash = float(summary["cash"] or 0)
     display_total_value = float(summary["total_value"] or 0)
     display_principal_profit_loss = float(summary["principal_profit_loss"] or 0)
@@ -3510,17 +3508,15 @@ def data_page(account: dict[str, Any], rollup_state: dict[str, Any] | None = Non
     holdings = list_holdings(account_id)
     worker_status = get_realtime_worker_status(account_id) or {}
     trade_logs = list_trade_logs(account_id)
-    interest_rows = list_daily_interest(account_id)
     snapshot_rows = list_account_snapshots(account_id)
     last_quote_at = latest_realtime_quote_time(account_id)
     snapshot_date = str((rollup_state or {}).get("snapshot_date") or date.today().isoformat()).strip()
-    summary = account_summary(account, holdings, trade_logs=trade_logs, interest_rows=interest_rows)
+    summary = account_summary(account, holdings, trade_logs=trade_logs)
     cash_adjustment_logs = [
         row for row in trade_logs if str(row.get("trade_type") or "").strip().lower() == "cash_adjustment"
     ]
     cumulative_frame = cumulative_contribution_frame(
         trade_logs=trade_logs,
-        interest_rows=interest_rows,
         snapshots=snapshot_rows,
         current_total_value=float(summary["total_value"] or 0),
         current_market_value=float(summary["market_value"] or 0),
@@ -3597,7 +3593,7 @@ def data_page(account: dict[str, Any], rollup_state: dict[str, Any] | None = Non
     with st.container(border=True):
         st.subheader("원금 누적 기록")
         st.caption("최초 입금일부터 현재까지 누적 원금과 현재 평가액 기준 수익률을 함께 봅니다.")
-        st.caption("현금 수정과 계좌 이체는 원금이 아닌 순유입 조정으로 반영합니다. 새 현금 이자는 자동 적립하지 않지만, 기존 일별 이자 이력은 현재 현금 계산에 계속 반영됩니다.")
+        st.caption("현금 수정과 계좌 이체는 원금이 아닌 순유입 조정으로 반영합니다.")
         st.caption("연금(IRP/퇴직연금) 계좌는 회사 납입금을 투자원금에 포함하고, 현재 수익률은 현재 평가액을 기준으로 계산합니다.")
         if cumulative_frame.empty:
             st.info("누적 원금 기록을 만들 현금 흐름 데이터가 아직 없습니다.")
