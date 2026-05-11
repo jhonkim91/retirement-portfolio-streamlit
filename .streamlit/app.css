@@ -38,8 +38,8 @@
     --chart-line: ${chart_line_color};
     --chart-tooltip-bg: ${chart_tooltip_bg_color};
     --chart-tooltip-text: ${chart_tooltip_text_color};
-    --panel-radius: 20px;
-    --panel-padding: 1.05rem 1.1rem 1.15rem;
+    --panel-radius: 8px;
+    --panel-padding: 1rem 1rem 1.05rem;
     --section-gap: 1rem;
     --chart-gap: 0.85rem;
 }
@@ -68,18 +68,13 @@ h6 {
 
 .stApp {
     background:
-        radial-gradient(circle at top left, rgba(228, 239, 232, 0.8), transparent 24rem),
-        linear-gradient(
-            180deg,
-            var(--theme-bg) 0%,
-            var(--panel-alt) 48%,
-            color-mix(in srgb, var(--theme-bg) 82%, white) 100%
-        );
+        radial-gradient(circle at top left, rgba(142, 202, 230, 0.16), transparent 22rem),
+        linear-gradient(180deg, var(--theme-bg) 0%, var(--panel-alt) 100%);
     color: var(--ink-strong);
 }
 
 .block-container {
-    padding-top: 1.35rem;
+    padding-top: 1rem;
     padding-bottom: 3rem;
     max-width: 1580px;
 }
@@ -91,14 +86,15 @@ h6 {
 
 /* Streamlit 기본 컴포넌트 브리지 */
 [data-testid="stSidebar"] {
-    background: linear-gradient(180deg, color-mix(in srgb, var(--theme-secondary-bg) 82%, white) 0%, var(--theme-secondary-bg) 100%);
+    background: linear-gradient(180deg, #ffffff 0%, var(--theme-secondary-bg) 100%);
     border-right: 1px solid var(--line-soft);
 }
 
 [data-testid="stVerticalBlockBorderWrapper"] {
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(250, 252, 251, 0.96));
+    background: #ffffff;
     border: 1px solid var(--line-soft);
-    box-shadow: 0 16px 38px var(--card-shadow);
+    border-radius: var(--panel-radius);
+    box-shadow: 0 4px 14px var(--card-shadow);
 }
 
 [data-testid="stSidebar"] [data-testid="stVerticalBlock"] > div:has(> [data-testid="stMarkdownContainer"]) {
@@ -108,9 +104,9 @@ h6 {
 [data-testid="stMetric"] {
     background: var(--surface-strong);
     border: 1px solid var(--line-soft);
-    border-radius: 18px;
+    border-radius: var(--panel-radius);
     padding: 0.95rem 1rem;
-    box-shadow: 0 12px 30px rgba(21, 40, 31, 0.05);
+    box-shadow: 0 4px 14px var(--card-shadow);
 }
 
 [data-testid="stMetricLabel"] {
@@ -124,16 +120,18 @@ h6 {
 
 [data-testid="stButton"] > button,
 [data-testid="stDownloadButton"] > button {
-    border-radius: 999px;
+    border-radius: 6px;
     border: 1px solid var(--border-emphasis);
-    background: rgba(255, 255, 255, 0.96);
+    background: rgba(255, 255, 255, 0.98);
     color: var(--brand-deep);
+    box-shadow: none;
 }
 
 [data-testid="stButton"] > button:hover,
 [data-testid="stDownloadButton"] > button:hover {
     border-color: color-mix(in srgb, var(--theme-primary) 55%, var(--theme-text));
     color: var(--brand-deep);
+    background: #ffffff;
 }
 
 [data-testid="stForm"] {
@@ -163,7 +161,9 @@ h6 {
 
 /* 인증 화면 */
 .stApp:has(.auth-page-shell) {
-    background: linear-gradient(180deg, var(--auth-bg-start) 0%, var(--auth-bg-end) 100%);
+    background:
+        radial-gradient(circle at top, rgba(142, 202, 230, 0.12), transparent 18rem),
+        linear-gradient(180deg, var(--auth-bg-start) 0%, var(--auth-bg-end) 100%);
 }
 
 .stApp:has(.auth-page-shell) [data-testid="stHeader"] {
@@ -171,9 +171,11 @@ h6 {
 }
 
 .block-container:has(.auth-page-shell) {
+    display: grid;
+    place-items: center;
+    min-height: 100vh;
     max-width: 100%;
-    padding-top: min(11vh, 6rem);
-    padding-bottom: min(8vh, 4rem);
+    padding: 1.5rem;
 }
 
 .auth-page-shell {
@@ -431,19 +433,19 @@ h6 {
 .st-key-auth-panel-login,
 .st-key-auth-panel-sign-up,
 .st-key-auth-demo-panel {
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(250, 251, 250, 0.94));
-    border-radius: 22px;
-    box-shadow: 0 16px 44px var(--card-shadow);
+    background: #ffffff;
+    border-radius: var(--panel-radius);
+    box-shadow: 0 4px 14px var(--card-shadow);
 }
 
 .st-key-auth-card-shell {
-    max-width: 500px;
+    max-width: 420px;
     margin: 0 auto;
-    padding: 2.05rem 2rem 1.75rem;
-    border-radius: 18px;
-    background: rgba(255, 255, 255, 0.98);
+    padding: 2rem;
+    border-radius: var(--panel-radius);
+    background: #ffffff;
     border: 1px solid var(--line-soft);
-    box-shadow: 0 28px 70px rgba(17, 87, 78, 0.22);
+    box-shadow: 0 4px 14px var(--card-shadow);
 }
 
 .st-key-auth-pending-panel {
@@ -460,9 +462,9 @@ h6 {
 }
 
 .st-key-auth-card-shell [data-testid="stTextInput"] [data-baseweb="input"] {
-    border-radius: 10px;
-    border: 1px solid var(--line-soft);
-    background: color-mix(in srgb, var(--theme-secondary-bg) 55%, white);
+    border-radius: 6px;
+    border: 1px solid var(--border-emphasis);
+    background: #ffffff;
     overflow: hidden;
     box-shadow: none;
 }
@@ -470,9 +472,15 @@ h6 {
 .st-key-auth-card-shell [data-testid="stTextInput"] input,
 .st-key-auth-card-shell [data-testid="stTextInput"] [data-baseweb="input"] button {
     min-height: 2.85rem;
-    background: color-mix(in srgb, var(--theme-secondary-bg) 55%, white);
+    background: #ffffff;
     color: var(--brand-deep);
     box-shadow: none;
+}
+
+.st-key-auth-card-shell [data-testid="stTextInput"] [data-baseweb="input"]:focus-within {
+    border-color: var(--brand-accent);
+    outline: 2px solid #8ecae6;
+    outline-offset: 0;
 }
 
 .st-key-auth-card-shell [data-testid="stTextInput"] input {
@@ -487,7 +495,7 @@ h6 {
 .st-key-auth-card-shell [data-testid="stTextInput"] [data-baseweb="input"] button:hover,
 .st-key-auth-card-shell [data-testid="stTextInput"] [data-baseweb="input"] button:focus,
 .st-key-auth-card-shell [data-testid="stTextInput"] [data-baseweb="input"] button:focus-visible {
-    background: color-mix(in srgb, var(--theme-secondary-bg) 68%, white);
+    background: #f8fafc;
     color: var(--brand-deep);
     box-shadow: none;
     outline: none;
@@ -500,7 +508,7 @@ h6 {
 .st-key-auth-card-shell [data-testid="stFormSubmitButton"] > button,
 .st-key-auth-demo-primary-action [data-testid="stButton"] > button {
     min-height: 2.95rem;
-    border-radius: 8px;
+    border-radius: 6px;
     border: none;
     background: var(--brand-accent);
     color: #ffffff;
@@ -533,7 +541,7 @@ h6 {
 .st-key-auth-panel-login [data-testid="stTextInput"] input,
 .st-key-auth-panel-sign-up [data-testid="stTextInput"] input {
     min-height: 2.9rem;
-    border-radius: 14px;
+    border-radius: 6px;
 }
 
 .st-key-auth-panel-login [data-testid="stButton"] > button,
@@ -592,6 +600,27 @@ h6 {
     margin: 0;
 }
 
+.dashboard-reference-time {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 0.45rem;
+    margin: 0.1rem 0 0.9rem;
+    color: var(--text-muted);
+    font-size: 0.82rem;
+    line-height: 1.2;
+}
+
+.dashboard-reference-time__label {
+    font-weight: 700;
+    color: var(--mid-text);
+}
+
+.dashboard-reference-time__value {
+    font-weight: 600;
+    color: var(--brand-deep);
+}
+
 .dashboard-load-status,
 .dashboard-load-palette {
     display: inline-flex;
@@ -599,7 +628,7 @@ h6 {
     min-height: 30px;
     border-radius: 999px;
     border: 1px solid var(--line-soft);
-    background: rgba(255, 255, 255, 0.74);
+    background: rgba(255, 255, 255, 0.96);
     box-sizing: border-box;
 }
 
@@ -661,8 +690,47 @@ h6 {
     flex: 1;
 }
 
-.st-key-dashboard-panel-allocation {
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(244, 248, 247, 0.98));
+.st-key-dashboard-panel-allocation,
+.st-key-dashboard-panel-selected-trend,
+.st-key-dashboard-panel-holdings {
+    background: #ffffff;
+    overflow: hidden;
+}
+
+.st-key-dashboard-summary-strip,
+.st-key-dashboard-secondary-grid {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+}
+
+.st-key-dashboard-panel-allocation [data-testid="stVerticalBlock"],
+.st-key-dashboard-panel-selected-trend [data-testid="stVerticalBlock"],
+.st-key-dashboard-panel-holdings [data-testid="stVerticalBlock"],
+.st-key-dashboard-panel-holdings-table [data-testid="stVerticalBlock"] {
+    gap: 0.68rem;
+}
+
+.st-key-dashboard-panel-allocation .dashboard-section-header,
+.st-key-dashboard-panel-selected-trend .dashboard-section-header,
+.st-key-dashboard-panel-holdings .dashboard-section-header,
+.st-key-dashboard-panel-holdings-table .dashboard-section-header {
+    margin-bottom: 0.72rem;
+}
+
+.st-key-dashboard-panel-allocation [data-testid="stElementContainer"],
+.st-key-dashboard-panel-selected-trend [data-testid="stElementContainer"],
+.st-key-dashboard-panel-holdings [data-testid="stElementContainer"],
+.st-key-dashboard-panel-holdings-table [data-testid="stElementContainer"] {
+    margin-bottom: 0 !important;
+}
+
+.st-key-dashboard-panel-allocation iframe,
+.st-key-dashboard-panel-selected-trend iframe,
+.st-key-dashboard-panel-holdings iframe {
+    display: block;
+    width: 100% !important;
+    border: none !important;
 }
 
 @keyframes dashboard-live-blink {
@@ -751,7 +819,7 @@ h6 {
     border-radius: 999px;
     background: var(--chart-accent);
     border: 2px solid rgba(255, 255, 255, 0.92);
-    box-shadow: 0 10px 20px rgba(17, 87, 78, 0.22);
+    box-shadow: 0 4px 14px var(--card-shadow);
 }
 
 .dashboard-treemap-legend__marker::after {
@@ -777,7 +845,7 @@ h6 {
     padding: 0.28rem 0.62rem;
     font-size: 0.74rem;
     font-weight: 700;
-    box-shadow: 0 10px 24px rgba(17, 87, 78, 0.22);
+    box-shadow: 0 4px 14px var(--card-shadow);
 }
 
 .dashboard-metric-strip {
@@ -788,11 +856,11 @@ h6 {
 }
 
 .dashboard-metric-card {
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 251, 250, 0.98));
+    background: #ffffff;
     border: 1px solid var(--border-emphasis);
-    border-radius: 16px;
+    border-radius: var(--panel-radius);
     padding: 1.05rem 1.1rem 1rem;
-    box-shadow: 0 12px 30px rgba(21, 40, 31, 0.04);
+    box-shadow: 0 4px 14px var(--card-shadow);
     min-height: 9rem;
     display: flex;
     flex-direction: column;
@@ -846,7 +914,17 @@ h6 {
 
 .dashboard-metric-card__value--accent,
 .dashboard-summary-card__value--accent {
+    color: var(--brand-accent);
+}
+
+.dashboard-metric-card__value--positive,
+.dashboard-summary-card__value--positive {
     color: var(--chart-up);
+}
+
+.dashboard-metric-card__value--negative,
+.dashboard-summary-card__value--negative {
+    color: var(--chart-down);
 }
 
 .dashboard-metric-card__note {
@@ -893,19 +971,42 @@ h6 {
     display: flex;
     flex-direction: column;
     justify-content: space-between;
-    min-height: 5.7rem;
+    min-height: 5.1rem;
+    background: #ffffff;
+    border-radius: 0.85rem;
 }
 
 .st-key-dashboard-card-principal .dashboard-summary-card__field,
 .st-key-dashboard-card-profit .dashboard-summary-card__field,
 .st-key-dashboard-card-profit-rate .dashboard-summary-card__field {
-    min-height: 6.7rem;
-    justify-content: flex-start;
-    gap: 1.6rem;
+    min-height: 5.1rem;
+    justify-content: space-between;
+    gap: 0;
 }
 
 .dashboard-summary-card__field--actionable {
     border-radius: 0.85rem;
+}
+
+.st-key-dashboard-card-principal,
+.st-key-dashboard-card-cash,
+.st-key-dashboard-card-total-value,
+.st-key-dashboard-card-profit,
+.st-key-dashboard-card-profit-rate,
+.st-key-dashboard-panel-holdings,
+.st-key-dashboard-panel-holdings-table {
+    background: #ffffff;
+}
+
+.st-key-dashboard-panel-holdings-table [data-testid="stDataFrame"],
+.st-key-dashboard-panel-holdings-table [data-testid="stDataFrame"] > div,
+.st-key-dashboard-panel-holdings-table [data-testid="stElementContainer"]:has([data-testid="stDataFrame"]) {
+    background: #ffffff;
+    border-radius: var(--panel-radius);
+}
+
+.st-key-dashboard-panel-holdings-table canvas {
+    background: #ffffff;
 }
 
 .st-key-dashboard-card-cash,
@@ -938,7 +1039,7 @@ h6 {
 .st-key-dashboard-total-value-refresh-overlay button {
     min-height: 0;
     padding: 0.28rem 0.78rem;
-    border-radius: 999px;
+    border-radius: 6px;
     box-shadow: none;
     font-size: 0.82rem;
     line-height: 1.1;
@@ -971,14 +1072,30 @@ h6 {
     font-weight: 700;
 }
 
+.dashboard-inline-control-label {
+    min-height: 2.75rem;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    color: var(--mid-text);
+    font-size: 0.84rem;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
 .st-key-dashboard-trend-controls [data-testid="stButton"] > button {
     min-height: 2.75rem;
     white-space: nowrap;
     font-weight: 700;
+    border-radius: 0.85rem;
+    border: 1px solid var(--border-emphasis);
+    background: #ffffff;
+    color: var(--brand-deep);
+    box-shadow: none;
 }
 
 .st-key-dashboard-trend-controls [data-testid="stSegmentedControl"] {
-    padding-top: 0.1rem;
+    padding-top: 0;
 }
 
 .st-key-dashboard-trend-controls [data-testid="stSegmentedControl"] [role="radiogroup"] {
@@ -988,6 +1105,16 @@ h6 {
 
 .st-key-dashboard-trend-controls [data-testid="stSegmentedControl"] label p {
     white-space: nowrap;
+}
+
+.st-key-dashboard-trend-controls [data-testid="stButton"] > button:hover,
+.st-key-dashboard-trend-controls [data-testid="stButton"] > button:focus,
+.st-key-dashboard-trend-controls [data-testid="stButton"] > button:focus-visible {
+    border-color: color-mix(in srgb, var(--theme-primary) 56%, var(--theme-text));
+    background: #ffffff;
+    color: var(--brand-deep);
+    outline: none;
+    box-shadow: none;
 }
 
 .st-key-trade-panel-transfer [data-testid="stButton"] > button,
@@ -1027,6 +1154,59 @@ h6 {
     line-height: 1.5;
 }
 
+.st-key-trade-log-table [data-testid="stCaptionContainer"] p {
+    color: var(--brand-deep);
+    font-weight: 800;
+}
+
+.st-key-trade-log-inline-editor-shell {
+    margin: 0.45rem 0 0.2rem;
+    padding: 0.55rem 0.6rem 0.15rem;
+    border-radius: 8px;
+    border: 1px solid var(--line-soft);
+    background: #f8fafc;
+}
+
+.st-key-trade-log-inline-editor-shell [data-testid="stForm"] {
+    background: transparent;
+}
+
+.st-key-trade-log-inline-editor-shell [data-testid="stTextInput"] input,
+.st-key-trade-log-inline-editor-shell [data-testid="stNumberInput"] input,
+.st-key-trade-log-inline-editor-shell [data-baseweb="select"] > div,
+.st-key-trade-log-inline-editor-shell [data-testid="stDateInput"] [data-baseweb="input"] {
+    min-height: 2.6rem;
+    border-radius: 6px;
+    border: 1px solid var(--border-emphasis);
+    background: #ffffff;
+    color: var(--brand-deep);
+    box-shadow: none;
+}
+
+.st-key-trade-log-inline-editor-shell [data-testid="stTextInput"] input::placeholder {
+    color: var(--text-muted);
+}
+
+.st-key-trade-log-inline-editor-shell [data-baseweb="select"] > div:focus-within,
+.st-key-trade-log-inline-editor-shell [data-testid="stDateInput"] [data-baseweb="input"]:focus-within {
+    border-color: var(--brand-accent);
+    outline: 2px solid #8ecae6;
+    outline-offset: 0;
+}
+
+.st-key-trade-log-inline-editor-shell [data-testid="stButton"] > button,
+.st-key-trade-log-inline-editor-shell [data-testid="stFormSubmitButton"] > button {
+    min-height: 2.6rem;
+    border-radius: 6px;
+    font-weight: 800;
+}
+
+.st-key-trade-log-inline-editor-shell [data-testid="stFormSubmitButton"] > button[kind="primary"] {
+    background: var(--brand-accent);
+    color: #ffffff;
+    border-color: var(--brand-accent);
+}
+
 /* 반응형 */
 @media (max-width: 860px) {
     .block-container:has(.auth-page-shell) {
@@ -1052,6 +1232,56 @@ h6 {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
+    .dashboard-reference-time {
+        justify-content: flex-start;
+        font-size: 0.74rem;
+    }
+
+    .st-key-dashboard-summary-strip [data-testid="stHorizontalBlock"],
+    .st-key-dashboard-secondary-grid [data-testid="stHorizontalBlock"] {
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        overflow-y: visible;
+        gap: 0.55rem;
+        padding-bottom: 0.3rem;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: thin;
+    }
+
+    .st-key-dashboard-summary-strip [data-testid="column"],
+    .st-key-dashboard-secondary-grid [data-testid="column"] {
+        width: 0 !important;
+        min-width: 0 !important;
+        flex: 1 1 0 !important;
+    }
+
+    .st-key-dashboard-summary-strip .dashboard-summary-card__label,
+    .st-key-dashboard-secondary-grid .dashboard-section-header__caption,
+    .st-key-dashboard-secondary-grid .dashboard-inline-control-label {
+        font-size: 0.74rem;
+    }
+
+    .st-key-dashboard-summary-strip .dashboard-summary-card__value {
+        font-size: clamp(0.94rem, 2.25vw, 1.22rem);
+        min-height: 1.8rem;
+    }
+
+    .st-key-dashboard-summary-strip .dashboard-summary-card__action,
+    .st-key-dashboard-summary-strip .st-key-dashboard-cash-card-overlay button,
+    .st-key-dashboard-summary-strip .st-key-dashboard-total-value-refresh-overlay button {
+        padding: 0.22rem 0.48rem;
+        font-size: 0.72rem;
+    }
+
+    .st-key-dashboard-secondary-grid .dashboard-section-header__title {
+        font-size: 1rem;
+    }
+
+    .st-key-dashboard-trend-controls [data-testid="stSegmentedControl"] label p,
+    .st-key-dashboard-trend-controls [data-testid="stButton"] > button {
+        font-size: 0.72rem;
+    }
+
     .dashboard-treemap-legend__range {
         width: min(300px, 48vw);
     }
@@ -1068,6 +1298,11 @@ h6 {
 
     .dashboard-metric-strip {
         grid-template-columns: 1fr;
+    }
+
+    .st-key-dashboard-summary-strip [data-testid="stHorizontalBlock"],
+    .st-key-dashboard-secondary-grid [data-testid="stHorizontalBlock"] {
+        gap: 0.4rem;
     }
 
     .dashboard-treemap-legend__range {

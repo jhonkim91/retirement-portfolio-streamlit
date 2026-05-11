@@ -48,10 +48,10 @@ APP_ROOT = Path(__file__).resolve().parent
 STREAMLIT_CONFIG_PATH = APP_ROOT / ".streamlit" / "config.toml"
 APP_CSS_PATH = APP_ROOT / ".streamlit" / "app.css"
 DEFAULT_THEME_SETTINGS = {
-    "primaryColor": "#0F766E",
-    "backgroundColor": "#F6F7F2",
-    "secondaryBackgroundColor": "#E4EFE8",
-    "textColor": "#15281F",
+    "primaryColor": "#33658A",
+    "backgroundColor": "#F8FAFC",
+    "secondaryBackgroundColor": "#F0F4F8",
+    "textColor": "#102A43",
 }
 
 
@@ -118,79 +118,103 @@ def load_design_tokens() -> dict[str, str | list[str]]:
     secondary_background_color = str(theme_settings["secondaryBackgroundColor"])
     text_color = str(theme_settings["textColor"])
 
-    brand_deep_color = _mix_hex_colors(primary_color, text_color, 0.40)
-    chart_line_color = _mix_hex_colors(primary_color, "#FFFFFF", 0.16)
-    chart_up_color = "#B24A4A"
-    chart_up_strong_color = "#8F3838"
-    chart_down_color = "#4C79AB"
-    chart_down_strong_color = "#345A82"
-    tooltip_background_color = _rgba_from_hex(_mix_hex_colors(text_color, primary_color, 0.22), 0.96)
+    brand_deep_color = "#17324D"
+    brand_accent_color = "#33658A"
+    brand_hover_color = "#2B5677"
+    brand_soft_color = _rgba_from_hex(brand_accent_color, 0.12)
+    border_soft_color = "#D9E2EC"
+    border_emphasis_color = "#CBD5E1"
+    text_muted_color = "#697586"
+    text_mid_color = "#486581"
+    text_dim_color = "#829AB1"
+    status_good_color = "#256F68"
+    status_warn_color = "#D97706"
+    auth_background_start_color = "#17324D"
+    auth_background_end_color = "#102A43"
+    hero_start_color = "#17324D"
+    hero_mid_color = "#1F4667"
+    hero_end_color = "#102A43"
+    hero_glow_color = _rgba_from_hex("#8ECAE6", 0.16)
+    card_shadow_color = "rgba(15, 23, 42, 0.05)"
+    chart_line_color = "#17324D"
+    chart_accent_color = "#33658A"
+    chart_accent_strong_color = "#2B5677"
+    chart_up_color = "#256F68"
+    chart_up_strong_color = "#0F766E"
+    chart_down_color = "#D94841"
+    chart_down_strong_color = "#B93833"
+    chart_band_upper_color = "#D97706"
+    chart_band_lower_color = "#0F766E"
+    tooltip_background_color = _rgba_from_hex("#17324D", 0.96)
+    treemap_palette = [
+        chart_down_strong_color,
+        chart_down_color,
+        _mix_hex_colors(chart_down_color, "#FFFFFF", 0.62),
+        _mix_hex_colors("#D9E2EC", "#FFFFFF", 0.5),
+        _mix_hex_colors(chart_up_color, "#FFFFFF", 0.62),
+        chart_up_color,
+        chart_up_strong_color,
+    ]
 
     return {
         "theme_primary_color": primary_color,
         "theme_background_color": background_color,
         "theme_secondary_background_color": secondary_background_color,
         "theme_text_color": text_color,
-        "panel_color": _mix_hex_colors(secondary_background_color, "#FFFFFF", 0.72),
-        "panel_alt_color": _mix_hex_colors(background_color, secondary_background_color, 0.55),
-        "surface_color": _rgba_from_hex(_mix_hex_colors(secondary_background_color, "#FFFFFF", 0.78), 0.88),
-        "surface_strong_color": _rgba_from_hex("#FFFFFF", 0.96),
-        "border_soft_color": _rgba_from_hex(text_color, 0.10),
-        "border_emphasis_color": _rgba_from_hex(primary_color, 0.16),
-        "text_muted_color": _mix_hex_colors(text_color, background_color, 0.56),
-        "text_mid_color": _mix_hex_colors(text_color, background_color, 0.42),
-        "text_dim_color": _mix_hex_colors(text_color, background_color, 0.72),
+        "panel_color": "#FFFFFF",
+        "panel_alt_color": _mix_hex_colors(background_color, secondary_background_color, 0.52),
+        "surface_color": _rgba_from_hex("#FFFFFF", 0.94),
+        "surface_strong_color": "#FFFFFF",
+        "border_soft_color": border_soft_color,
+        "border_emphasis_color": border_emphasis_color,
+        "text_muted_color": text_muted_color,
+        "text_mid_color": text_mid_color,
+        "text_dim_color": text_dim_color,
         "brand_deep_color": brand_deep_color,
-        "brand_accent_color": primary_color,
-        "brand_hover_color": _mix_hex_colors(primary_color, text_color, 0.24),
-        "brand_soft_color": _rgba_from_hex(primary_color, 0.14),
-        "status_good_color": primary_color,
-        "status_warn_color": "#B56B2B",
-        "auth_background_start_color": _mix_hex_colors(text_color, primary_color, 0.52),
-        "auth_background_end_color": _mix_hex_colors(text_color, primary_color, 0.30),
-        "hero_start_color": _mix_hex_colors(primary_color, text_color, 0.42),
-        "hero_mid_color": _mix_hex_colors(primary_color, "#FFFFFF", 0.12),
-        "hero_end_color": primary_color,
-        "hero_glow_color": _rgba_from_hex(primary_color, 0.28),
-        "card_shadow_color": _rgba_from_hex(text_color, 0.08),
-        "chart_canvas_bg_color": _mix_hex_colors(background_color, secondary_background_color, 0.58),
-        "chart_canvas_border_color": _mix_hex_colors(secondary_background_color, text_color, 0.12),
-        "chart_title_text_color": _mix_hex_colors(primary_color, text_color, 0.45),
-        "chart_title_bg_color": _rgba_from_hex(_mix_hex_colors(secondary_background_color, "#FFFFFF", 0.74), 0.96),
-        "chart_title_border_color": _rgba_from_hex(primary_color, 0.16),
-        "chart_panel_color": _mix_hex_colors(secondary_background_color, "#FFFFFF", 0.50),
-        "chart_panel_alt_color": _mix_hex_colors(background_color, "#FFFFFF", 0.45),
-        "chart_border_color": _rgba_from_hex(text_color, 0.16),
-        "chart_dim_text_color": _mix_hex_colors(text_color, background_color, 0.72),
-        "chart_muted_text_color": _mix_hex_colors(text_color, background_color, 0.60),
-        "chart_mid_text_color": _mix_hex_colors(text_color, background_color, 0.46),
+        "brand_accent_color": brand_accent_color,
+        "brand_hover_color": brand_hover_color,
+        "brand_soft_color": brand_soft_color,
+        "status_good_color": status_good_color,
+        "status_warn_color": status_warn_color,
+        "auth_background_start_color": auth_background_start_color,
+        "auth_background_end_color": auth_background_end_color,
+        "hero_start_color": hero_start_color,
+        "hero_mid_color": hero_mid_color,
+        "hero_end_color": hero_end_color,
+        "hero_glow_color": hero_glow_color,
+        "card_shadow_color": card_shadow_color,
+        "chart_canvas_bg_color": "#FFFFFF",
+        "chart_canvas_border_color": "#D9E2EC",
+        "chart_title_text_color": brand_deep_color,
+        "chart_title_bg_color": _rgba_from_hex("#F8FAFC", 0.98),
+        "chart_title_border_color": _rgba_from_hex("#D9E2EC", 0.92),
+        "chart_panel_color": "#FFFFFF",
+        "chart_panel_alt_color": "#F8FAFC",
+        "chart_border_color": _rgba_from_hex("#D9E2EC", 0.94),
+        "chart_dim_text_color": text_dim_color,
+        "chart_muted_text_color": text_muted_color,
+        "chart_mid_text_color": text_mid_color,
         "chart_text_color": brand_deep_color,
         "chart_inverse_text_color": "#FFFFFF",
-        "chart_inverse_muted_text_color": "#E5EEF0",
+        "chart_inverse_muted_text_color": "#D9E2EC",
         "chart_up_color": chart_up_color,
         "chart_up_strong_color": chart_up_strong_color,
         "chart_down_color": chart_down_color,
         "chart_down_strong_color": chart_down_strong_color,
-        "chart_flat_color": _mix_hex_colors(primary_color, text_color, 0.58),
-        "chart_accent_color": primary_color,
-        "chart_accent_soft_color": _rgba_from_hex(primary_color, 0.18),
-        "chart_accent_strong_color": _mix_hex_colors(primary_color, text_color, 0.18),
-        "chart_live_dot_color": primary_color,
+        "chart_flat_color": "#829AB1",
+        "chart_accent_color": chart_accent_color,
+        "chart_accent_soft_color": _rgba_from_hex(chart_accent_color, 0.18),
+        "chart_accent_strong_color": chart_accent_strong_color,
+        "chart_band_upper_color": chart_band_upper_color,
+        "chart_band_lower_color": chart_band_lower_color,
+        "chart_live_dot_color": status_good_color,
         "chart_line_color": chart_line_color,
         "chart_line_soft_color": _rgba_from_hex(chart_line_color, 0.28),
         "chart_line_faint_color": _rgba_from_hex(chart_line_color, 0.08),
         "chart_tooltip_bg_color": tooltip_background_color,
         "chart_tooltip_text_color": "#F8FAFC",
         "chart_tooltip_muted_text_color": "#DCE7EA",
-        "treemap_palette": [
-            chart_down_strong_color,
-            chart_down_color,
-            _mix_hex_colors(chart_down_color, background_color, 0.55),
-            _mix_hex_colors(background_color, secondary_background_color, 0.72),
-            _mix_hex_colors(chart_up_color, background_color, 0.55),
-            chart_up_color,
-            chart_up_strong_color,
-        ],
+        "treemap_palette": treemap_palette,
     }
 
 
@@ -304,14 +328,14 @@ TRADE_TYPE_LABELS = {
 }
 TRADE_TYPE_BADGE_STYLES = {
     "buy": {
-        "background": "#E7F5EC",
-        "border": "#B7E1C1",
-        "color": "#0F766E",
+        "background": "#E6F4F1",
+        "border": "#B6D9D4",
+        "color": "#256F68",
     },
     "sell": {
-        "background": "#FDECEC",
-        "border": "#F5B5B5",
-        "color": "#B42318",
+        "background": "#FDEDEC",
+        "border": "#F3C1BD",
+        "color": "#D94841",
     },
 }
 ASSET_TYPE_LABELS = {
@@ -347,6 +371,8 @@ TRADE_LOG_TABLE_DISPLAY_FIELDS = [
     "total_amount",
 ]
 TRADE_LOG_TABLE_COLUMN_WEIGHTS = [1.05, 1.45, 1.0, 0.9, 0.95, 0.9, 0.9, 1.0, 1.3]
+TRADE_LOG_INLINE_TRADE_EDIT_COLUMN_WEIGHTS = [1.55, 1.0, 1.1, 0.82, 0.95, 0.95, 1.18, 0.74, 0.74]
+TRADE_LOG_INLINE_CASH_EDIT_COLUMN_WEIGHTS = [1.05, 1.05, 1.2, 1.7, 0.74, 0.74]
 DETAIL_MEASURE_LABELS = {
     "market_value": "평가금액",
     "profit_rate": "수익률",
@@ -361,9 +387,9 @@ PERIOD_LABELS = {
     "1y": "1년",
 }
 SELECTED_TREND_PERIOD_OPTIONS = ("today", "1mo", "3mo", "6mo", "1y")
-DASHBOARD_OVERVIEW_PANEL_HEIGHT = 560
-DASHBOARD_OVERVIEW_CHART_HEIGHT = 400
-DASHBOARD_DETAIL_CHART_HEIGHT = 300
+DASHBOARD_ALLOCATION_CHART_HEIGHT = 560
+DASHBOARD_HOLDINGS_CHART_HEIGHT = 360
+DASHBOARD_DETAIL_CHART_HEIGHT = 340
 DASHBOARD_HOLDINGS_TABLE_HEIGHT = 380
 FEARGREED_BG_COLOR = str(DESIGN_TOKENS["chart_panel_alt_color"])
 FEARGREED_PANEL_COLOR = str(DESIGN_TOKENS["chart_panel_color"])
@@ -622,60 +648,75 @@ def render_trade_log_edit_form(
 
     selected_type = normalize_trade_log_type(selected_log.get("trade_type"))
     selected_trade_date = _trade_log_date_value(selected_log)
-    with st.container(border=True):
-        st.caption("선택한 거래 기록 수정")
+    with st.container(key="trade-log-inline-editor-shell"):
         if not is_trade_log_editable(selected_log):
             st.info("이 기록은 현재 수정/삭제를 지원하지 않습니다.")
             return
 
         if selected_type in {"buy", "sell"}:
             with st.form(f"trade-log-edit-form:{account['id']}:{editing_log_id}", clear_on_submit=False):
-                edit_trade_type = st.radio(
-                    "거래 유형",
-                    ["buy", "sell"],
-                    index=0 if selected_type == "buy" else 1,
-                    format_func=label_trade_type,
-                    horizontal=True,
-                )
-                edit_product_name = st.text_input("상품명", value=str(selected_log.get("product_name") or "").strip())
-                edit_symbol = st.text_input("상품 코드", value=str(selected_log.get("symbol") or "").strip())
-                edit_value_col, edit_quantity_col = st.columns(2, gap="medium")
-                with edit_value_col:
-                    edit_price = st.number_input(
-                        trade_price_label(edit_trade_type),
-                        min_value=0.0,
-                        step=100.0,
-                        value=float(selected_log.get("price") or 0),
+                row_columns = st.columns(TRADE_LOG_INLINE_TRADE_EDIT_COLUMN_WEIGHTS, gap="small")
+                with row_columns[0]:
+                    edit_product_name = st.text_input(
+                        "상품명",
+                        value=str(selected_log.get("product_name") or "").strip(),
+                        placeholder="상품명",
+                        label_visibility="collapsed",
                     )
-                with edit_quantity_col:
+                with row_columns[1]:
+                    edit_symbol = st.text_input(
+                        "상품 코드",
+                        value=str(selected_log.get("symbol") or "").strip(),
+                        placeholder="코드",
+                        label_visibility="collapsed",
+                    )
+                with row_columns[2]:
+                    edit_trade_date = st.date_input(
+                        trade_date_label(selected_type),
+                        value=selected_trade_date,
+                        label_visibility="collapsed",
+                    )
+                with row_columns[3]:
                     edit_quantity = st.number_input(
                         "수량/좌수",
                         min_value=0.0,
                         step=1.0,
                         value=float(selected_log.get("quantity") or 0),
+                        label_visibility="collapsed",
                     )
-                edit_asset_col, edit_date_col = st.columns(2, gap="medium")
-                with edit_asset_col:
+                with row_columns[4]:
+                    edit_price = st.number_input(
+                        trade_price_label(selected_type),
+                        min_value=0.0,
+                        step=100.0,
+                        value=float(selected_log.get("price") or 0),
+                        label_visibility="collapsed",
+                    )
+                with row_columns[5]:
                     edit_asset_type = st.selectbox(
                         "자산 구분",
                         ["risk", "safe"],
                         index=0 if str(selected_log.get("asset_type") or "risk").strip().lower() == "risk" else 1,
                         format_func=label_asset_type,
+                        label_visibility="collapsed",
                     )
-                with edit_date_col:
-                    edit_trade_date = st.date_input(trade_date_label(edit_trade_type), value=selected_trade_date)
-                edit_notes = st.text_input("메모", value=str(selected_log.get("notes") or "").strip(), placeholder="선택 입력")
-                save_col, cancel_col = st.columns(2, gap="small")
-                with save_col:
-                    submitted = st.form_submit_button("수정 저장", width="stretch", type="primary")
-                with cancel_col:
-                    cancelled = st.form_submit_button("닫기", width="stretch")
+                with row_columns[6]:
+                    edit_notes = st.text_input(
+                        "메모",
+                        value=str(selected_log.get("notes") or "").strip(),
+                        placeholder="메모",
+                        label_visibility="collapsed",
+                    )
+                with row_columns[7]:
+                    submitted = st.form_submit_button("저장", width="stretch", type="primary")
+                with row_columns[8]:
+                    cancelled = st.form_submit_button("취소", width="stretch")
             if submitted:
                 try:
                     update_trade_log(
                         int(account["id"]),
                         int(editing_log_id),
-                        trade_type=edit_trade_type,
+                        trade_type=selected_type,
                         symbol=edit_symbol,
                         product_name=edit_product_name,
                         asset_type=edit_asset_type,
@@ -699,29 +740,36 @@ def render_trade_log_edit_form(
         flow_options = ["personal_deposit", "employer_deposit"]
         selected_flow_index = flow_options.index(selected_type) if selected_type in flow_options else 0
         with st.form(f"cash-log-edit-form:{account['id']}:{editing_log_id}", clear_on_submit=False):
-            edit_flow_type = st.radio(
-                "현금 흐름",
-                flow_options,
-                index=selected_flow_index,
-                format_func=label_cash_flow_type,
-                horizontal=True,
-            )
-            edit_top_cols = st.columns((1.15, 2.6), gap="small")
-            with edit_top_cols[0]:
-                edit_trade_date = st.date_input("처리일", value=selected_trade_date)
-            with edit_top_cols[1]:
+            row_columns = st.columns(TRADE_LOG_INLINE_CASH_EDIT_COLUMN_WEIGHTS, gap="small")
+            with row_columns[0]:
+                edit_flow_type = st.selectbox(
+                    "현금 흐름",
+                    flow_options,
+                    index=selected_flow_index,
+                    format_func=label_cash_flow_type,
+                    label_visibility="collapsed",
+                )
+            with row_columns[1]:
+                edit_trade_date = st.date_input("처리일", value=selected_trade_date, label_visibility="collapsed")
+            with row_columns[2]:
                 edit_amount = st.number_input(
                     "금액",
                     min_value=0,
                     step=100000,
                     value=int(round(float(selected_log.get("total_amount") or 0))),
+                    label_visibility="collapsed",
                 )
-            edit_notes = st.text_area("메모", height=90, value=str(selected_log.get("notes") or ""), placeholder="메모 선택 입력")
-            save_col, cancel_col = st.columns(2, gap="small")
-            with save_col:
-                submitted = st.form_submit_button("수정 저장", width="stretch", type="primary")
-            with cancel_col:
-                cancelled = st.form_submit_button("닫기", width="stretch")
+            with row_columns[3]:
+                edit_notes = st.text_input(
+                    "메모",
+                    value=str(selected_log.get("notes") or ""),
+                    placeholder="메모",
+                    label_visibility="collapsed",
+                )
+            with row_columns[4]:
+                submitted = st.form_submit_button("저장", width="stretch", type="primary")
+            with row_columns[5]:
+                cancelled = st.form_submit_button("취소", width="stretch")
         if submitted:
             try:
                 update_trade_log(
@@ -1272,8 +1320,8 @@ def render_dashboard_metric_strip(cards: list[dict[str, str]]) -> None:
         action = str(card.get("action") or "").strip()
         tone = str(card.get("tone") or "").strip()
         value_class = "dashboard-metric-card__value"
-        if tone == "accent":
-            value_class += " dashboard-metric-card__value--accent"
+        if tone in {"accent", "positive", "negative"}:
+            value_class += f" dashboard-metric-card__value--{tone}"
         note_html = f'<div class="dashboard-metric-card__note">{html.escape(note)}</div>' if note else ""
         action_html = f'<div class="dashboard-metric-card__action">{html.escape(action)}</div>' if action else ""
         card_html = (
@@ -1296,8 +1344,8 @@ def render_dashboard_summary_card(label: str, value: str, *, tone: str = "", act
     """기본 요약 카드 본문을 렌더링한다."""
 
     value_class = "dashboard-summary-card__value"
-    if tone == "accent":
-        value_class += " dashboard-summary-card__value--accent"
+    if tone in {"accent", "positive", "negative"}:
+        value_class += f" dashboard-summary-card__value--{tone}"
     field_class = "dashboard-summary-card__field"
     if actionable:
         field_class += " dashboard-summary-card__field--actionable"
@@ -1450,6 +1498,20 @@ def render_dashboard_section_header(
     )
 
 
+def render_dashboard_reference_time(reference_time_text: str) -> None:
+    """대시보드 요약 카드 아래에 기준시각을 우측 정렬로 표시한다."""
+
+    st.markdown(
+        (
+            '<div class="dashboard-reference-time">'
+            '<span class="dashboard-reference-time__label">기준시각</span>'
+            f'<span class="dashboard-reference-time__value">{html.escape(reference_time_text)}</span>'
+            "</div>"
+        ),
+        unsafe_allow_html=True,
+    )
+
+
 def normalize_holding_symbol(value: Any) -> str:
     """보유 종목 선택에 쓸 심볼 키를 정규화한다."""
 
@@ -1573,6 +1635,27 @@ def parse_realtime_timestamp(value: str | None) -> datetime | None:
     if parsed.tzinfo is None:
         return parsed.replace(tzinfo=KST_TIMEZONE)
     return parsed.astimezone(KST_TIMEZONE)
+
+
+def format_dashboard_reference_time(value: Any) -> str:
+    """대시보드 기준시각을 `YYYY-MM-DD HH:MM:SS` 형식으로 반환한다."""
+
+    parsed = parse_realtime_timestamp(str(value or "").strip())
+    if parsed is not None:
+        return parsed.strftime("%Y-%m-%d %H:%M:%S")
+
+    raw_value = str(value or "").strip()
+    if not raw_value:
+        return "-"
+
+    fallback_timestamp = pd.to_datetime(raw_value, errors="coerce")
+    if pd.isna(fallback_timestamp):
+        return raw_value
+    if fallback_timestamp.tzinfo is None:
+        fallback_timestamp = fallback_timestamp.tz_localize(KST_TIMEZONE)
+    else:
+        fallback_timestamp = fallback_timestamp.tz_convert(KST_TIMEZONE)
+    return fallback_timestamp.strftime("%Y-%m-%d %H:%M:%S")
 
 
 def is_recent_realtime_quote(
@@ -1806,7 +1889,11 @@ def _format_intraday_as_of(value: Any) -> str:
         timestamp = pd.Timestamp(raw_value)
     except Exception:  # noqa: BLE001
         return raw_value
-    return f"기준 {timestamp.strftime('%m-%d %H:%M')}"
+    if timestamp.tzinfo is None:
+        timestamp = timestamp.tz_localize(KST_TIMEZONE)
+    else:
+        timestamp = timestamp.tz_convert(KST_TIMEZONE)
+    return f"기준시각 {timestamp.strftime('%Y-%m-%d %H:%M:%S')}"
 
 
 def _build_intraday_sparkline_svg(
@@ -1819,14 +1906,14 @@ def _build_intraday_sparkline_svg(
     if not values:
         return (
             '<div style="height:40px; display:flex; align-items:center; justify-content:center; '
-            'color:#868993; font-size:10px;">당일 데이터 없음</div>'
+            f'color:{FEARGREED_MUTED_TEXT_COLOR}; font-size:10px;">당일 데이터 없음</div>'
         )
 
     numeric_values = [float(value) for value in values]
     minimum = min(numeric_values)
     maximum = max(numeric_values)
-    stroke_color = "#E22B2B" if positive else "#1763B2"
-    fill_color = "rgba(226,43,43,0.16)" if positive else "rgba(23,99,178,0.18)"
+    stroke_color = FEARGREED_UP_COLOR if positive else FEARGREED_DOWN_COLOR
+    fill_color = CHART_ACCENT_SOFT_COLOR if positive else _rgba_from_hex(FEARGREED_DOWN_COLOR, 0.18)
     left_pad = 4
     top_pad = 3
     usable_width = max(width - left_pad * 2, 1)
@@ -1892,7 +1979,7 @@ def _attach_leaf_market_details(
         leaf["holding_profit_text"] = "-"
         leaf["sparkline_svg"] = (
             '<div style="height:40px; display:flex; align-items:center; justify-content:center; '
-            'color:#868993; font-size:10px;">현금 자산은 장중 추세가 없습니다</div>'
+            f'color:{FEARGREED_MUTED_TEXT_COLOR}; font-size:10px;">현금 자산은 장중 추세가 없습니다</div>'
         )
         leaf["intraday_as_of"] = "현금 잔액"
         return
@@ -1994,7 +2081,7 @@ def allocation_chart(summary: dict[str, Any]) -> alt.Chart | None:
         .mark_arc(innerRadius=70)
         .encode(
             theta=alt.Theta("value:Q"),
-            color=alt.Color("bucket:N", scale=alt.Scale(range=["#B45309", "#0F766E", "#2563EB"])),
+            color=alt.Color("bucket:N", scale=alt.Scale(range=["#D97706", "#0F766E", "#33658A"])),
             tooltip=[alt.Tooltip("bucket:N"), alt.Tooltip("value:Q", format=",.0f")],
         )
     )
@@ -2117,6 +2204,17 @@ def allocation_treemap_options(
                 );
             }
             """
+            .replace("#E22B2B", FEARGREED_UP_COLOR)
+            .replace("#1763B2", FEARGREED_DOWN_COLOR)
+            .replace("rgba(226,43,43,.13)", _rgba_from_hex(FEARGREED_UP_COLOR, 0.14))
+            .replace("rgba(23,99,178,.15)", _rgba_from_hex(FEARGREED_DOWN_COLOR, 0.14))
+            .replace("#7F8798", FEARGREED_DIM_TEXT_COLOR)
+            .replace("#868993", FEARGREED_MUTED_TEXT_COLOR)
+            .replace("#555C6E", FEARGREED_MID_TEXT_COLOR)
+            .replace("#9BA3B2", FEARGREED_DIM_TEXT_COLOR)
+            .replace("#DDE3EE", CHART_TOOLTIP_TEXT_COLOR)
+            .replace("#D1D4DC", CHART_TOOLTIP_TEXT_COLOR)
+            .replace("rgba(30,34,45,.97)", "rgba(23,50,77,.97)")
         )
 
     tooltip_config: dict[str, Any] = {
@@ -2147,7 +2245,7 @@ def allocation_treemap_options(
         "title": {
             "text": "자산군 → 섹터 → 보유 종목",
             "left": "center",
-            "top": 8,
+            "top": 2,
             "padding": [6, 12],
             "backgroundColor": TREEMAP_TITLE_BG_COLOR,
             "borderColor": TREEMAP_TITLE_BORDER_COLOR,
@@ -2170,9 +2268,9 @@ def allocation_treemap_options(
             "realtime": True,
             "orient": "horizontal",
             "left": "center",
-            "bottom": 8,
+            "bottom": 6,
             "itemWidth": 14,
-            "itemHeight": 220,
+            "itemHeight": 200,
             "handleSize": 20,
             "text": ["높은 수익률", "낮은 수익률"],
             "textGap": 6,
@@ -2194,10 +2292,10 @@ def allocation_treemap_options(
             {
                 "name": "자산 배분",
                 "type": "treemap",
-                "top": 52,
-                "left": 8,
-                "right": 8,
-                "bottom": 72,
+                "top": 38,
+                "left": 0,
+                "right": 0,
+                "bottom": 52,
                 "roam": False,
                 "nodeClick": False,
                 "sort": "desc",
@@ -2219,7 +2317,7 @@ def allocation_treemap_options(
                 "upperLabel": {
                     "show": True,
                     "formatter": label_formatter,
-                    "height": 24,
+                    "height": 22,
                     "color": "#F8FAFC",
                     "fontWeight": 700,
                     "overflow": "truncate",
@@ -2227,9 +2325,9 @@ def allocation_treemap_options(
                 },
                 "itemStyle": {
                     "borderColor": TREEMAP_CANVAS_BORDER_COLOR,
-                    "borderWidth": 3,
-                    "gapWidth": 4,
-                    "borderRadius": 8,
+                    "borderWidth": 1,
+                    "gapWidth": 1,
+                    "borderRadius": 6,
                 },
                 "emphasis": {
                     "focus": "self",
@@ -2244,31 +2342,31 @@ def allocation_treemap_options(
                     {
                         "itemStyle": {
                             "borderColor": TREEMAP_CANVAS_BORDER_COLOR,
-                            "borderWidth": 4,
-                            "gapWidth": 6,
-                            "borderRadius": 10,
+                            "borderWidth": 1,
+                            "gapWidth": 1,
+                            "borderRadius": 6,
                         },
                         "upperLabel": {
                             "show": True,
-                            "height": 30,
+                            "height": 26,
                             "color": FEARGREED_FULL_TEXT_COLOR,
                             "backgroundColor": FEARGREED_FLAT_COLOR,
-                            "padding": [6, 10],
+                            "padding": [5, 8],
                         },
                     },
                     {
                         "itemStyle": {
                             "borderColor": TREEMAP_CANVAS_BORDER_COLOR,
-                            "borderWidth": 3,
-                            "gapWidth": 4,
-                            "borderRadius": 8,
+                            "borderWidth": 1,
+                            "gapWidth": 1,
+                            "borderRadius": 6,
                         },
                         "upperLabel": {
                             "show": True,
-                            "height": 24,
+                            "height": 20,
                             "color": FEARGREED_BRIGHT_TEXT_COLOR,
                             "backgroundColor": "rgba(42,46,57,0.88)",
-                            "padding": [4, 8],
+                            "padding": [3, 6],
                         },
                     },
                     {
@@ -2276,9 +2374,9 @@ def allocation_treemap_options(
                         "colorMappingBy": "value",
                         "itemStyle": {
                             "borderColor": TREEMAP_CANVAS_BORDER_COLOR,
-                            "borderWidth": 2,
-                            "gapWidth": 3,
-                            "borderRadius": 6,
+                            "borderWidth": 1,
+                            "gapWidth": 1,
+                            "borderRadius": 4,
                         },
                     },
                 ],
@@ -2373,7 +2471,7 @@ def holdings_bar_options(frame: pd.DataFrame, *, selected_symbol: str | None = N
         "backgroundColor": "transparent",
         "animationDuration": 260,
         "animationDurationUpdate": 320,
-        "grid": {"top": 56, "right": 12, "bottom": 96, "left": 56},
+        "grid": {"top": 44, "right": 12, "bottom": 82, "left": 56},
         "tooltip": {
             "trigger": "item",
             "backgroundColor": CHART_TOOLTIP_BG_COLOR,
@@ -2478,7 +2576,7 @@ def holdings_bar_fallback_chart(frame: pd.DataFrame, *, selected_symbol: str | N
             opacity=alt.Opacity("selected_opacity:Q", legend=None),
         )
     )
-    return style_dashboard_altair_chart(bars + labels, height=DASHBOARD_OVERVIEW_CHART_HEIGHT)
+    return style_dashboard_altair_chart(bars + labels, height=DASHBOARD_HOLDINGS_CHART_HEIGHT)
 
 
 def build_selected_holding_intraday_trend_frame(holding: dict[str, Any]) -> pd.DataFrame:
@@ -2699,6 +2797,12 @@ def _selected_holding_trend_data_view_option() -> Any | None:
             return html;
         }
         """
+        .replace("#D7E2E7", "#D9E2EC")
+        .replace("#E2E8F0", "#D9E2EC")
+        .replace("#F8FAFC", "#F8FAFC")
+        .replace("#334155", CHART_TEXT_COLOR)
+        .replace("#1E293B", CHART_TEXT_COLOR)
+        .replace("#64748B", FEARGREED_MUTED_TEXT_COLOR)
     )
 
 
@@ -3053,8 +3157,8 @@ def build_holdings_mix_bar_html(summary: dict[str, Any]) -> str:
     allocation = summary.get("allocation") or {}
     cash_amount = float(allocation.get("cash") or summary.get("cash") or 0)
     segments = [
-        ("위험자산", float(allocation.get("risk") or 0), "#D8A94D"),
-        ("안전자산", float(allocation.get("safe") or 0) + cash_amount, "#83A968"),
+        ("위험자산", float(allocation.get("risk") or 0), FEARGREED_DOWN_COLOR),
+        ("안전자산", float(allocation.get("safe") or 0) + cash_amount, FEARGREED_UP_COLOR),
     ]
     total_value = sum(max(amount, 0.0) for _, amount, _ in segments)
     if total_value <= 0:
@@ -3070,7 +3174,7 @@ def build_holdings_mix_bar_html(summary: dict[str, Any]) -> str:
                     f'<div style="width:{percentage:.4f}%; background:{color}; min-width:0; height:100%;',
                     ' display:flex; align-items:center; justify-content:center; overflow:hidden;">',
                     (
-                        f'<span style="font-size:11px; font-weight:700; color:#15281F; white-space:nowrap;">{percentage:.0f}%</span>'
+                        f'<span style="font-size:11px; font-weight:700; color:{FEARGREED_FULL_TEXT_COLOR}; white-space:nowrap;">{percentage:.0f}%</span>'
                         if percentage >= 10
                         else ""
                     ),
@@ -3103,7 +3207,7 @@ def build_holdings_mix_bar_html(summary: dict[str, Any]) -> str:
             f'<div style="font-size:12px; font-weight:700; color:{CHART_TEXT_COLOR};">자산 비중</div>',
             f'<div style="font-size:11px; color:{FEARGREED_MUTED_TEXT_COLOR};">총 평가액 {format_won(total_value)}</div>',
             "</div>",
-            f'<div style="display:flex; width:100%; height:18px; overflow:hidden; border-radius:999px; background:{FEARGREED_PANEL_ALT_COLOR}; border:1px solid {FEARGREED_BORDER_COLOR};">',
+            f'<div style="display:flex; width:100%; height:18px; overflow:hidden; border-radius:999px; background:#FFFFFF; border:1px solid {FEARGREED_BORDER_COLOR};">',
             "".join(bar_segments),
             "</div>",
             '<div style="display:flex; flex-wrap:wrap; gap:10px 16px; margin-top:10px;">',
@@ -3121,6 +3225,20 @@ def render_holdings_mix_bar(summary: dict[str, Any]) -> None:
     if not mix_bar_html:
         return
     st.markdown(mix_bar_html, unsafe_allow_html=True)
+
+
+def dashboard_return_metric_tone(value: float) -> str:
+    """평가손익/수익률 요약 카드 값에 맞는 강조 톤을 반환한다."""
+
+    try:
+        numeric_value = float(value or 0)
+    except (TypeError, ValueError):
+        return "accent"
+    if numeric_value > 0:
+        return "positive"
+    if numeric_value < 0:
+        return "negative"
+    return "accent"
 
 
 def format_holdings_price_updated_at(value: Any) -> str:
@@ -3253,7 +3371,7 @@ def empty_state() -> None:
             st.rerun()
 
     with demo_col:
-        with st.container(border=True):
+        with st.container(border=True, key="trade-log-table"):
             st.subheader("데모 모드")
             st.caption("실제 계좌 없이 화면 흐름을 빠르게 확인할 수 있도록 샘플 데이터를 불러옵니다.")
             st.write("연금 계좌, 일반 계좌, 입금, 매수, 계좌 이동, 스냅샷 예시가 함께 생성됩니다.")
@@ -3374,6 +3492,8 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]], roll
         if float(summary["total_principal"] or 0)
         else 0.0
     )
+    profit_tone = dashboard_return_metric_tone(display_principal_profit_loss)
+    profit_rate_tone = dashboard_return_metric_tone(display_principal_profit_rate)
     account_id = int(account["id"])
     echarts_available = st_echarts is not None
     selection_key = dashboard_holding_selection_key(account_id)
@@ -3395,30 +3515,35 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]], roll
     if str(st.session_state.get(trend_measure_key) or "").strip() not in DETAIL_MEASURE_LABELS:
         st.session_state[trend_measure_key] = DEFAULT_SELECTED_TREND_MEASURE
     overview_frame = holdings_overview_frame(holdings, selected_symbol=selected_symbol or None, limit=10)
-    summary_cols = st.columns(5, gap="small", vertical_alignment="top")
+    reference_time_text = format_dashboard_reference_time(latest_realtime_quote_time(account_id))
 
-    with summary_cols[0]:
-        with st.container(border=True, key="dashboard-card-principal"):
-            render_dashboard_summary_card("입금 원금", format_won(summary["total_principal"]))
+    with st.container(key="dashboard-summary-strip"):
+        summary_cols = st.columns(5, gap="small", vertical_alignment="top")
 
-    with summary_cols[1]:
-        render_dashboard_cash_card(int(account["id"]), display_cash)
+        with summary_cols[0]:
+            with st.container(border=True, key="dashboard-card-principal"):
+                render_dashboard_summary_card("입금 원금", format_won(summary["total_principal"]))
 
-    with summary_cols[2]:
-        render_dashboard_total_value_card(int(account["id"]), display_total_value, holdings)
+        with summary_cols[1]:
+            render_dashboard_cash_card(int(account["id"]), display_cash)
 
-    with summary_cols[3]:
-        with st.container(border=True, key="dashboard-card-profit"):
-            render_dashboard_summary_card("원금 대비 평가손익", format_won(display_principal_profit_loss), tone="accent")
+        with summary_cols[2]:
+            render_dashboard_total_value_card(int(account["id"]), display_total_value, holdings)
 
-    with summary_cols[4]:
-        with st.container(border=True, key="dashboard-card-profit-rate"):
-            render_dashboard_summary_card("원금 대비 수익률", format_pct(display_principal_profit_rate), tone="accent")
+        with summary_cols[3]:
+            with st.container(border=True, key="dashboard-card-profit"):
+                render_dashboard_summary_card("원금 대비 평가손익", format_won(display_principal_profit_loss), tone=profit_tone)
+
+        with summary_cols[4]:
+            with st.container(border=True, key="dashboard-card-profit-rate"):
+                render_dashboard_summary_card("원금 대비 수익률", format_pct(display_principal_profit_rate), tone=profit_rate_tone)
+
+    render_dashboard_reference_time(reference_time_text)
 
     if not echarts_available:
         st.warning("현재 환경에서는 ECharts 모듈을 불러오지 못해 대시보드 차트를 표시할 수 없습니다.")
 
-    with st.container(border=True, height=DASHBOARD_OVERVIEW_PANEL_HEIGHT, key="dashboard-panel-allocation"):
+    with st.container(border=True, key="dashboard-panel-allocation"):
         treemap_options = allocation_treemap_options(
             summary,
             holdings,
@@ -3443,7 +3568,7 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]], roll
         else:
             treemap_selection = st_echarts(
                 options=treemap_options,
-                height=f"{DASHBOARD_OVERVIEW_CHART_HEIGHT}px",
+                height=f"{DASHBOARD_ALLOCATION_CHART_HEIGHT}px",
                 key=f"allocation-treemap:{account_id}",
                 on_select="rerun",
                 selection_mode="points",
@@ -3451,119 +3576,131 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]], roll
             if sync_dashboard_selected_holding(account_id, treemap_selection, holdings=holdings):
                 st.rerun()
 
-    trend_col, holdings_col = st.columns((1, 1), gap="large", vertical_alignment="top")
+    with st.container(key="dashboard-secondary-grid"):
+        trend_col, holdings_col = st.columns((1, 1), gap="large", vertical_alignment="top")
 
-    with trend_col:
-        with st.container(border=True, height=DASHBOARD_OVERVIEW_PANEL_HEIGHT, key="dashboard-panel-selected-trend"):
-            selected_trend_measure = DEFAULT_SELECTED_TREND_MEASURE
-            st.markdown("### 선택 종목 트렌드")
+        with trend_col:
+            with st.container(border=True, key="dashboard-panel-selected-trend"):
+                selected_trend_measure = DEFAULT_SELECTED_TREND_MEASURE
+                st.markdown("### 선택 종목 트렌드")
 
-            if not selected_symbol:
-                st.info("자산 배분 트리맵에서 종목 타일을 누르면 여기에서 해당 종목 트렌드가 표시됩니다.")
-            elif selected_symbol == "CASH":
-                with st.container(border=True, key="dashboard-trend-controls"):
-                    _, action_col = st.columns((1, 0.36), gap="medium", vertical_alignment="bottom")
-                    with action_col:
-                        if st.button("선택 해제", key=f"clear-selected-holding:{account_id}", width="stretch"):
-                            st.session_state[selection_key] = ""
-                            st.rerun()
-                st.info("예수금은 시장 가격 추이가 없어서 개별 트렌드 차트를 표시하지 않습니다.")
-            else:
-                selected_holding_name = dashboard_selected_holding_name(holdings, selected_symbol)
-                with st.container(border=True, key="dashboard-trend-controls"):
-                    period_col, measure_col, action_col = st.columns(
-                        (1.4, 1.2, 0.55),
-                        gap="small",
-                        vertical_alignment="bottom",
-                    )
-                    with period_col:
-                        period = st.segmented_control(
-                            "기간",
-                            options=list(SELECTED_TREND_PERIOD_OPTIONS),
-                            format_func=label_period,
-                            default=period,
-                            key=trend_period_key,
-                        )
-                    with measure_col:
-                        selected_trend_measure = st.segmented_control(
-                            "표시 지표",
-                            options=["market_value", "profit_rate", "close"],
-                            format_func=label_detail_measure,
-                            default=DEFAULT_SELECTED_TREND_MEASURE,
-                            key=trend_measure_key,
-                        )
-                    with action_col:
-                        if st.button("선택 해제", key=f"clear-selected-holding:{account_id}", width="stretch"):
-                            st.session_state[selection_key] = ""
-                            st.rerun()
-                selected_holdings = [
-                    holding for holding in holdings if normalize_holding_symbol(holding.get("symbol")) == selected_symbol
-                ]
-                if not selected_holdings:
-                    st.info("선택한 종목을 현재 보유 목록에서 찾지 못했습니다.")
+                if not selected_symbol:
+                    st.info("자산 배분 트리맵에서 종목 타일을 누르면 여기에서 해당 종목 트렌드가 표시됩니다.")
+                elif selected_symbol == "CASH":
+                    with st.container(border=True, key="dashboard-trend-controls"):
+                        _, action_col = st.columns((1, 0.36), gap="medium", vertical_alignment="bottom")
+                        with action_col:
+                            if st.button("선택 해제", key=f"clear-selected-holding:{account_id}", width="stretch"):
+                                st.session_state[selection_key] = ""
+                                st.rerun()
+                    st.info("예수금은 시장 가격 추이가 없어서 개별 트렌드 차트를 표시하지 않습니다.")
                 else:
-                    try:
-                        with st.spinner(f"{selected_holding_name} 추이를 불러오는 중입니다..."):
-                            selected_holding_trend = build_selected_holding_trend_frame(
-                                selected_holdings,
-                                period=period,
+                    selected_holding_name = dashboard_selected_holding_name(holdings, selected_symbol)
+                    with st.container(border=True, key="dashboard-trend-controls"):
+                        period_label_col, period_col, measure_label_col, measure_col, action_col = st.columns(
+                            (0.28, 1.22, 0.36, 1.06, 0.7),
+                            gap="small",
+                            vertical_alignment="center",
+                        )
+                        with period_label_col:
+                            st.markdown('<div class="dashboard-inline-control-label">기간</div>', unsafe_allow_html=True)
+                        with period_col:
+                            period = st.segmented_control(
+                                "기간",
+                                options=list(SELECTED_TREND_PERIOD_OPTIONS),
+                                format_func=label_period,
+                                default=period,
+                                key=trend_period_key,
+                                label_visibility="collapsed",
                             )
-                    except Exception as exc:  # noqa: BLE001
-                        st.warning(f"선택 종목 추이를 불러오지 못했습니다: {exc}")
+                        with measure_label_col:
+                            st.markdown('<div class="dashboard-inline-control-label">지표</div>', unsafe_allow_html=True)
+                        with measure_col:
+                            selected_trend_measure = st.segmented_control(
+                                "표시 지표",
+                                options=["market_value", "profit_rate", "close"],
+                                format_func=label_detail_measure,
+                                default=DEFAULT_SELECTED_TREND_MEASURE,
+                                key=trend_measure_key,
+                                label_visibility="collapsed",
+                            )
+                        with action_col:
+                            if st.button(
+                                "선택 해제",
+                                key=f"clear-selected-holding:{account_id}",
+                                width="stretch",
+                                type="secondary",
+                            ):
+                                st.session_state[selection_key] = ""
+                                st.rerun()
+                    selected_holdings = [
+                        holding for holding in holdings if normalize_holding_symbol(holding.get("symbol")) == selected_symbol
+                    ]
+                    if not selected_holdings:
+                        st.info("선택한 종목을 현재 보유 목록에서 찾지 못했습니다.")
                     else:
-                        if selected_holding_trend.empty:
-                            st.info("선택 종목의 시세 이력이 아직 없어 트렌드 차트를 표시할 수 없습니다.")
+                        try:
+                            with st.spinner(f"{selected_holding_name} 추이를 불러오는 중입니다..."):
+                                selected_holding_trend = build_selected_holding_trend_frame(
+                                    selected_holdings,
+                                    period=period,
+                                )
+                        except Exception as exc:  # noqa: BLE001
+                            st.warning(f"선택 종목 추이를 불러오지 못했습니다: {exc}")
                         else:
-                            selected_frame = selected_holding_trend.sort_values("date").copy()
-                            selected_measure = str(selected_trend_measure or DEFAULT_SELECTED_TREND_MEASURE)
-                            selected_symbol_code = str(selected_holdings[0].get("symbol") or selected_symbol).strip() or selected_symbol
-                            if echarts_available:
-                                trend_options = selected_holding_trend_options(
-                                    selected_frame,
-                                    selected_holding_name=selected_holding_name,
-                                    selected_symbol_code=selected_symbol_code,
-                                    measure=selected_measure,
-                                    period_label=label_period(period),
-                                )
-                                if trend_options is None:
-                                    st.info("선택 종목의 추이 옵션을 만들지 못했습니다.")
-                                else:
-                                    st_echarts(
-                                        options=trend_options,
-                                        height=f"{DASHBOARD_DETAIL_CHART_HEIGHT}px",
-                                        key=f"selected-holding-trend:{account_id}:{selected_symbol}:{selected_measure}:{period}",
-                                    )
+                            if selected_holding_trend.empty:
+                                st.info("선택 종목의 시세 이력이 아직 없어 트렌드 차트를 표시할 수 없습니다.")
                             else:
-                                trend_chart = selected_holding_trend_chart(
-                                    selected_frame,
-                                    measure=selected_measure,
-                                    selected_holding_name=selected_holding_name,
-                                    selected_symbol_code=selected_symbol_code,
-                                    period_label=label_period(period),
-                                )
-                                st.altair_chart(
-                                    style_dashboard_altair_chart(trend_chart, height=DASHBOARD_DETAIL_CHART_HEIGHT),
-                                    width="stretch",
-                                )
+                                selected_frame = selected_holding_trend.sort_values("date").copy()
+                                selected_measure = str(selected_trend_measure or DEFAULT_SELECTED_TREND_MEASURE)
+                                selected_symbol_code = str(selected_holdings[0].get("symbol") or selected_symbol).strip() or selected_symbol
+                                if echarts_available:
+                                    trend_options = selected_holding_trend_options(
+                                        selected_frame,
+                                        selected_holding_name=selected_holding_name,
+                                        selected_symbol_code=selected_symbol_code,
+                                        measure=selected_measure,
+                                        period_label=label_period(period),
+                                    )
+                                    if trend_options is None:
+                                        st.info("선택 종목의 추이 옵션을 만들지 못했습니다.")
+                                    else:
+                                        st_echarts(
+                                            options=trend_options,
+                                            height=f"{DASHBOARD_DETAIL_CHART_HEIGHT}px",
+                                            key=f"selected-holding-trend:{account_id}:{selected_symbol}:{selected_measure}:{period}",
+                                        )
+                                else:
+                                    trend_chart = selected_holding_trend_chart(
+                                        selected_frame,
+                                        measure=selected_measure,
+                                        selected_holding_name=selected_holding_name,
+                                        selected_symbol_code=selected_symbol_code,
+                                        period_label=label_period(period),
+                                    )
+                                    st.altair_chart(
+                                        style_dashboard_altair_chart(trend_chart, height=DASHBOARD_DETAIL_CHART_HEIGHT),
+                                        width="stretch",
+                                    )
 
-    with holdings_col:
-        with st.container(border=True, height=DASHBOARD_OVERVIEW_PANEL_HEIGHT, key="dashboard-panel-holdings"):
-            render_dashboard_section_header("보유 종목 수익률", "현재 보유 상위 종목의 수익률 흐름을 같은 행에서 함께 비교합니다.")
-            if overview_frame.empty:
-                st.info("보유 종목이 없어 수익률 차트를 그릴 수 없습니다.")
-            elif not echarts_available:
-                fallback_chart = holdings_bar_fallback_chart(overview_frame, selected_symbol=selected_symbol or None)
-                if fallback_chart is None:
-                    st.info("현재 환경에서는 보유 종목 수익률 차트를 표시할 수 없습니다.")
+        with holdings_col:
+            with st.container(border=True, key="dashboard-panel-holdings"):
+                render_dashboard_section_header("보유 종목 수익률", "현재 보유 상위 종목의 수익률 흐름을 같은 행에서 함께 비교합니다.")
+                if overview_frame.empty:
+                    st.info("보유 종목이 없어 수익률 차트를 그릴 수 없습니다.")
+                elif not echarts_available:
+                    fallback_chart = holdings_bar_fallback_chart(overview_frame, selected_symbol=selected_symbol or None)
+                    if fallback_chart is None:
+                        st.info("현재 환경에서는 보유 종목 수익률 차트를 표시할 수 없습니다.")
+                    else:
+                        st.altair_chart(fallback_chart, width="stretch")
                 else:
-                    st.altair_chart(fallback_chart, width="stretch")
-            else:
-                bar_options = holdings_bar_options(overview_frame, selected_symbol=selected_symbol or None)
-                st_echarts(
-                    options=bar_options,
-                    height=f"{DASHBOARD_OVERVIEW_CHART_HEIGHT}px",
-                    key=f"holdings-profit-bar:{account_id}",
-                )
+                    bar_options = holdings_bar_options(overview_frame, selected_symbol=selected_symbol or None)
+                    st_echarts(
+                        options=bar_options,
+                        height=f"{DASHBOARD_HOLDINGS_CHART_HEIGHT}px",
+                        key=f"holdings-profit-bar:{account_id}",
+                    )
 
     with st.container(border=True, key="dashboard-panel-holdings-table"):
         render_dashboard_section_header("현재 보유 종목", "계좌 전체 포지션을 표로 읽고 현재 선택 종목과 함께 확인합니다.", compact=True)
@@ -3772,7 +3909,7 @@ def trade_entry_page(account: dict[str, Any], holdings: list[dict[str, Any]], ac
             .encode(
                 x=alt.X("product_name:N", sort="-y", title="실현 종목"),
                 y=alt.Y("profit_loss:Q", title="실현 손익"),
-                color=alt.Color("tone:N", scale=alt.Scale(domain=["수익", "손실"], range=["#0F766E", "#B91C1C"])),
+                color=alt.Color("tone:N", scale=alt.Scale(domain=["수익", "손실"], range=[FEARGREED_UP_COLOR, FEARGREED_DOWN_COLOR])),
                 tooltip=[
                     alt.Tooltip("product_name:N", title="종목"),
                     alt.Tooltip("profit_loss:Q", title="손익", format=",.0f"),
@@ -3815,7 +3952,11 @@ def trade_entry_page(account: dict[str, Any], holdings: list[dict[str, Any]], ac
                 row_columns = st.columns(TRADE_LOG_TABLE_COLUMN_WEIGHTS, gap="small")
                 for column, field_name in zip(row_columns[:-1], TRADE_LOG_TABLE_DISPLAY_FIELDS):
                     with column:
-                        st.markdown(format_trade_log_cell(row, field_name, account_name_map), unsafe_allow_html=True)
+                        cell_value = format_trade_log_cell(row, field_name, account_name_map)
+                        if field_name == "trade_type":
+                            st.markdown(cell_value, unsafe_allow_html=True)
+                        else:
+                            st.write(cell_value)
                 with row_columns[-1]:
                     if is_trade_log_editable(row):
                         action_col_1, action_col_2 = st.columns(2, gap="small")

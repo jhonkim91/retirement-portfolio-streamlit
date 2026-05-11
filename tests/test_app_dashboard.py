@@ -44,18 +44,25 @@ class ThemeStylesheetTests(unittest.TestCase):
 
         tokens = dashboard_app.load_design_tokens()
 
-        self.assertEqual(tokens["theme_primary_color"], "#0F766E")
-        self.assertEqual(tokens["theme_background_color"], "#F6F7F2")
-        self.assertEqual(tokens["theme_secondary_background_color"], "#E4EFE8")
-        self.assertEqual(tokens["theme_text_color"], "#15281F")
+        self.assertEqual(tokens["theme_primary_color"], "#33658A")
+        self.assertEqual(tokens["theme_background_color"], "#F8FAFC")
+        self.assertEqual(tokens["theme_secondary_background_color"], "#F0F4F8")
+        self.assertEqual(tokens["theme_text_color"], "#102A43")
+        self.assertEqual(tokens["chart_up_color"], "#256F68")
+        self.assertEqual(tokens["chart_down_color"], "#D94841")
+        self.assertEqual(tokens["chart_line_color"], "#17324D")
 
     def test_render_app_stylesheet_substitutes_theme_variables(self) -> None:
         """외부 CSS 템플릿의 플레이스홀더가 실제 토큰 값으로 치환된다."""
 
         stylesheet = dashboard_app.render_app_stylesheet()
 
-        self.assertIn("--theme-primary: #0F766E;", stylesheet)
+        self.assertIn("--theme-primary: #33658A;", stylesheet)
         self.assertIn(".dashboard-metric-card", stylesheet)
+        self.assertIn(".dashboard-reference-time", stylesheet)
+        self.assertIn(".st-key-dashboard-panel-allocation", stylesheet)
+        self.assertIn(".st-key-dashboard-panel-holdings-table", stylesheet)
+        self.assertIn(".st-key-trade-log-inline-editor-shell", stylesheet)
         self.assertNotIn("${theme_primary_color}", stylesheet)
 
     def test_render_app_stylesheet_uses_local_system_font_stack(self) -> None:
@@ -267,8 +274,21 @@ class HoldingsTableDisplayTests(unittest.TestCase):
         self.assertIn("안전자산", html)
         self.assertIn("50.0%", html)
         self.assertIn("50.0%", html)
+        self.assertIn(dashboard_app.FEARGREED_DOWN_COLOR, html)
+        self.assertIn(dashboard_app.FEARGREED_UP_COLOR, html)
         self.assertIn("보유현금 ₩200,000 포함", html)
         self.assertNotIn(">보유현금<", html)
+
+
+class DashboardSummaryToneTests(unittest.TestCase):
+    """원금 대비 손익 카드 강조 톤을 검증한다."""
+
+    def test_dashboard_return_metric_tone_tracks_sign(self) -> None:
+        """평가손익/수익률 요약 카드는 값 부호에 따라 초록/빨강 톤을 사용한다."""
+
+        self.assertEqual(dashboard_app.dashboard_return_metric_tone(150000), "positive")
+        self.assertEqual(dashboard_app.dashboard_return_metric_tone(-2.35), "negative")
+        self.assertEqual(dashboard_app.dashboard_return_metric_tone(0), "accent")
 
 
 class DashboardSelectionPayloadTests(unittest.TestCase):
@@ -576,11 +596,19 @@ class AllocationTreemapVisualMapTests(unittest.TestCase):
         self.assertEqual(us_index_leaf["current_price_text"], "₩104")
         self.assertEqual(us_index_leaf["day_change_text"], "+4.00%")
         self.assertEqual(us_index_leaf["holding_profit_text"], "+10.00%")
+        self.assertEqual(us_index_leaf["intraday_as_of"], "기준시각 2026-05-10 14:55:00")
         self.assertIn("<svg", us_index_leaf["sparkline_svg"])
 
 
 class DashboardAllocationStatusTests(unittest.TestCase):
     """자산 배분 헤더의 실시간 상태 문구를 검증한다."""
+
+    def test_format_dashboard_reference_time_formats_full_seconds(self) -> None:
+        """대시보드 기준시각은 초 단위까지 표기한다."""
+
+        formatted = dashboard_app.format_dashboard_reference_time("2026-05-11T11:24:15+09:00")
+
+        self.assertEqual(formatted, "2026-05-11 11:24:15")
 
     def test_dashboard_allocation_status_returns_idle_when_data_missing(self) -> None:
         """배분 데이터가 없으면 대기 상태를 표시한다."""

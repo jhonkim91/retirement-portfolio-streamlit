@@ -550,3 +550,67 @@ python scripts/verify_streamlit_deployment.py --page data --expect-backend supab
 - 검증 필요
   - 거래기록에서 매수 기록 삭제 후 대시보드/보유종목에서 해당 종목이 사라지는지 확인.
   - 개인 입금/회사 납입금/출금 삭제 시 현금 잔액이 정상 보정되는지 확인.
+
+## 2026-05-11 19:06 대시보드 카드/트렌드 컨트롤 스타일 조정
+
+### 변경 파일
+- `app.py`
+- `.streamlit/app.css`
+- `tests/test_app_dashboard.py`
+
+### 변경 내용
+- 상단 5개 요약 카드와 `현재 보유 종목` 패널 내부 배경을 흰색 기준으로 정리.
+- `원금 대비 평가손익`, `원금 대비 수익률` 카드 tone을 값 부호 기준 초록/빨강으로 복원.
+- `현재 보유 종목` 비중 막대는 `위험자산=빨강`, `안전자산=초록`, 트랙 배경은 흰색으로 조정.
+- 선택 종목 트렌드 컨트롤에서 `기간`, `지표`, `선택 해제`를 한 행에 배치하고 `선택 해제` 버튼을 동일한 박스 스타일로 통일.
+- 대시보드 상단/패널 관련 CSS 회귀를 반영하고 테스트 expectation을 갱신.
+
+### 검증 결과
+- `python -m compileall app.py src tests` 성공
+- `python -m unittest discover -s tests -p "test_*.py"` 성공 (`124`건)
+- 추가 확인:
+  - `python -m compileall app.py` 성공
+  - `python -m unittest tests.test_app_dashboard` 성공 (`40`건)
+
+### 로컬 실행 메모
+- Streamlit 로컬 서버: `python -m streamlit run app.py --server.port 8522 --server.headless true`
+- 확인 URL: `http://localhost:8522`
+- Playwright 기반 로컬 자동 확인은 Streamlit 초기 렌더 프레임을 안정적으로 잡지 못해 스크린샷이 빈 흰 화면으로 남았고, 이 한계는 `artifacts/local-dashboard-manual.png` 및 `artifacts/local-dashboard-debug/`에 기록함.
+
+## 2026-05-11 19:08 자산 배분 차트 세로 비율 확대
+
+### 변경 내용
+- `app.py`에 자산 배분 전용 높이 상수 `DASHBOARD_ALLOCATION_PANEL_HEIGHT=720`, `DASHBOARD_ALLOCATION_CHART_HEIGHT=520`를 추가.
+- 자산 배분 패널만 더 길게 보이도록 컨테이너 높이와 트리맵 렌더 높이를 전용 상수로 분리.
+- Altair fallback 자산 배분 차트도 동일 전용 높이를 사용하도록 맞춤.
+
+### 검증 결과
+- `python -m compileall app.py` 성공
+- `python -m unittest tests.test_app_dashboard` 성공 (`40`건)
+
+## 2026-05-11 19:29 대시보드 레이아웃/모바일/트리맵 경계 재조정
+
+### 변경 파일
+- `app.py`
+- `.streamlit/app.css`
+- `.streamlit/config.toml`
+- `tests/test_app_dashboard.py`
+
+### 변경 내용
+- 상단 5개 요약 카드 아래에 `기준시각`을 `YYYY-MM-DD HH:MM:SS` 형식으로 우측 정렬 배치.
+- 자산 배분/선택 종목 트렌드/보유 종목 수익률 패널의 고정 높이를 풀고 내부 gap을 줄여, 하단 공백이 과도하게 남지 않도록 정리.
+- `현재 보유 종목` 패널과 표 영역을 흰색 기준으로 맞추고, 자산 비중 막대 트랙도 흰색으로 정리.
+- 선택 종목 트렌드와 보유 종목 수익률 2열 영역에 모바일 전용 nowrap/축소 레이아웃을 적용해, 모바일에서도 PC와 같은 배치를 유지하고 필요 시 확대해서 볼 수 있게 조정.
+- 트리맵 상위/하위 레벨 `gapWidth`, `borderWidth`, `upperLabel` 높이, 외곽 margin을 줄여 경계선 어긋남과 과한 흰 여백을 완화.
+- 상단 카드 중 `입금 원금`, `원금 대비 평가손익`, `원금 대비 수익률`도 `보유 현금`, `현재 평가액` 카드와 같은 높이 기준으로 재정렬.
+
+### 검증 결과
+- `python -m compileall app.py src scripts tests` 성공
+- `python -m unittest discover -s tests -p "test_*.py"` 성공 (`125`건)
+- 추가 확인:
+  - `python -m unittest tests.test_app_dashboard` 성공 (`41`건)
+  - `python -m unittest tests.test_app_dashboard.ThemeStylesheetTests` 성공 (`3`건)
+
+### 로컬 확인 메모
+- Streamlit 로컬 서버: `python -m streamlit run app.py --server.port 8524 --server.headless true`
+- Playwright 로컬 확인에서는 Streamlit skeleton 단계 스크린샷까지만 안정적으로 캡처됐고, 산출물은 `artifacts/local-dashboard-8524.png`에 남김.
