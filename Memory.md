@@ -28,6 +28,7 @@
 - [x] 배포 검증 스크립트에 세션 재사용/디버그 아티팩트 저장 옵션 추가
 - [x] `src/market.py` 검색 캐시 추가 및 정규화 질의 회귀 테스트 보강
 - [x] 사용자별 DB 조회 캐시 및 이자 조회 제거 반영
+- [x] 외부 CDN 폰트 import 제거 및 시스템 폰트 스택 전환
 - [ ] 다음 장중 자동 스케줄(`UTC 00:00`, `UTC 02:55`) 1회 추가 확인
 - [x] 배포 대시보드에서 자산 배분 상태 칩이 실제로 `실시간 연동 중`으로 보이는지 화면 검증
 
@@ -128,6 +129,9 @@ streamlit run app.py
 - Supabase 읽기 경로에서 `holdings`, `trade_logs`, `daily_account_snapshot`, `realtime_*` 조회 전에 `accounts` 존재 확인용 추가 GET을 보내던 경로를 제거해 데이터 페이지/대시보드 렌더 시 중복 호출 수를 낮춤
 - `app.py`의 대시보드/데이터 페이지에서 `daily_interest` 조회와 관련 문구를 제거하고, `record_trade()`의 legacy 이자 재동기화 훅도 빼서 이자 제거 방향에 맞게 정리
 - 앱 코드 커밋 `8eb14d5`를 `origin/main`에 푸시했고, 원격 Streamlit 앱 `데이터` 페이지에서 로그인/저장소 상태 검증을 다시 통과함
+- `.streamlit/app.css`의 Pretendard jsDelivr `@import`를 제거하고 시스템 폰트 스택(`system-ui`, `-apple-system`, `"Segoe UI"`, `"Apple SD Gothic Neo"`, `"Noto Sans KR"`)으로 전환해 첫 렌더 시 외부 폰트 CSS 응답 대기를 없앰
+- `tests/test_app_dashboard.py`에 외부 CDN 폰트 import 부재와 시스템 폰트 스택 적용 회귀 테스트를 추가
+- 앱 코드 커밋 `569e2f9`를 `origin/main`에 푸시했고, 원격 Streamlit 앱 대시보드 로그인/렌더 검증을 다시 통과함
 - 배포 웹 검증이 불안정하던 원인을 `반복 로그인에 따른 인증 rate limit`과 `실패 시 마지막 화면 증거 부족`으로 분리했고, `scripts/verify_streamlit_deployment.py`에 `--storage-state`, `--debug-dir` 옵션과 `auth_error`/`rate_limited` 진단 필드를 추가
 - 검증 실패 시 단계별 `txt/png/url` 아티팩트를 남기도록 보강해, 로그인 실패/페이지 전환 실패/배포 미반영 상태를 이후 세션에서도 바로 재확인할 수 있게 정리
 
@@ -247,6 +251,15 @@ streamlit run app.py
   - 로컬 `.streamlit/secrets.toml`의 검증 계정 값을 환경 변수로 주입해 원격 검증 실행
   - `./.venv/bin/python scripts/verify_streamlit_deployment.py --page data --expect-backend supabase --debug-dir artifacts/deploy-verify-db-cache-8eb14d5` 성공
   - 원격 검증 결과: `backend_storage=supabase`, `status_panel_visible=true`, `snapshot_count="1건"`, 로그인/작업공간 노출 정상
+- 이번 턴 CSS 초기 로딩 개선 검증:
+  - `python3 -m compileall app.py tests/test_app_dashboard.py` 성공
+  - `python3 -m unittest tests.test_app_dashboard` 성공 (`32`건)
+  - `python3 -m compileall app.py src scripts tests` 성공
+  - `python3 -m unittest discover -s tests -p "test_*.py"` 성공 (`104`건)
+  - 배포 커밋 `569e2f9` 푸시 후 `git push origin main` 기준 원격 반영
+  - 로컬 `.streamlit/secrets.toml`의 검증 계정 값을 환경 변수로 주입해 원격 검증 실행
+  - `./.venv/bin/python scripts/verify_streamlit_deployment.py --page dashboard --expect-backend supabase --debug-dir artifacts/deploy-verify-system-font-569e2f9` 성공
+  - 원격 검증 결과: `backend_storage=supabase`, `allocation_status="지연 데이터 표시 중"`, 로그인/작업공간 노출 정상
 - 이번 턴 매수 현금 부족 차단 해제 검증:
   - `python3 -m compileall src/db.py src/sqlite_db.py tests/test_db.py` 성공
   - `python3 -m unittest tests.test_db` 성공 (`17`건)
