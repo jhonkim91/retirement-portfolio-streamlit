@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 import pandas as pd
 
+import src.market as market
 from src.market import (
     clean_code,
     fetch_latest_price,
@@ -12,6 +13,7 @@ from src.market import (
     is_krx_code,
     normalize_symbol,
     resolve_kis_sector_label,
+    search_products,
 )
 
 
@@ -117,6 +119,46 @@ class MarketSectorResolutionTests(unittest.TestCase):
     def test_resolve_kis_sector_label_returns_master_sector_name(self, sector_mock) -> None:
         self.assertEqual(resolve_kis_sector_label("005930"), "전기·전자")
         sector_mock.assert_called_once_with("005930")
+
+
+class MarketSearchCacheTests(unittest.TestCase):
+    """검색 캐시가 정규화된 질의값 기준으로 동작하는지 검증한다."""
+
+    def tearDown(self) -> None:
+        getattr(market._search_products_cached, "clear", lambda: None)()
+
+    @patch("src.market.search_funds_from_funetf", return_value=[])
+    @patch("src.market.search_products_from_naver_etf_list", return_value=[])
+    @patch(
+        "src.market.search_products_from_naver_search",
+        return_value=[
+            {
+                "name": "삼성전자",
+                "code": "005930",
+                "symbol": "005930.KS",
+                "exchange": "KRX",
+                "type": "stock/ETF",
+                "source": "Naver",
+            }
+        ],
+    )
+    @patch("src.market.search_master_products", return_value=[])
+    def test_search_products_reuses_cache_for_normalized_query(
+        self,
+        search_master_mock,
+        naver_search_mock,
+        naver_etf_mock,
+        funetf_mock,
+    ) -> None:
+        first = search_products(" 삼성전자 ", limit=5)
+        second = search_products("삼성전자", limit=5)
+
+        self.assertEqual(first, second)
+        self.assertEqual(first[0]["code"], "005930")
+        search_master_mock.assert_called_once_with("삼성전자", limit=5)
+        naver_search_mock.assert_called_once_with("삼성전자", 5)
+        naver_etf_mock.assert_not_called()
+        funetf_mock.assert_not_called()
 
 
 if __name__ == "__main__":

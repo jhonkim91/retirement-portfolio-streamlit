@@ -430,8 +430,10 @@ def get_funetf_product_by_code(code: str) -> dict[str, Any] | None:
         return None
 
 
-def search_products(query: str, limit: int = 8) -> list[dict[str, Any]]:
-    cleaned_query = clean_code(query)
+@st.cache_data(ttl=3600, max_entries=300, show_spinner=False)
+def _search_products_cached(cleaned_query: str, limit: int = 8) -> list[dict[str, Any]]:
+    """정규화된 검색어 기준으로 외부 상품 검색 결과를 캐시한다."""
+
     if len(cleaned_query) < 2:
         return []
 
@@ -524,6 +526,21 @@ def search_products(query: str, limit: int = 8) -> list[dict[str, Any]]:
             add_result(item)
 
     return sorted(results, key=rank)[:limit]
+
+
+def search_products(query: str, limit: int = 8) -> list[dict[str, Any]]:
+    """여러 외부 경로를 순차 조회해 검색 후보를 반환한다."""
+
+    cleaned_query = clean_code(query)
+    if len(cleaned_query) < 2:
+        return []
+
+    try:
+        normalized_limit = max(1, int(limit))
+    except (TypeError, ValueError):
+        normalized_limit = 8
+
+    return _search_products_cached(cleaned_query, normalized_limit)
 
 
 def _empty_intraday_snapshot(normalized: str) -> dict[str, Any]:

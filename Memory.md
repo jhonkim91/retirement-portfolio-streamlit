@@ -25,6 +25,8 @@
 - [x] Supabase 음수 현금 helper 제약으로 막히던 거래 등록 재수정
 - [x] 거래 저장 후 `st.session_state` 직접 초기화 예외 제거
 - [x] 운영 배포용 `app.py` 초기 `importlib.reload(src.market)` 제거
+- [x] 배포 검증 스크립트에 세션 재사용/디버그 아티팩트 저장 옵션 추가
+- [x] `src/market.py` 검색 캐시 추가 및 정규화 질의 회귀 테스트 보강
 - [ ] 다음 장중 자동 스케줄(`UTC 00:00`, `UTC 02:55`) 1회 추가 확인
 - [x] 배포 대시보드에서 자산 배분 상태 칩이 실제로 `실시간 연동 중`으로 보이는지 화면 검증
 
@@ -118,6 +120,10 @@ streamlit run app.py
 - 누적 원금 화면 문구도 `새 이자는 자동 적립하지 않지만 기존 일별 이자 이력은 현금 계산에 반영된다`는 현재 동작에 맞게 수정
 - 매수 등록은 보유현금 부족이어도 허용하고, 이후 `현금 조정`으로 실제 통장 잔액을 수동 최신화하는 현재 운영 방식에 맞게 `buy` 현금 부족 차단을 제거
 - `app.py` 초기 로딩에서 `src.market` import 직후 다시 호출하던 `importlib.reload()`를 제거해, Streamlit 재실행마다 중복 모듈 초기화 비용이 생기던 경로를 정리
+- `src/market.py`의 `search_products()`를 정규화 질의값 기준 내부 캐시(`ttl=3600`, `max_entries=300`)로 감싸, 동일 검색어의 공백/표기 차이로 외부 검색 API를 반복 호출하던 경로를 줄임
+- `tests/test_market.py`에 `" 삼성전자 "`와 `"삼성전자"`가 동일 캐시 엔트리를 재사용하는지 검증하는 회귀 테스트를 추가
+- 배포 웹 검증이 불안정하던 원인을 `반복 로그인에 따른 인증 rate limit`과 `실패 시 마지막 화면 증거 부족`으로 분리했고, `scripts/verify_streamlit_deployment.py`에 `--storage-state`, `--debug-dir` 옵션과 `auth_error`/`rate_limited` 진단 필드를 추가
+- 검증 실패 시 단계별 `txt/png/url` 아티팩트를 남기도록 보강해, 로그인 실패/페이지 전환 실패/배포 미반영 상태를 이후 세션에서도 바로 재확인할 수 있게 정리
 
 ## 최신 검증 결과
 - `python3 -m compileall app.py src scripts tests` 성공
@@ -216,6 +222,11 @@ streamlit run app.py
   - `./.venv/bin/python -m unittest discover -s tests -p "test_*.py"` 성공 (`92`건)
   - `_sync_legacy_interest_history_for_buy()` 테스트에서 기존 `interest`/`daily_interest` 이력이 있으면 `_replace_interest_history()`를 호출하는지 확인
   - 이자 이력이 없는 계좌는 매수 전 재동기화를 건너뛰는지 확인
+- 이번 턴 검색 캐시 보강 검증:
+  - `python3 -m compileall src/market.py tests/test_market.py` 성공
+  - `python3 -m unittest tests.test_market` 성공 (`11`건)
+  - `python3 -m compileall app.py src scripts tests` 성공
+  - `python3 -m unittest discover -s tests -p "test_*.py"` 성공 (`101`건)
 - 이번 턴 매수 현금 부족 차단 해제 검증:
   - `python3 -m compileall src/db.py src/sqlite_db.py tests/test_db.py` 성공
   - `python3 -m unittest tests.test_db` 성공 (`17`건)
@@ -257,6 +268,14 @@ streamlit run app.py
   - `./.venv/bin/python scripts/verify_streamlit_deployment.py --page dashboard --expect-backend supabase` 성공
   - 원격 검증 결과: `backend_storage=supabase`, `allocation_status="실시간 연동 중"`, 로그인/작업공간 노출 정상
   - 원격 검증 산출물: `artifacts/deploy-verify-remove-reload-89038db.txt`, `artifacts/deploy-verify-remove-reload-89038db.png`
+- 이번 턴 배포 검증 디버그성 보강 검증:
+  - `python3 -m compileall scripts/verify_streamlit_deployment.py tests/test_verify_streamlit_deployment.py` 성공
+  - `python3 -m unittest tests.test_verify_streamlit_deployment` 성공 (`10`건)
+  - `python3 -m compileall app.py src scripts tests` 성공
+  - `python3 -m unittest discover -s tests -p "test_*.py"` 성공 (`100`건)
+  - `scripts/verify_streamlit_deployment.py`에 `--storage-state` 재사용 옵션 추가
+  - `scripts/verify_streamlit_deployment.py`에 `--debug-dir` 단계별 `txt/png/url` 저장 옵션 추가
+  - 로그인 실패 시 `Request rate limit reached` 같은 인증 제한 문구를 `auth_error`, `rate_limited`로 분리 노출하도록 보강
 
 ## Git/GitHub 상태
 - 기본 브랜치: `main`
