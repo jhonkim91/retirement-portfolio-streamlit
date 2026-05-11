@@ -12,6 +12,10 @@
 - [x] GitHub-hosted runner에서 `KIS Realtime Worker` 수동 실행 성공 검증
 - [x] `Memory.md` 장문 로그를 요약형 운영 메모로 정리
 - [x] GitHub Actions `Node 24` 전환 경고 제거
+- [x] 배포 검증 스크립트에 대시보드 자산 배분 상태 칩 파싱/기대값 검증 추가
+- [x] `config.toml` 기반 디자인 토큰 및 전역 CSS 외부 파일 구조 정리
+- [x] 보유 종목 수익률 음수 막대 모서리 방향 수정
+- [x] 선택 종목 트렌드에 `당일` intraday 구간 추가
 - [ ] 다음 장중 자동 스케줄(`UTC 00:00`, `UTC 02:55`) 1회 추가 확인
 - [x] 배포 대시보드에서 자산 배분 상태 칩이 실제로 `실시간 연동 중`으로 보이는지 화면 검증
 
@@ -90,11 +94,18 @@ streamlit run app.py
 - 커밋 `2ede61d` 배포 후 세 번째 원격 확인에서 자산 배분 상태 칩이 `실시간 연동 중`으로 전환됨을 확인
 - `actions/checkout@v6`, `actions/setup-python@v6`, `permissions.contents=read`로 workflow를 올려 `Node.js 20 actions are deprecated` 경고 제거
 - `Daily Rollup` 과거 schedule 실패 원인은 `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` 시크릿 누락이었고, 현재는 수동 `dry-run` 성공으로 복구 상태 확인
+- `scripts/verify_streamlit_deployment.py`가 대시보드 렌더 완료까지 대기한 뒤 `자산 배분` 상태 칩 텍스트를 파싱하고, `--expect-allocation-status`로 기대값 비교까지 수행하도록 보강
+- `app.py` 내부 전역 CSS를 `.streamlit/app.css`로 분리하고, `.streamlit/config.toml`의 `primary/background/secondaryBackground/text`를 기준으로 카드·차트·배경 토큰을 Python 로더에서 파생하도록 정리
+- 대시보드 차트 계열의 선택 강조색, 라인 색, 툴팁/캔버스 색을 동일 토큰 체계에 연결하고, `tests/test_app_dashboard.py`에 토큰/외부 CSS 로딩 회귀 테스트를 추가
+- `보유 종목 수익률` ECharts 막대가 음수일 때도 상단 라운드가 적용되던 문제를 수정하고, 값 부호에 따라 양수는 상단 라운드, 음수는 하단 라운드가 적용되도록 변경
+- Altair fallback 막대차트도 `cornerRadiusEnd`로 맞춰 ECharts 미사용 환경에서 같은 방향성을 유지하도록 정리
+- 선택 종목 트렌드 기간에 `당일`을 추가하고, `fetch_intraday_price_snapshot()`의 세션 타임라인을 사용해 장 시작부터 장 마감까지의 intraday 누적 손익 흐름을 그리도록 연결
+- KIS/Yahoo intraday 스냅샷 반환값에 `timeline(datetime, close)`를 추가하고, 선택 종목 데이터 보기에서 `당일`일 때 `시간` 컬럼과 `HH:MM` 축 라벨을 함께 노출하도록 정리
 
 ## 최신 검증 결과
 - `python3 -m compileall app.py src scripts tests` 성공
 - `python3 -m unittest discover -s tests -p "test_*.py"` 성공
-- 최신 테스트 수: `73`건 통과
+- 최신 테스트 수: `85`건 통과
 - 배포 검증 산출물:
   - `artifacts/deploy-verify-realtime-data-20260511.txt`
   - `artifacts/deploy-verify-realtime-data-20260511.png`
@@ -116,6 +127,39 @@ streamlit run app.py
   - 두 run 모두 `Node.js 20 actions are deprecated` 경고 문구 미발견
   - `gh workflow list`, `gh api repos/.../actions/workflows` 기준 `KIS Realtime Worker`, `Daily Rollup` 모두 `active`
   - 다만 `gh run list --workflow "KIS Realtime Worker" --event schedule` 결과는 비어 있어 `schedule` 이벤트 실주행은 다음 자동 사이클에서 추가 확인 필요
+- 이번 턴 배포 검증 스크립트 추가 검증:
+  - `python3 -m unittest tests.test_verify_streamlit_deployment` 성공 (`7`건)
+  - `python3 -m unittest discover -s tests -p "test_*.py"` 재실행 성공 (`81`건)
+  - `./.venv/bin/python scripts/verify_streamlit_deployment.py --page dashboard --expect-backend supabase` 성공
+  - 위 실행에서 `allocation_status="지연 데이터 표시 중"` 파싱 확인
+  - `./.venv/bin/python scripts/verify_streamlit_deployment.py --page dashboard --expect-backend supabase --expect-allocation-status "지연 데이터 표시 중"` 성공
+  - 산출물: `artifacts/deploy-verify-dashboard-allocation-status-20260511.txt`, `artifacts/deploy-verify-dashboard-allocation-status-20260511.png`
+  - `2026-05-11 03:30 UTC` 기준 `gh run list --workflow "KIS Realtime Worker" --event schedule` 결과는 여전히 비어 있음
+- 이번 턴 디자인 토큰/CSS 구조 검증:
+  - `python3 -m compileall app.py tests/test_app_dashboard.py` 성공
+  - `python3 -m unittest tests.test_app_dashboard` 성공 (`22`건)
+  - `python3 -m compileall app.py src scripts tests` 재실행 성공
+  - `python3 -m unittest discover -s tests -p "test_*.py"` 성공 (`83`건)
+  - `python3 -m streamlit run app.py --server.port 8511 --server.headless true` 로컬 기동 성공
+  - `./.local/bin/agent-browser`로 `http://localhost:8511` 확인 시 초기 skeleton 이후 로그인 카드 렌더 스크린샷 확보
+  - 로컬 시각 검증 산출물: `artifacts/design-token-local-8511.png`, `artifacts/design-token-local-8511-after-wait.png`
+- 이번 턴 보유 종목 수익률 막대 방향 수정 검증:
+  - `python3 -m compileall app.py tests/test_app_dashboard.py` 성공
+  - `python3 -m unittest tests.test_app_dashboard` 성공 (`22`건)
+  - `python3 -m unittest discover -s tests -p "test_*.py"` 성공 (`83`건)
+  - `holdings_bar_options()` 테스트에서 양수 막대 `borderRadius=[10, 10, 0, 0]`, 음수 막대 `borderRadius=[0, 0, 10, 10]` 회귀 검증 추가
+  - Altair fallback 차트 `mark_bar(cornerRadiusEnd=8)` 스펙 직렬화 확인
+  - 로컬 브라우저 기동: `python3 -m streamlit run app.py --server.port 8512 --server.headless true` 성공
+  - `agent-browser`로 로그인 화면 렌더 스크린샷 확보: `artifacts/holdings-bar-login-8512-after-double-wait.png`
+- 이번 턴 선택 종목 트렌드 `당일` intraday 추가 검증:
+  - `python3 -m compileall app.py tests/test_app_dashboard.py` 성공
+  - `python3 -m unittest tests.test_app_dashboard` 성공 (`24`건)
+  - `python3 -m compileall app.py src scripts tests` 성공
+  - `python3 -m unittest discover -s tests -p "test_*.py"` 성공 (`85`건)
+  - `python3 -m streamlit run app.py --server.port 8514 --server.headless true` 로컬 기동 성공
+  - `agent-browser`로 `http://localhost:8514` 로그인 화면 렌더, 에러 오버레이 없음, 본문 텍스트 존재 확인
+  - 로컬 시각 검증 산출물: `artifacts/selected-trend-local-8514-login.png`, `artifacts/selected-trend-local-8514-after-wait.png`
+  - `./.venv/bin/python scripts/verify_streamlit_deployment.py --url http://localhost:8514 ...` 는 로컬 앱 프레임 감지 실패로 중단되어, 로컬 브라우저 검증은 `agent-browser` 기준으로 기록
 
 ## Git/GitHub 상태
 - 기본 브랜치: `main`
@@ -126,6 +170,7 @@ streamlit run app.py
   - `2ede61d` `Improve dashboard live status fallback`
   - `c07e7d7` `Upgrade GitHub Actions to Node 24 runtimes`
 - 최근 기록 커밋:
+  - `0f53406` `Record Node 24 workflow verification`
   - `2654620` `Record realtime table activation verification`
   - `00aa563` `Record GitHub worker validation`
 - 로컬 도구:
@@ -152,4 +197,4 @@ python scripts/verify_streamlit_deployment.py --page data --expect-backend supab
 
 ## 남은 작업
 1. `KIS Realtime Worker`의 다음 자동 스케줄(`UTC 00:00` 또는 `UTC 02:55`)이 실제 `schedule` 이벤트로 생성되고 `success`로 끝나는지 확인
-2. 필요 시 `verify_streamlit_deployment.py`에 자산 배분 상태 칩 텍스트 검증 추가
+2. `2026-05-11 03:30 UTC` 기준 자동 `schedule` run이 없으므로, 다음 확인 시각은 `2026-05-12 00:00 UTC` 이후가 우선

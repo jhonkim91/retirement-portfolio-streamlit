@@ -3,7 +3,10 @@ from __future__ import annotations
 import html
 import importlib
 from datetime import date, datetime, timedelta
+from pathlib import Path
+from string import Template
 from typing import Any
+import tomllib
 from zoneinfo import ZoneInfo
 
 import altair as alt
@@ -38,6 +41,164 @@ search_products = getattr(market_module, "search_products", lambda query, limit=
 quote_provider_status = getattr(market_module, "quote_provider_status", lambda: {})
 is_kis_domestic_symbol = getattr(market_module, "is_kis_domestic_symbol", lambda symbol: False)
 
+APP_ROOT = Path(__file__).resolve().parent
+STREAMLIT_CONFIG_PATH = APP_ROOT / ".streamlit" / "config.toml"
+APP_CSS_PATH = APP_ROOT / ".streamlit" / "app.css"
+DEFAULT_THEME_SETTINGS = {
+    "primaryColor": "#0F766E",
+    "backgroundColor": "#F6F7F2",
+    "secondaryBackgroundColor": "#E4EFE8",
+    "textColor": "#15281F",
+}
+
+
+def _normalize_hex_color(value: Any, fallback: str) -> str:
+    """16진수 색상 문자열을 `#RRGGBB` 형식으로 정규화한다."""
+
+    raw_value = str(value or "").strip()
+    candidate = raw_value if raw_value.startswith("#") else f"#{raw_value}"
+    if len(candidate) == 4:
+        candidate = "#" + "".join(channel * 2 for channel in candidate[1:])
+    if len(candidate) != 7:
+        return fallback
+    if any(channel not in "0123456789abcdefABCDEF" for channel in candidate[1:]):
+        return fallback
+    return candidate.upper()
+
+
+def _hex_to_rgb(value: str) -> tuple[int, int, int]:
+    """정규화된 16진수 색상을 RGB 튜플로 변환한다."""
+
+    normalized = _normalize_hex_color(value, "#000000").lstrip("#")
+    return tuple(int(normalized[index : index + 2], 16) for index in (0, 2, 4))
+
+
+def _mix_hex_colors(start_hex: str, end_hex: str, ratio: float) -> str:
+    """두 16진수 색상을 비율에 따라 섞어 새 16진수 색상을 만든다."""
+
+    ratio = max(0.0, min(1.0, float(ratio)))
+    start_rgb = _hex_to_rgb(start_hex)
+    end_rgb = _hex_to_rgb(end_hex)
+    mixed_rgb = tuple(
+        round(source + (target - source) * ratio)
+        for source, target in zip(start_rgb, end_rgb)
+    )
+    return "#{:02X}{:02X}{:02X}".format(*mixed_rgb)
+
+
+def _rgba_from_hex(value: str, alpha: float) -> str:
+    """16진수 색상과 alpha 값으로 CSS rgba 문자열을 만든다."""
+
+    red, green, blue = _hex_to_rgb(value)
+    return f"rgba({red}, {green}, {blue}, {max(0.0, min(1.0, float(alpha))):.2f})"
+
+
+def load_design_tokens() -> dict[str, str | list[str]]:
+    """`.streamlit/config.toml`을 기준으로 파생 디자인 토큰을 계산한다."""
+
+    theme_settings = dict(DEFAULT_THEME_SETTINGS)
+    try:
+        parsed_config = tomllib.loads(STREAMLIT_CONFIG_PATH.read_text(encoding="utf-8"))
+    except (FileNotFoundError, OSError, tomllib.TOMLDecodeError):
+        parsed_config = {}
+
+    raw_theme_settings = parsed_config.get("theme") if isinstance(parsed_config, dict) else {}
+    if isinstance(raw_theme_settings, dict):
+        for key, fallback in DEFAULT_THEME_SETTINGS.items():
+            theme_settings[key] = _normalize_hex_color(raw_theme_settings.get(key), fallback)
+    else:
+        for key, fallback in DEFAULT_THEME_SETTINGS.items():
+            theme_settings[key] = fallback
+
+    primary_color = str(theme_settings["primaryColor"])
+    background_color = str(theme_settings["backgroundColor"])
+    secondary_background_color = str(theme_settings["secondaryBackgroundColor"])
+    text_color = str(theme_settings["textColor"])
+
+    brand_deep_color = _mix_hex_colors(primary_color, text_color, 0.40)
+    chart_line_color = _mix_hex_colors(primary_color, "#FFFFFF", 0.16)
+    chart_up_color = "#B24A4A"
+    chart_up_strong_color = "#8F3838"
+    chart_down_color = "#4C79AB"
+    chart_down_strong_color = "#345A82"
+    tooltip_background_color = _rgba_from_hex(_mix_hex_colors(text_color, primary_color, 0.22), 0.96)
+
+    return {
+        "theme_primary_color": primary_color,
+        "theme_background_color": background_color,
+        "theme_secondary_background_color": secondary_background_color,
+        "theme_text_color": text_color,
+        "panel_color": _mix_hex_colors(secondary_background_color, "#FFFFFF", 0.72),
+        "panel_alt_color": _mix_hex_colors(background_color, secondary_background_color, 0.55),
+        "surface_color": _rgba_from_hex(_mix_hex_colors(secondary_background_color, "#FFFFFF", 0.78), 0.88),
+        "surface_strong_color": _rgba_from_hex("#FFFFFF", 0.96),
+        "border_soft_color": _rgba_from_hex(text_color, 0.10),
+        "border_emphasis_color": _rgba_from_hex(primary_color, 0.16),
+        "text_muted_color": _mix_hex_colors(text_color, background_color, 0.56),
+        "text_mid_color": _mix_hex_colors(text_color, background_color, 0.42),
+        "text_dim_color": _mix_hex_colors(text_color, background_color, 0.72),
+        "brand_deep_color": brand_deep_color,
+        "brand_accent_color": primary_color,
+        "brand_hover_color": _mix_hex_colors(primary_color, text_color, 0.24),
+        "brand_soft_color": _rgba_from_hex(primary_color, 0.14),
+        "status_good_color": primary_color,
+        "status_warn_color": "#B56B2B",
+        "auth_background_start_color": _mix_hex_colors(text_color, primary_color, 0.52),
+        "auth_background_end_color": _mix_hex_colors(text_color, primary_color, 0.30),
+        "hero_start_color": _mix_hex_colors(primary_color, text_color, 0.42),
+        "hero_mid_color": _mix_hex_colors(primary_color, "#FFFFFF", 0.12),
+        "hero_end_color": primary_color,
+        "hero_glow_color": _rgba_from_hex(primary_color, 0.28),
+        "card_shadow_color": _rgba_from_hex(text_color, 0.08),
+        "chart_canvas_bg_color": _mix_hex_colors(background_color, secondary_background_color, 0.58),
+        "chart_canvas_border_color": _mix_hex_colors(secondary_background_color, text_color, 0.12),
+        "chart_title_text_color": _mix_hex_colors(primary_color, text_color, 0.45),
+        "chart_title_bg_color": _rgba_from_hex(_mix_hex_colors(secondary_background_color, "#FFFFFF", 0.74), 0.96),
+        "chart_title_border_color": _rgba_from_hex(primary_color, 0.16),
+        "chart_panel_color": _mix_hex_colors(secondary_background_color, "#FFFFFF", 0.50),
+        "chart_panel_alt_color": _mix_hex_colors(background_color, "#FFFFFF", 0.45),
+        "chart_border_color": _rgba_from_hex(text_color, 0.16),
+        "chart_dim_text_color": _mix_hex_colors(text_color, background_color, 0.72),
+        "chart_muted_text_color": _mix_hex_colors(text_color, background_color, 0.60),
+        "chart_mid_text_color": _mix_hex_colors(text_color, background_color, 0.46),
+        "chart_text_color": brand_deep_color,
+        "chart_inverse_text_color": "#FFFFFF",
+        "chart_inverse_muted_text_color": "#E5EEF0",
+        "chart_up_color": chart_up_color,
+        "chart_up_strong_color": chart_up_strong_color,
+        "chart_down_color": chart_down_color,
+        "chart_down_strong_color": chart_down_strong_color,
+        "chart_flat_color": _mix_hex_colors(primary_color, text_color, 0.58),
+        "chart_accent_color": primary_color,
+        "chart_accent_soft_color": _rgba_from_hex(primary_color, 0.18),
+        "chart_accent_strong_color": _mix_hex_colors(primary_color, text_color, 0.18),
+        "chart_live_dot_color": primary_color,
+        "chart_line_color": chart_line_color,
+        "chart_line_soft_color": _rgba_from_hex(chart_line_color, 0.28),
+        "chart_line_faint_color": _rgba_from_hex(chart_line_color, 0.08),
+        "chart_tooltip_bg_color": tooltip_background_color,
+        "chart_tooltip_text_color": "#F8FAFC",
+        "chart_tooltip_muted_text_color": "#DCE7EA",
+        "treemap_palette": [
+            chart_down_strong_color,
+            chart_down_color,
+            _mix_hex_colors(chart_down_color, background_color, 0.55),
+            _mix_hex_colors(background_color, secondary_background_color, 0.72),
+            _mix_hex_colors(chart_up_color, background_color, 0.55),
+            chart_up_color,
+            chart_up_strong_color,
+        ],
+    }
+
+
+def render_app_stylesheet() -> str:
+    """디자인 토큰을 외부 CSS 템플릿에 주입한 결과를 반환한다."""
+
+    css_template = APP_CSS_PATH.read_text(encoding="utf-8")
+    css_variables = {key: str(value) for key, value in DESIGN_TOKENS.items() if isinstance(value, str)}
+    return Template(css_template).safe_substitute(css_variables)
+
+
 KST_TIMEZONE = ZoneInfo("Asia/Seoul")
 REALTIME_QUOTE_FRESHNESS = timedelta(minutes=3)
 
@@ -63,6 +224,7 @@ set_holding_price = _db.set_holding_price
 backend_status = _db.backend_status
 is_accounts_hotfix_error = _db.is_accounts_hotfix_error
 sync_account_rollup = _db.sync_account_rollup
+DESIGN_TOKENS = load_design_tokens()
 
 
 def holdings_overview_frame(
@@ -165,43 +327,49 @@ DETAIL_MEASURE_LABELS = {
 }
 DEFAULT_SELECTED_TREND_MEASURE = "profit_rate"
 PERIOD_LABELS = {
+    "today": "당일",
     "1mo": "1개월",
     "3mo": "3개월",
     "6mo": "6개월",
     "1y": "1년",
 }
+SELECTED_TREND_PERIOD_OPTIONS = ("today", "1mo", "3mo", "6mo", "1y")
 DASHBOARD_OVERVIEW_PANEL_HEIGHT = 560
 DASHBOARD_OVERVIEW_CHART_HEIGHT = 400
 DASHBOARD_DETAIL_CHART_HEIGHT = 300
 DASHBOARD_HOLDINGS_TABLE_HEIGHT = 380
-FEARGREED_BG_COLOR = "#131722"
-FEARGREED_PANEL_COLOR = "#1E222D"
-FEARGREED_PANEL_ALT_COLOR = "#181C26"
-FEARGREED_BORDER_COLOR = "#2A2F3E"
-FEARGREED_DIM_TEXT_COLOR = "#555C6E"
-FEARGREED_MUTED_TEXT_COLOR = "#868993"
-FEARGREED_MID_TEXT_COLOR = "#9BA3B2"
-FEARGREED_BRIGHT_TEXT_COLOR = "#D1D4DC"
-FEARGREED_FULL_TEXT_COLOR = "#FFFFFF"
-FEARGREED_UP_COLOR = "#E22B2B"
-FEARGREED_DOWN_COLOR = "#1763B2"
-FEARGREED_FLAT_COLOR = "#2A2E39"
-FEARGREED_ACCENT_COLOR = "#2962FF"
-FEARGREED_LIVE_DOT_COLOR = "#26A69A"
-TREEMAP_CANVAS_BG_COLOR = "#EEF4F2"
-TREEMAP_CANVAS_BORDER_COLOR = "#D7E4DF"
-TREEMAP_TITLE_TEXT_COLOR = "#103B42"
-TREEMAP_TITLE_BG_COLOR = "rgba(255, 255, 255, 0.96)"
-TREEMAP_TITLE_BORDER_COLOR = "rgba(16, 59, 66, 0.14)"
+FEARGREED_BG_COLOR = str(DESIGN_TOKENS["chart_panel_alt_color"])
+FEARGREED_PANEL_COLOR = str(DESIGN_TOKENS["chart_panel_color"])
+FEARGREED_PANEL_ALT_COLOR = str(DESIGN_TOKENS["chart_panel_alt_color"])
+FEARGREED_BORDER_COLOR = str(DESIGN_TOKENS["chart_border_color"])
+FEARGREED_DIM_TEXT_COLOR = str(DESIGN_TOKENS["chart_dim_text_color"])
+FEARGREED_MUTED_TEXT_COLOR = str(DESIGN_TOKENS["chart_muted_text_color"])
+FEARGREED_MID_TEXT_COLOR = str(DESIGN_TOKENS["chart_mid_text_color"])
+FEARGREED_BRIGHT_TEXT_COLOR = str(DESIGN_TOKENS["chart_inverse_muted_text_color"])
+FEARGREED_FULL_TEXT_COLOR = str(DESIGN_TOKENS["chart_inverse_text_color"])
+FEARGREED_UP_COLOR = str(DESIGN_TOKENS["chart_up_color"])
+FEARGREED_DOWN_COLOR = str(DESIGN_TOKENS["chart_down_color"])
+FEARGREED_FLAT_COLOR = str(DESIGN_TOKENS["chart_flat_color"])
+FEARGREED_ACCENT_COLOR = str(DESIGN_TOKENS["chart_accent_color"])
+FEARGREED_LIVE_DOT_COLOR = str(DESIGN_TOKENS["chart_live_dot_color"])
+TREEMAP_CANVAS_BG_COLOR = str(DESIGN_TOKENS["chart_canvas_bg_color"])
+TREEMAP_CANVAS_BORDER_COLOR = str(DESIGN_TOKENS["chart_canvas_border_color"])
+TREEMAP_TITLE_TEXT_COLOR = str(DESIGN_TOKENS["chart_title_text_color"])
+TREEMAP_TITLE_BG_COLOR = str(DESIGN_TOKENS["chart_title_bg_color"])
+TREEMAP_TITLE_BORDER_COLOR = str(DESIGN_TOKENS["chart_title_border_color"])
 FEARGREED_TREEMAP_PALETTE = [
-    "#050F28",
-    "#0D3D7A",
-    "#80AAF0",
-    "#2A2E39",
-    "#FF8080",
-    "#E22B2B",
-    "#3A0000",
+    str(color)
+    for color in DESIGN_TOKENS["treemap_palette"]
+    if isinstance(color, str)
 ]
+CHART_LINE_COLOR = str(DESIGN_TOKENS["chart_line_color"])
+CHART_LINE_SOFT_COLOR = str(DESIGN_TOKENS["chart_line_soft_color"])
+CHART_LINE_FAINT_COLOR = str(DESIGN_TOKENS["chart_line_faint_color"])
+CHART_TOOLTIP_BG_COLOR = str(DESIGN_TOKENS["chart_tooltip_bg_color"])
+CHART_TOOLTIP_TEXT_COLOR = str(DESIGN_TOKENS["chart_tooltip_text_color"])
+CHART_TEXT_COLOR = str(DESIGN_TOKENS["chart_text_color"])
+CHART_ACCENT_SOFT_COLOR = str(DESIGN_TOKENS["chart_accent_soft_color"])
+CHART_ACCENT_STRONG_COLOR = str(DESIGN_TOKENS["chart_accent_strong_color"])
 PRODUCT_TYPE_LABELS = {
     "stock": "주식",
     "stock/ETF": "주식/ETF",
@@ -313,6 +481,8 @@ def period_start_date(period: str) -> date:
 
     today = date.today()
     normalized = str(period or "6mo")
+    if normalized == "today":
+        return today
     if normalized == "1mo":
         return today - relativedelta(months=1)
     if normalized == "3mo":
@@ -421,1043 +591,7 @@ def mark_rollup_synced(account_id: int) -> None:
 def inject_app_styles() -> None:
     """대시보드 중심 UI 정리를 위한 앱 전역 스타일을 주입한다."""
 
-    st.markdown(
-        """
-        <style>
-        @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
-
-        :root {
-            --bg: #f4f7f6;
-            --panel: #ffffff;
-            --panel-alt: #f6f9f8;
-            --surface: rgba(255, 255, 255, 0.88);
-            --surface-strong: rgba(255, 255, 255, 0.96);
-            --line-soft: rgba(15, 23, 42, 0.08);
-            --text-muted: #526072;
-            --ink-strong: #0f172a;
-            --brand-deep: #103b42;
-            --brand-accent: #d97706;
-            --status-good: #0f766e;
-            --status-warn: #b45309;
-            --border-strong: rgba(15, 23, 42, 0.08);
-            --dim-text: #94a3b8;
-            --mid-text: #607285;
-            --full: #ffffff;
-            --panel-radius: 20px;
-            --panel-padding: 1.05rem 1.1rem 1.15rem;
-            --section-gap: 1rem;
-            --chart-gap: 0.85rem;
-        }
-
-        html, body, [class*="css"] {
-            font-family: 'Pretendard', sans-serif;
-        }
-
-        h1, h2, h3, h4, h5, h6 {
-            color: var(--brand-deep);
-        }
-
-        [data-testid="stMarkdownContainer"] p,
-        [data-testid="stCaptionContainer"],
-        [data-testid="stText"] {
-            color: var(--ink-strong);
-        }
-
-        .stApp {
-            background:
-                radial-gradient(circle at top left, rgba(214, 232, 231, 0.65), transparent 24rem),
-                linear-gradient(180deg, #f4f7f6 0%, #eef3f2 45%, #f7f8f7 100%);
-            color: var(--ink-strong);
-        }
-
-        .block-container {
-            padding-top: 1.35rem;
-            padding-bottom: 3rem;
-            max-width: 1580px;
-        }
-
-        [data-testid="stSidebar"] {
-            background: linear-gradient(180deg, #ecf5f2 0%, #e4eeea 100%);
-            border-right: 1px solid rgba(15, 23, 42, 0.08);
-        }
-
-        [data-testid="stVerticalBlockBorderWrapper"] {
-            background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 251, 250, 0.96));
-            border: 1px solid rgba(15, 23, 42, 0.08);
-            box-shadow: 0 16px 38px rgba(15, 23, 42, 0.05);
-        }
-
-        [data-testid="stSidebar"] [data-testid="stVerticalBlock"] > div:has(> [data-testid="stMarkdownContainer"]) {
-            gap: 0.35rem;
-        }
-
-        [data-testid="stMetric"] {
-            background: var(--surface-strong);
-            border: 1px solid var(--line-soft);
-            border-radius: 18px;
-            padding: 0.95rem 1rem;
-            box-shadow: 0 12px 30px rgba(15, 23, 42, 0.04);
-        }
-
-        [data-testid="stMetricLabel"] {
-            color: var(--text-muted);
-            font-weight: 600;
-        }
-
-        [data-testid="stMetricValue"] {
-            color: var(--ink-strong);
-        }
-
-        [data-testid="stButton"] > button,
-        [data-testid="stDownloadButton"] > button {
-            border-radius: 999px;
-            border: 1px solid rgba(16, 59, 66, 0.18);
-            background: rgba(255, 255, 255, 0.96);
-            color: #103b42;
-        }
-
-        [data-testid="stForm"] {
-            background: transparent;
-        }
-
-        .dashboard-note {
-            color: var(--text-muted);
-            font-size: 0.9rem;
-        }
-
-        .auth-hero {
-            position: relative;
-            overflow: hidden;
-            padding: 2.5rem 2rem 2rem;
-            border-radius: 28px;
-            background:
-                radial-gradient(circle at 18% 18%, rgba(255, 255, 255, 0.24), transparent 16rem),
-                radial-gradient(circle at 88% 22%, rgba(245, 158, 11, 0.24), transparent 15rem),
-                linear-gradient(135deg, #103b42 0%, #195d67 54%, #0f766e 100%);
-            border: 1px solid rgba(255, 255, 255, 0.14);
-            box-shadow: 0 24px 60px rgba(16, 59, 66, 0.18);
-            margin-bottom: 1rem;
-        }
-
-        .auth-hero__eyebrow {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.45rem;
-            padding: 0.38rem 0.78rem;
-            border-radius: 999px;
-            background: rgba(255, 255, 255, 0.14);
-            color: rgba(248, 250, 252, 0.88);
-            font-size: 0.78rem;
-            font-weight: 700;
-            letter-spacing: 0.08em;
-            text-transform: uppercase;
-        }
-
-        .auth-hero__title {
-            max-width: 52rem;
-            color: #f8fafc;
-            font-size: clamp(2.15rem, 4vw, 3.45rem);
-            line-height: 1.02;
-            letter-spacing: -0.05em;
-            margin: 1rem 0 0.8rem;
-        }
-
-        .auth-hero__caption {
-            max-width: 44rem;
-            color: rgba(241, 245, 249, 0.88);
-            font-size: 1.02rem;
-            line-height: 1.65;
-            margin: 0;
-        }
-
-        .auth-hero__metrics {
-            display: grid;
-            grid-template-columns: repeat(3, minmax(0, 1fr));
-            gap: 0.9rem;
-            margin-top: 1.5rem;
-        }
-
-        .auth-hero__metric {
-            padding: 1rem 1rem 0.95rem;
-            border-radius: 18px;
-            background: rgba(255, 255, 255, 0.12);
-            border: 1px solid rgba(255, 255, 255, 0.16);
-            backdrop-filter: blur(12px);
-        }
-
-        .auth-hero__metric-label {
-            color: rgba(226, 232, 240, 0.82);
-            font-size: 0.8rem;
-            font-weight: 700;
-            letter-spacing: 0.03em;
-            margin-bottom: 0.45rem;
-        }
-
-        .auth-hero__metric-value {
-            color: #ffffff;
-            font-size: 1.05rem;
-            font-weight: 700;
-            line-height: 1.3;
-        }
-
-        .auth-feature-card {
-            height: 100%;
-            padding: 1.2rem 1.15rem 1.15rem;
-            border-radius: 22px;
-            background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(246, 249, 248, 0.94));
-            border: 1px solid rgba(16, 59, 66, 0.1);
-            box-shadow: 0 16px 38px rgba(15, 23, 42, 0.05);
-        }
-
-        .auth-feature-card__index {
-            color: #0f766e;
-            font-size: 0.78rem;
-            font-weight: 800;
-            letter-spacing: 0.08em;
-            text-transform: uppercase;
-        }
-
-        .auth-feature-card__title {
-            color: var(--brand-deep);
-            font-size: 1.05rem;
-            font-weight: 800;
-            line-height: 1.3;
-            margin-top: 0.55rem;
-        }
-
-        .auth-feature-card__desc {
-            color: var(--mid-text);
-            font-size: 0.92rem;
-            line-height: 1.55;
-            margin-top: 0.45rem;
-        }
-
-        .auth-entry-intro {
-            color: var(--mid-text);
-            font-size: 0.95rem;
-            line-height: 1.55;
-            margin: 1rem 0 0.8rem;
-        }
-
-        [data-testid="stTabs"] [data-baseweb="tab-list"] {
-            gap: 0.45rem;
-            padding: 0.2rem;
-            background: rgba(255, 255, 255, 0.03);
-            border: 1px solid var(--border-strong);
-            border-radius: 18px;
-        }
-
-        [data-testid="stTabs"] [data-baseweb="tab"] {
-            height: 2.9rem;
-            border-radius: 14px;
-            padding: 0 1rem;
-            color: var(--text-muted);
-            font-weight: 700;
-        }
-
-        [data-testid="stTabs"] [aria-selected="true"] {
-            background: rgba(41, 98, 255, 0.22);
-            color: var(--full);
-        }
-
-        .auth-panel-eyebrow {
-            color: var(--brand-accent);
-            font-size: 0.76rem;
-            font-weight: 800;
-            letter-spacing: 0.08em;
-            text-transform: uppercase;
-            margin-bottom: 0.55rem;
-        }
-
-        .auth-panel-title {
-            color: var(--brand-deep);
-            font-size: clamp(1.3rem, 2vw, 1.6rem);
-            font-weight: 800;
-            line-height: 1.15;
-            letter-spacing: -0.03em;
-            margin: 0;
-        }
-
-        .auth-panel-caption {
-            color: var(--mid-text);
-            font-size: 0.94rem;
-            line-height: 1.55;
-            margin: 0.4rem 0 1rem;
-        }
-
-        .auth-simple-title {
-            color: var(--brand-deep);
-            font-size: clamp(2rem, 3.2vw, 3rem);
-            font-weight: 900;
-            line-height: 1.05;
-            letter-spacing: -0.05em;
-            margin: 0 0 1.2rem;
-        }
-
-        .stApp:has(.auth-page-shell) {
-            background: linear-gradient(180deg, #1d3d5e 0%, #1a3551 100%);
-        }
-
-        .stApp:has(.auth-page-shell) [data-testid="stHeader"] {
-            background: transparent;
-        }
-
-        .block-container:has(.auth-page-shell) {
-            max-width: 100%;
-            padding-top: min(11vh, 6rem);
-            padding-bottom: min(8vh, 4rem);
-        }
-
-        .auth-page-shell {
-            width: 100%;
-            height: 0;
-        }
-
-        .auth-card-brand {
-            margin-bottom: 1.55rem;
-        }
-
-        .auth-card-brand__title {
-            color: #17334f;
-            font-size: clamp(2rem, 2.6vw, 2.55rem);
-            font-weight: 900;
-            line-height: 1.08;
-            letter-spacing: -0.05em;
-            margin: 0;
-        }
-
-        .auth-card-brand__caption {
-            color: #4f6683;
-            font-size: 0.98rem;
-            line-height: 1.6;
-            margin: 0.7rem 0 0;
-        }
-
-        .auth-card-mode {
-            color: #3f6c95;
-            font-size: 0.82rem;
-            font-weight: 800;
-            letter-spacing: 0.08em;
-            text-transform: uppercase;
-            margin-bottom: 0.6rem;
-        }
-
-        .auth-card-section-label {
-            color: #17334f;
-            font-size: 0.95rem;
-            font-weight: 800;
-            margin: 0 0 0.85rem;
-        }
-
-        .auth-card-helper {
-            color: #607285;
-            font-size: 0.92rem;
-            line-height: 1.55;
-            margin: 0 0 1rem;
-        }
-
-        .auth-demo-mini-list {
-            display: grid;
-            gap: 0.6rem;
-            margin: 1rem 0 1rem;
-        }
-
-        .auth-demo-mini-item {
-            padding: 0.75rem 0.85rem;
-            border-radius: 12px;
-            background: #eff4fb;
-            border: 1px solid rgba(59, 108, 151, 0.12);
-        }
-
-        .auth-demo-mini-item__title {
-            color: #17334f;
-            font-size: 0.86rem;
-            font-weight: 800;
-            margin-bottom: 0.2rem;
-        }
-
-        .auth-demo-mini-item__desc {
-            color: #5c728d;
-            font-size: 0.81rem;
-            line-height: 1.45;
-        }
-
-        .auth-card-note {
-            color: #6c7f95;
-            font-size: 0.82rem;
-            line-height: 1.45;
-            margin-top: 0.85rem;
-        }
-
-        .auth-demo-points {
-            display: grid;
-            grid-template-columns: repeat(3, minmax(0, 1fr));
-            gap: 0.7rem;
-            margin: 1rem 0 1rem;
-        }
-
-        .auth-demo-point {
-            height: 100%;
-            padding: 0.9rem 0.95rem;
-            border-radius: 16px;
-            background: rgba(255, 255, 255, 0.72);
-            border: 1px solid rgba(16, 59, 66, 0.09);
-        }
-
-        .auth-demo-point__title {
-            color: var(--brand-deep);
-            font-size: 0.86rem;
-            font-weight: 800;
-            margin-bottom: 0.28rem;
-        }
-
-        .auth-demo-point__desc {
-            color: var(--mid-text);
-            font-size: 0.82rem;
-            line-height: 1.45;
-        }
-
-        .st-key-auth-panel-login,
-        .st-key-auth-panel-sign-up,
-        .st-key-auth-demo-panel {
-            background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(250, 251, 250, 0.94));
-            border-radius: 22px;
-            box-shadow: 0 16px 44px rgba(15, 23, 42, 0.05);
-        }
-
-        .st-key-auth-card-shell {
-            max-width: 500px;
-            margin: 0 auto;
-            padding: 2.05rem 2rem 1.75rem;
-            border-radius: 18px;
-            background: rgba(255, 255, 255, 0.98);
-            border: 1px solid rgba(12, 30, 52, 0.08);
-            box-shadow: 0 28px 70px rgba(8, 25, 44, 0.28);
-        }
-
-        .st-key-auth-pending-panel {
-            max-width: 500px;
-            margin: 0 auto 1rem;
-            border-radius: 16px;
-            background: rgba(255, 255, 255, 0.96);
-            box-shadow: 0 16px 44px rgba(8, 25, 44, 0.16);
-        }
-
-        .st-key-auth-card-shell [data-testid="stTextInput"] label p {
-            color: #17334f;
-            font-weight: 800;
-        }
-
-        .st-key-auth-card-shell [data-testid="stTextInput"] [data-baseweb="input"] {
-            border-radius: 10px;
-            border: 1px solid rgba(59, 108, 151, 0.16);
-            background: #dfe8f4;
-            overflow: hidden;
-            box-shadow: none;
-        }
-
-        .st-key-auth-card-shell [data-testid="stTextInput"] input {
-            min-height: 2.85rem;
-            border: none !important;
-            background: #dfe8f4;
-            color: #17334f;
-            box-shadow: none;
-        }
-
-        .st-key-auth-card-shell [data-testid="stTextInput"] [data-baseweb="input"] button {
-            min-height: 2.85rem;
-            border: none;
-            border-radius: 0;
-            background: #dfe8f4;
-            color: #17334f;
-            box-shadow: none;
-        }
-
-        .st-key-auth-card-shell [data-testid="stTextInput"] [data-baseweb="input"] button:hover,
-        .st-key-auth-card-shell [data-testid="stTextInput"] [data-baseweb="input"] button:focus,
-        .st-key-auth-card-shell [data-testid="stTextInput"] [data-baseweb="input"] button:focus-visible {
-            background: #d8e4f2;
-            color: #17334f;
-            box-shadow: none;
-            outline: none;
-        }
-
-        .st-key-auth-card-shell [data-testid="stTextInput"] input::placeholder {
-            color: #7d90a9;
-        }
-
-        .st-key-auth-card-shell [data-testid="stFormSubmitButton"] > button,
-        .st-key-auth-demo-primary-action [data-testid="stButton"] > button {
-            min-height: 2.95rem;
-            border-radius: 8px;
-            border: none;
-            background: #3f6f99;
-            color: #ffffff;
-            font-weight: 800;
-            box-shadow: none;
-        }
-
-        .st-key-auth-card-shell [data-testid="stFormSubmitButton"] > button:hover,
-        .st-key-auth-demo-primary-action [data-testid="stButton"] > button:hover {
-            background: #355f85;
-            color: #ffffff;
-        }
-
-        .st-key-auth-card-links [data-testid="stButton"] > button {
-            min-height: auto;
-            padding: 0.25rem 0;
-            border: none;
-            background: transparent;
-            color: #3f6f99;
-            font-weight: 800;
-            box-shadow: none;
-            justify-content: center;
-        }
-
-        .st-key-auth-card-links [data-testid="stButton"] > button:hover {
-            background: transparent;
-            color: #2c567b;
-        }
-
-        .st-key-auth-panel-login [data-testid="stTextInput"] input,
-        .st-key-auth-panel-sign-up [data-testid="stTextInput"] input {
-            min-height: 2.9rem;
-            border-radius: 14px;
-        }
-
-        .st-key-auth-panel-login [data-testid="stButton"] > button,
-        .st-key-auth-panel-sign-up [data-testid="stButton"] > button,
-        .st-key-auth-demo-panel [data-testid="stButton"] > button,
-        .st-key-auth-panel-login [data-testid="stFormSubmitButton"] > button,
-        .st-key-auth-panel-sign-up [data-testid="stFormSubmitButton"] > button {
-            min-height: 2.85rem;
-            font-weight: 700;
-        }
-
-        .dashboard-section-header {
-            display: flex;
-            flex-direction: column;
-            gap: 0.28rem;
-            margin-bottom: var(--section-gap);
-        }
-
-        .dashboard-section-header__top {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 0.9rem;
-        }
-
-        .dashboard-section-header__status-group {
-            display: inline-flex;
-            align-items: center;
-            justify-content: flex-end;
-            gap: 0.45rem;
-            flex-wrap: wrap;
-        }
-
-        .dashboard-section-header--compact {
-            margin-bottom: 0.9rem;
-        }
-
-        .dashboard-section-header__title {
-            color: var(--brand-deep);
-            font-size: clamp(1.28rem, 1.55vw, 1.9rem);
-            font-weight: 800;
-            line-height: 1.1;
-            letter-spacing: -0.03em;
-            margin: 0;
-        }
-
-        .dashboard-section-header__title--compact {
-            font-size: clamp(1.12rem, 1.35vw, 1.45rem);
-        }
-
-        .dashboard-section-header__caption {
-            color: var(--text-muted);
-            font-size: 0.94rem;
-            line-height: 1.45;
-            margin: 0;
-        }
-
-        .dashboard-load-status {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.45rem;
-            padding: 0.26rem 0.68rem;
-            min-height: 30px;
-            border-radius: 999px;
-            border: 1px solid rgba(15, 23, 42, 0.08);
-            background: rgba(255, 255, 255, 0.74);
-            color: #607285;
-            white-space: nowrap;
-            box-sizing: border-box;
-        }
-
-        .dashboard-load-status__dot {
-            width: 0.42rem;
-            height: 0.42rem;
-            border-radius: 999px;
-            background: var(--dim-text);
-        }
-
-        .dashboard-load-status__text {
-            font-size: 0.76rem;
-            font-weight: 700;
-            letter-spacing: 0.03em;
-        }
-
-        .dashboard-load-status--live .dashboard-load-status__dot {
-            background: #26a69a;
-            animation: dashboard-live-blink 2.4s ease-in-out infinite;
-        }
-
-        .dashboard-load-status--stale .dashboard-load-status__dot {
-            background: #f59e0b;
-        }
-
-        .dashboard-load-status--idle .dashboard-load-status__dot {
-            background: #94a3b8;
-        }
-
-        .dashboard-load-palette {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.3rem;
-            padding: 0.26rem 0.68rem;
-            border-radius: 999px;
-            border: 1px solid rgba(15, 23, 42, 0.08);
-            background: rgba(255, 255, 255, 0.74);
-            min-height: 30px;
-            box-sizing: border-box;
-        }
-
-        .dashboard-load-palette__label {
-            color: #607285;
-            font-size: 0.66rem;
-            font-weight: 800;
-            line-height: 1;
-        }
-
-        .dashboard-load-palette__bar {
-            display: flex;
-            width: 78px;
-            height: 0.42rem;
-            border-radius: 999px;
-            overflow: hidden;
-            box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
-        }
-
-        .dashboard-load-palette__segment {
-            flex: 1;
-        }
-
-        .st-key-dashboard-panel-allocation {
-            background:
-                linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(244, 248, 247, 0.98));
-        }
-
-        @keyframes dashboard-live-blink {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.22; }
-        }
-
-        .dashboard-chart-shell {
-            display: flex;
-            flex-direction: column;
-            gap: var(--chart-gap);
-        }
-
-        .dashboard-chart-shell__legend {
-            margin-top: auto;
-        }
-
-        .dashboard-treemap-legend {
-            display: flex;
-            flex-direction: column;
-            gap: 0.42rem;
-            margin-top: 0.2rem;
-            color: var(--mid-text);
-            font-size: 0.82rem;
-            font-weight: 700;
-        }
-
-        .dashboard-treemap-legend__range {
-            width: min(360px, 52vw);
-            display: flex;
-            flex-direction: column;
-            gap: 0.4rem;
-            align-items: stretch;
-            margin: 0 auto;
-        }
-
-        .dashboard-treemap-legend__bar {
-            position: relative;
-            width: 100%;
-            height: 14px;
-            border-radius: 999px;
-            border: 1px solid var(--border-strong);
-            background: rgba(255, 255, 255, 0.02);
-            box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
-            overflow: hidden;
-        }
-
-        .dashboard-treemap-legend__segments {
-            display: flex;
-            width: 100%;
-            height: 100%;
-        }
-
-        .dashboard-treemap-legend__segment {
-            flex: 1;
-        }
-
-        .dashboard-treemap-legend__labels {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 0.8rem;
-            color: var(--mid-text);
-            font-size: 0.79rem;
-            font-weight: 700;
-        }
-
-        .dashboard-treemap-legend__hint {
-            color: var(--text-muted);
-            font-size: 0.78rem;
-            font-weight: 600;
-            text-align: center;
-            line-height: 1.35;
-        }
-
-        .dashboard-treemap-legend__marker {
-            position: absolute;
-            top: -6px;
-            width: 18px;
-            height: 26px;
-            border-radius: 999px;
-            background: rgba(41, 98, 255, 0.96);
-            border: 2px solid rgba(255, 255, 255, 0.92);
-            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.28);
-        }
-
-        .dashboard-treemap-legend__marker::after {
-            content: "";
-            position: absolute;
-            left: 50%;
-            bottom: -7px;
-            width: 2px;
-            height: 7px;
-            transform: translateX(-50%);
-            background: rgba(41, 98, 255, 0.92);
-        }
-
-        .dashboard-treemap-legend__marker-label {
-            position: absolute;
-            left: 50%;
-            bottom: calc(100% + 10px);
-            transform: translateX(-50%);
-            white-space: nowrap;
-            background: rgba(30, 34, 45, 0.97);
-            color: #F8FAFC;
-            border-radius: 999px;
-            padding: 0.28rem 0.62rem;
-            font-size: 0.74rem;
-            font-weight: 700;
-            box-shadow: 0 10px 24px rgba(0, 0, 0, 0.24);
-        }
-
-        .dashboard-metric-strip {
-            display: grid;
-            grid-template-columns: repeat(5, minmax(0, 1fr));
-            gap: 0.85rem;
-            margin: 1.1rem 0 1.35rem;
-        }
-
-        .dashboard-metric-card {
-            background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 251, 250, 0.98));
-            border: 1px solid rgba(37, 99, 235, 0.16);
-            border-radius: 16px;
-            padding: 1.05rem 1.1rem 1rem;
-            box-shadow: 0 12px 30px rgba(15, 23, 42, 0.04);
-            min-height: 9rem;
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-        }
-
-        .dashboard-metric-card__top {
-            display: flex;
-            align-items: flex-start;
-            justify-content: space-between;
-            gap: 0.65rem;
-        }
-
-        .dashboard-metric-card__label {
-            color: var(--mid-text);
-            font-size: 0.86rem;
-            font-weight: 700;
-            letter-spacing: 0.01em;
-        }
-
-        .dashboard-metric-card__action {
-            border: 1px solid rgba(37, 99, 235, 0.22);
-            border-radius: 10px;
-            padding: 0.2rem 0.72rem;
-            font-size: 0.84rem;
-            font-weight: 700;
-            color: #0f3b66;
-            background: rgba(255, 255, 255, 0.96);
-            white-space: nowrap;
-        }
-
-        .dashboard-metric-card__value {
-            color: #0d3559;
-            font-size: clamp(1.6rem, 2vw, 2.2rem);
-            font-weight: 800;
-            line-height: 1.08;
-            letter-spacing: -0.03em;
-            margin-top: 1.2rem;
-        }
-
-        .dashboard-metric-card__value--accent {
-            color: #b42318;
-        }
-
-        .dashboard-metric-card__note {
-            margin-top: 0.75rem;
-            color: var(--text-muted);
-            font-size: 0.82rem;
-            line-height: 1.45;
-        }
-
-        .dashboard-summary-card__label {
-            color: var(--mid-text);
-            font-size: 0.86rem;
-            font-weight: 700;
-            letter-spacing: 0.01em;
-            margin: 0;
-        }
-
-        .dashboard-summary-card__value {
-            color: #0d3559;
-            font-size: clamp(1.52rem, 1.9vw, 2.15rem);
-            font-weight: 800;
-            line-height: 1.04;
-            letter-spacing: -0.03em;
-            min-height: 2.55rem;
-            display: flex;
-            align-items: flex-end;
-            margin: 0;
-            white-space: nowrap;
-            overflow: hidden;
-        }
-
-        .dashboard-summary-card__value--accent {
-            color: #b42318;
-        }
-
-        .dashboard-summary-card__header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 0.55rem;
-            min-height: 0;
-            margin: 0;
-        }
-
-        .dashboard-summary-card__action {
-            border: 1px solid rgba(37, 99, 235, 0.22);
-            border-radius: 999px;
-            padding: 0.28rem 0.78rem;
-            font-size: 0.82rem;
-            font-weight: 700;
-            color: #0f3b66;
-            background: rgba(255, 255, 255, 0.96);
-            white-space: nowrap;
-            line-height: 1.1;
-        }
-
-        .dashboard-summary-card__field {
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-            min-height: 5.7rem;
-        }
-
-        .st-key-dashboard-card-principal .dashboard-summary-card__field,
-        .st-key-dashboard-card-profit .dashboard-summary-card__field,
-        .st-key-dashboard-card-profit-rate .dashboard-summary-card__field {
-            min-height: 6.7rem;
-            justify-content: flex-start;
-            gap: 1.6rem;
-        }
-
-        .dashboard-summary-card__field--actionable {
-            border-radius: 0.85rem;
-        }
-
-        .st-key-dashboard-card-cash,
-        .st-key-dashboard-card-total-value {
-            position: relative;
-        }
-
-        .st-key-dashboard-cash-card-overlay,
-        .st-key-dashboard-total-value-refresh-overlay {
-            position: absolute;
-            top: 0.55rem;
-            right: 0.8rem;
-            z-index: 2;
-            width: auto;
-            height: auto;
-        }
-
-        .st-key-dashboard-cash-card-overlay [data-testid="stElementContainer"],
-        .st-key-dashboard-total-value-refresh-overlay [data-testid="stElementContainer"] {
-            margin: 0 !important;
-            padding: 0 !important;
-        }
-
-        .st-key-dashboard-cash-card-overlay [data-testid="stButton"],
-        .st-key-dashboard-total-value-refresh-overlay [data-testid="stButton"] {
-            width: auto;
-        }
-
-        .st-key-dashboard-cash-card-overlay button,
-        .st-key-dashboard-total-value-refresh-overlay button {
-            min-height: 0;
-            padding: 0.28rem 0.78rem;
-            border: 1px solid rgba(37, 99, 235, 0.22);
-            border-radius: 999px;
-            background: rgba(255, 255, 255, 0.96);
-            box-shadow: none;
-            color: #0f3b66;
-            font-size: 0.82rem;
-            font-weight: 700;
-            line-height: 1.1;
-        }
-
-        .st-key-dashboard-cash-card-overlay button:hover,
-        .st-key-dashboard-cash-card-overlay button:focus,
-        .st-key-dashboard-cash-card-overlay button:focus-visible,
-        .st-key-dashboard-total-value-refresh-overlay button:hover,
-        .st-key-dashboard-total-value-refresh-overlay button:focus,
-        .st-key-dashboard-total-value-refresh-overlay button:focus-visible {
-            border-color: rgba(37, 99, 235, 0.34);
-            background: rgba(255, 255, 255, 1);
-            outline: none;
-            box-shadow: none;
-        }
-
-        .st-key-dashboard-card-cash [data-testid="stNumberInput"] input,
-        .st-key-trade-panel-transfer [data-testid="stNumberInput"] input {
-            min-height: 2.6rem;
-        }
-
-        .st-key-dashboard-card-cash [data-testid="stHorizontalBlock"] {
-            align-items: flex-start;
-        }
-
-        .st-key-dashboard-card-cash [data-testid="stNumberInput"] label p,
-        .st-key-dashboard-panel-selected-trend [data-testid="stSegmentedControl"] label p {
-            color: var(--mid-text);
-            font-weight: 700;
-        }
-
-        .st-key-dashboard-trend-controls [data-testid="stButton"] > button {
-            min-height: 2.75rem;
-            white-space: nowrap;
-            font-weight: 700;
-        }
-
-        .st-key-dashboard-trend-controls [data-testid="stSegmentedControl"] {
-            padding-top: 0.1rem;
-        }
-
-        .st-key-dashboard-trend-controls [data-testid="stSegmentedControl"] [role="radiogroup"] {
-            flex-wrap: nowrap;
-            gap: 0.1rem;
-        }
-
-        .st-key-dashboard-trend-controls [data-testid="stSegmentedControl"] label p {
-            white-space: nowrap;
-        }
-
-        .st-key-trade-panel-transfer [data-testid="stButton"] > button {
-            min-height: 2.65rem;
-            font-weight: 700;
-        }
-
-        .st-key-trade-panel-transfer [data-baseweb="select"] > div,
-        .st-key-trade-panel-transfer [data-baseweb="input"] > div {
-            min-height: 2.65rem;
-        }
-
-        .st-key-dashboard-panel-market [data-testid="stButton"] > button {
-            min-height: 2.65rem;
-        }
-
-        @media (max-width: 860px) {
-            .block-container:has(.auth-page-shell) {
-                padding-top: 2.25rem;
-                padding-bottom: 2rem;
-            }
-
-            .st-key-auth-card-shell {
-                max-width: 100%;
-                padding: 1.45rem 1.2rem 1.2rem;
-            }
-
-            .auth-hero {
-                padding: 2rem 1.35rem 1.5rem;
-            }
-
-            .auth-hero__metrics,
-            .auth-demo-points {
-                grid-template-columns: 1fr;
-            }
-
-            .dashboard-metric-strip {
-                grid-template-columns: repeat(2, minmax(0, 1fr));
-            }
-
-            .dashboard-treemap-legend__range {
-                width: min(300px, 48vw);
-            }
-        }
-
-        @media (max-width: 560px) {
-            .auth-card-brand__title {
-                font-size: 1.9rem;
-            }
-
-            .auth-hero__title {
-                font-size: 2rem;
-            }
-
-            .dashboard-metric-strip {
-                grid-template-columns: 1fr;
-            }
-
-            .dashboard-treemap-legend__range {
-                width: min(320px, 82vw);
-            }
-
-            .dashboard-treemap-legend__labels {
-                gap: 0.45rem;
-                font-size: 0.72rem;
-            }
-
-            .dashboard-treemap-legend__marker-label {
-                max-width: min(220px, 74vw);
-                overflow: hidden;
-                text-overflow: ellipsis;
-            }
-        }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
+    st.markdown(f"<style>{render_app_stylesheet()}</style>", unsafe_allow_html=True)
 
 
 def set_auth_feedback(level: str, message: str) -> None:
@@ -2269,6 +1403,7 @@ def style_dashboard_altair_chart(chart: alt.Chart, *, height: int) -> alt.Chart:
 
     return (
         chart.properties(height=height)
+        .configure(background="transparent")
         .configure_view(stroke=None)
         .configure_axis(
             gridColor=FEARGREED_BORDER_COLOR,
@@ -2622,7 +1757,7 @@ def allocation_treemap_options(
         "borderWidth": 0,
         "padding": 0,
         "confine": True,
-        "textStyle": {"color": "#1E293B", "fontSize": 12},
+        "textStyle": {"color": CHART_TEXT_COLOR, "fontSize": 12},
         "extraCssText": "box-shadow:none;",
     }
     if tooltip_formatter is not None:
@@ -2707,7 +1842,7 @@ def allocation_treemap_options(
                 "label": {
                     "show": True,
                     "formatter": label_formatter,
-                    "color": "#FFFFFF",
+                    "color": CHART_TEXT_COLOR,
                     "fontWeight": 700,
                     "fontSize": 14,
                     "lineHeight": 18,
@@ -2813,10 +1948,11 @@ def holdings_bar_options(frame: pd.DataFrame, *, selected_symbol: str | None = N
                 "profit_rate": round(rate, 2),
                 "itemStyle": {
                     "color": FEARGREED_UP_COLOR if rate >= 0 else FEARGREED_DOWN_COLOR,
+                    "borderRadius": [10, 10, 0, 0] if rate >= 0 else [0, 0, 10, 10],
                     "borderColor": FEARGREED_ACCENT_COLOR if is_selected else "rgba(255,255,255,0.08)",
                     "borderWidth": 3 if is_selected else 0,
                     "shadowBlur": 18 if is_selected else 0,
-                    "shadowColor": "rgba(41, 98, 255, 0.28)" if is_selected else "transparent",
+                    "shadowColor": CHART_ACCENT_SOFT_COLOR if is_selected else "transparent",
                     "opacity": 1 if is_selected else 0.92,
                 },
                 "label": {
@@ -2824,7 +1960,7 @@ def holdings_bar_options(frame: pd.DataFrame, *, selected_symbol: str | None = N
                     "position": "top" if rate >= 0 else "bottom",
                     "distance": 8,
                     "formatter": format_pct(rate),
-                    "color": FEARGREED_FULL_TEXT_COLOR if is_selected else FEARGREED_MID_TEXT_COLOR,
+                    "color": CHART_TEXT_COLOR if is_selected else FEARGREED_MID_TEXT_COLOR,
                     "fontWeight": 700 if is_selected else 600,
                     "opacity": 1 if is_selected or not selected_key else 0.78,
                 },
@@ -2873,9 +2009,9 @@ def holdings_bar_options(frame: pd.DataFrame, *, selected_symbol: str | None = N
         "grid": {"top": 56, "right": 12, "bottom": 96, "left": 56},
         "tooltip": {
             "trigger": "item",
-            "backgroundColor": "rgba(30, 34, 45, 0.97)",
+            "backgroundColor": CHART_TOOLTIP_BG_COLOR,
             "borderWidth": 0,
-            "textStyle": {"color": "#F8FAFC", "fontSize": 12},
+            "textStyle": {"color": CHART_TOOLTIP_TEXT_COLOR, "fontSize": 12},
             **({"formatter": tooltip_formatter} if tooltip_formatter is not None else {}),
         },
         "xAxis": {
@@ -2898,7 +2034,6 @@ def holdings_bar_options(frame: pd.DataFrame, *, selected_symbol: str | None = N
                 "type": "bar",
                 "barWidth": "52%",
                 "data": data,
-                "itemStyle": {"borderRadius": [10, 10, 0, 0]},
                 "emphasis": {
                     "focus": "self",
                     "itemStyle": {
@@ -2930,7 +2065,7 @@ def holdings_bar_fallback_chart(frame: pd.DataFrame, *, selected_symbol: str | N
     display_order = chart_frame["display_name"].tolist()
     bars = (
         alt.Chart(chart_frame)
-        .mark_bar(cornerRadiusTopLeft=8, cornerRadiusTopRight=8, size=52)
+        .mark_bar(cornerRadiusEnd=8, size=52)
         .encode(
             x=alt.X(
                 "display_name:N",
@@ -2968,7 +2103,7 @@ def holdings_bar_fallback_chart(frame: pd.DataFrame, *, selected_symbol: str | N
     )
     labels = (
         alt.Chart(chart_frame)
-        .mark_text(dy=-8, fontSize=11, fontWeight="bold", color=FEARGREED_FULL_TEXT_COLOR)
+        .mark_text(dy=-8, fontSize=11, fontWeight="bold", color=CHART_TEXT_COLOR)
         .encode(
             x=alt.X("display_name:N", sort=display_order),
             y=alt.Y("profit_rate:Q"),
@@ -2977,6 +2112,83 @@ def holdings_bar_fallback_chart(frame: pd.DataFrame, *, selected_symbol: str | N
         )
     )
     return style_dashboard_altair_chart(bars + labels, height=DASHBOARD_OVERVIEW_CHART_HEIGHT)
+
+
+def build_selected_holding_intraday_trend_frame(holding: dict[str, Any]) -> pd.DataFrame:
+    """선택 종목 1건의 intraday 타임라인을 차트용 프레임으로 변환한다."""
+
+    symbol = str(holding.get("symbol") or "").strip()
+    if not symbol:
+        return pd.DataFrame()
+
+    snapshot = fetch_intraday_price_snapshot(symbol)
+    timeline = snapshot.get("timeline") or []
+    if not isinstance(timeline, list) or not timeline:
+        return pd.DataFrame()
+
+    quantity = float(holding.get("quantity") or 0)
+    cost_basis = float(holding.get("avg_cost") or 0) * quantity
+    rows: list[dict[str, Any]] = []
+    for point in timeline:
+        point_datetime = pd.to_datetime(point.get("datetime"), errors="coerce")
+        if pd.isna(point_datetime):
+            continue
+        close_price = float(point.get("close") or 0)
+        market_value = close_price * quantity
+        profit_loss = market_value - cost_basis
+        rows.append(
+            {
+                "date": point_datetime,
+                "symbol": symbol,
+                "product_name": str(holding.get("product_name") or symbol).strip(),
+                "close": close_price,
+                "market_value": market_value,
+                "cost_basis": cost_basis,
+                "profit_loss": profit_loss,
+                "profit_rate": (profit_loss / cost_basis * 100) if cost_basis else 0.0,
+            }
+        )
+
+    if not rows:
+        return pd.DataFrame()
+    return pd.DataFrame(rows).sort_values("date").drop_duplicates(subset=["date"], keep="last").reset_index(drop=True)
+
+
+def build_selected_holding_trend_frame(selected_holdings: list[dict[str, Any]], period: str) -> pd.DataFrame:
+    """선택 종목 추이를 기간에 맞춰 일봉 또는 intraday 프레임으로 반환한다."""
+
+    normalized_period = str(period or "6mo").strip().lower() or "6mo"
+    if normalized_period != "today":
+        _, selected_holding_trend = build_portfolio_trend(selected_holdings, period=normalized_period)
+        return selected_holding_trend
+
+    detail_rows = [
+        build_selected_holding_intraday_trend_frame(holding)
+        for holding in selected_holdings
+    ]
+    detail_rows = [frame for frame in detail_rows if not frame.empty]
+    if not detail_rows:
+        return pd.DataFrame()
+
+    merged = pd.concat(detail_rows, ignore_index=True)
+    aggregated = (
+        merged.groupby("date", as_index=False)
+        .agg(
+            product_name=("product_name", "last"),
+            symbol=("symbol", "last"),
+            close=("close", "last"),
+            market_value=("market_value", "sum"),
+            cost_basis=("cost_basis", "sum"),
+        )
+        .sort_values("date")
+        .reset_index(drop=True)
+    )
+    aggregated["profit_loss"] = aggregated["market_value"] - aggregated["cost_basis"]
+    aggregated["profit_rate"] = aggregated.apply(
+        lambda row: (row["profit_loss"] / row["cost_basis"] * 100) if row["cost_basis"] else 0.0,
+        axis=1,
+    )
+    return aggregated
 
 
 def selected_holding_trend_chart(
@@ -2992,11 +2204,12 @@ def selected_holding_trend_chart(
     measure_key = str(measure or DEFAULT_SELECTED_TREND_MEASURE)
     measure_title = label_detail_measure(measure_key)
     measure_format = ",.2f" if measure_key == "close" else (".2f" if measure_key == "profit_rate" else ",.0f")
+    x_axis_title = "시간" if str(period_label) == "당일" else "날짜"
     return (
         alt.Chart(frame)
-        .mark_line(point=True, strokeWidth=3, color="#80AAF0")
+        .mark_line(point=True, strokeWidth=3, color=CHART_LINE_COLOR)
         .encode(
-            x=alt.X("date:T", title="날짜"),
+            x=alt.X("date:T", title=x_axis_title),
             y=alt.Y(f"{measure_key}:Q", title=measure_title),
             tooltip=[
                 alt.Tooltip("product_name:N", title="종목"),
@@ -3051,6 +2264,9 @@ def _selected_holding_trend_data_view_option() -> Any | None:
             }
 
             var rows = (((option || {}).series || [])[0] || {}).data || [];
+            var hasTime = rows.some(function(row) {
+                return String((row || {}).time || '').trim() !== '';
+            });
             var headerStyle = 'padding:8px 10px; border-bottom:1px solid #D7E2E7; background:#F8FAFC; color:#334155; font-weight:700; text-align:center;';
             var cellStyle = 'padding:8px 10px; border-bottom:1px solid #E2E8F0; color:#1E293B;';
             var html = '<div style="padding:8px 2px 2px;">';
@@ -3059,20 +2275,27 @@ def _selected_holding_trend_data_view_option() -> Any | None:
             html += '<th style="' + headerStyle + '">년</th>';
             html += '<th style="' + headerStyle + '">월</th>';
             html += '<th style="' + headerStyle + '">일</th>';
+            if (hasTime) {
+                html += '<th style="' + headerStyle + '">시간</th>';
+            }
             html += '<th style="' + headerStyle + '">기준가(종가)</th>';
             html += '<th style="' + headerStyle + '">수익률</th>';
             html += '<th style="' + headerStyle + '">평가금액</th>';
             html += '</tr></thead><tbody>';
 
             if (!rows.length) {
-                html += '<tr><td colspan="6" style="' + cellStyle + ' text-align:center; color:#64748B;">데이터가 없습니다.</td></tr>';
+                html += '<tr><td colspan="' + (hasTime ? '7' : '6') + '" style="' + cellStyle + ' text-align:center; color:#64748B;">데이터가 없습니다.</td></tr>';
             } else {
                 for (var index = 0; index < rows.length; index += 1) {
                     var row = rows[index] || {};
                     html += '<tr>'
                         + '<td style="' + cellStyle + ' text-align:center;">' + esc(row.year || '') + '</td>'
                         + '<td style="' + cellStyle + ' text-align:center;">' + esc(row.month || '') + '</td>'
-                        + '<td style="' + cellStyle + ' text-align:center;">' + esc(row.day || '') + '</td>'
+                        + '<td style="' + cellStyle + ' text-align:center;">' + esc(row.day || '') + '</td>';
+                    if (hasTime) {
+                        html += '<td style="' + cellStyle + ' text-align:center;">' + esc(row.time || '') + '</td>';
+                    }
+                    html += ''
                         + '<td style="' + cellStyle + ' text-align:right; font-variant-numeric:tabular-nums;">' + esc(formatClose(row.close)) + '</td>'
                         + '<td style="' + cellStyle + ' text-align:right; font-variant-numeric:tabular-nums;">' + esc(formatRate(row.profit_rate)) + '</td>'
                         + '<td style="' + cellStyle + ' text-align:right; font-variant-numeric:tabular-nums;">' + esc(formatValue(row.market_value)) + '</td>'
@@ -3104,9 +2327,18 @@ def selected_holding_trend_options(
     measure_title = label_detail_measure(measure_key)
     working = frame.sort_values("date").copy()
     working["date"] = pd.to_datetime(working["date"])
-    date_format = "%m-%d" if str(period_label) in {"1개월", "3개월"} else "%Y-%m"
+    intraday_mode = str(period_label) == "당일"
+    if intraday_mode:
+        date_format = "%H:%M"
+        full_date_format = "%Y-%m-%d %H:%M"
+    elif str(period_label) in {"1개월", "3개월"}:
+        date_format = "%m-%d"
+        full_date_format = "%Y-%m-%d"
+    else:
+        date_format = "%Y-%m"
+        full_date_format = "%Y-%m-%d"
     x_labels = working["date"].dt.strftime(date_format).tolist()
-    full_dates = working["date"].dt.strftime("%Y-%m-%d").tolist()
+    full_dates = working["date"].dt.strftime(full_date_format).tolist()
 
     series_data: list[dict[str, Any]] = []
     for row, label_date, full_date, row_date in zip(
@@ -3123,6 +2355,7 @@ def selected_holding_trend_options(
                 "year": row_date.strftime("%Y"),
                 "month": row_date.strftime("%m"),
                 "day": row_date.strftime("%d"),
+                "time": row_date.strftime("%H:%M") if intraday_mode else "",
                 "product_name": selected_holding_name,
                 "market_value": round(float(row.get("market_value") or 0), 4),
                 "profit_rate": round(float(row.get("profit_rate") or 0), 4),
@@ -3221,7 +2454,7 @@ def selected_holding_trend_options(
             "textStyle": {
                 "fontSize": 16,
                 "fontWeight": 700,
-                "color": FEARGREED_FULL_TEXT_COLOR,
+                "color": CHART_TEXT_COLOR,
             },
             "subtextStyle": {
                 "fontSize": 11,
@@ -3257,7 +2490,7 @@ def selected_holding_trend_options(
                     "type": "dashed",
                 },
             },
-            "backgroundColor": "rgba(30, 34, 45, 0.97)",
+            "backgroundColor": CHART_TOOLTIP_BG_COLOR,
             "borderColor": FEARGREED_BORDER_COLOR,
             "borderWidth": 1,
             "borderRadius": 12,
@@ -3276,7 +2509,7 @@ def selected_holding_trend_options(
             },
             "emphasis": {
                 "iconStyle": {
-                    "borderColor": FEARGREED_FULL_TEXT_COLOR,
+                    "borderColor": CHART_TEXT_COLOR,
                 }
             },
             "feature": {
@@ -3340,16 +2573,16 @@ def selected_holding_trend_options(
                 "bottom": 30,
                 "borderColor": FEARGREED_BORDER_COLOR,
                 "backgroundColor": FEARGREED_PANEL_COLOR,
-                "fillerColor": "rgba(41, 98, 255, 0.18)",
+                "fillerColor": CHART_ACCENT_SOFT_COLOR,
                 "handleSize": 18,
                 "brushSelect": False,
                 "dataBackground": {
-                    "lineStyle": {"color": "rgba(128, 170, 240, 0.55)"},
-                    "areaStyle": {"color": "rgba(128, 170, 240, 0.08)"},
+                    "lineStyle": {"color": CHART_LINE_SOFT_COLOR},
+                    "areaStyle": {"color": CHART_LINE_FAINT_COLOR},
                 },
                 "selectedDataBackground": {
                     "lineStyle": {"color": FEARGREED_ACCENT_COLOR},
-                    "areaStyle": {"color": "rgba(41, 98, 255, 0.18)"},
+                    "areaStyle": {"color": CHART_ACCENT_SOFT_COLOR},
                 },
             },
         ],
@@ -3363,12 +2596,12 @@ def selected_holding_trend_options(
                 "symbolSize": 7,
                 "data": series_data,
                 "lineStyle": {
-                    "color": "#80AAF0",
+                    "color": CHART_LINE_COLOR,
                     "width": 3,
                 },
                 "itemStyle": {
                     "color": FEARGREED_FULL_TEXT_COLOR,
-                    "borderColor": "#80AAF0",
+                    "borderColor": CHART_LINE_COLOR,
                     "borderWidth": 2,
                 },
                 "areaStyle": {
@@ -3379,8 +2612,8 @@ def selected_holding_trend_options(
                         "x2": 0,
                         "y2": 1,
                         "colorStops": [
-                            {"offset": 0, "color": "rgba(128, 170, 240, 0.28)"},
-                            {"offset": 1, "color": "rgba(128, 170, 240, 0.03)"},
+                            {"offset": 0, "color": CHART_LINE_SOFT_COLOR},
+                            {"offset": 1, "color": CHART_LINE_FAINT_COLOR},
                         ],
                     }
                 },
@@ -3643,6 +2876,9 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]], roll
         st.session_state[selection_key] = ""
         selected_symbol = ""
     period = str(st.session_state.get(trend_period_key, "6mo") or "6mo")
+    if period not in SELECTED_TREND_PERIOD_OPTIONS:
+        period = "6mo"
+        st.session_state[trend_period_key] = period
     if str(st.session_state.get(trend_measure_key) or "").strip() not in DETAIL_MEASURE_LABELS:
         st.session_state[trend_measure_key] = DEFAULT_SELECTED_TREND_MEASURE
     overview_frame = holdings_overview_frame(holdings, selected_symbol=selected_symbol or None, limit=10)
@@ -3730,7 +2966,7 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]], roll
                     with period_col:
                         period = st.segmented_control(
                             "기간",
-                            options=["1mo", "3mo", "6mo", "1y"],
+                            options=list(SELECTED_TREND_PERIOD_OPTIONS),
                             format_func=label_period,
                             default=period,
                             key=trend_period_key,
@@ -3755,7 +2991,10 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]], roll
                 else:
                     try:
                         with st.spinner(f"{selected_holding_name} 추이를 불러오는 중입니다..."):
-                            _, selected_holding_trend = build_portfolio_trend(selected_holdings, period=period)
+                            selected_holding_trend = build_selected_holding_trend_frame(
+                                selected_holdings,
+                                period=period,
+                            )
                     except Exception as exc:  # noqa: BLE001
                         st.warning(f"선택 종목 추이를 불러오지 못했습니다: {exc}")
                     else:

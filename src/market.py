@@ -532,6 +532,7 @@ def _empty_intraday_snapshot(normalized: str) -> dict[str, Any]:
     return {
         "symbol": normalized,
         "series": [],
+        "timeline": [],
         "current_price": None,
         "previous_close": None,
         "day_change_rate": None,
@@ -602,9 +603,17 @@ def _fetch_intraday_price_snapshot_from_yfinance(symbol: str, interval: str = "5
         day_change_rate = ((current_price - first_price) / first_price * 100) if first_price else 0.0
 
     as_of = pd.Timestamp(latest_session["datetime"].iloc[-1]).isoformat()
+    timeline = [
+        {
+            "datetime": pd.Timestamp(row.datetime).isoformat(),
+            "close": round(float(row.close), 4),
+        }
+        for row in latest_session.itertuples(index=False)
+    ]
     return {
         "symbol": normalized,
         "series": [round(float(value), 4) for value in latest_prices.tolist()],
+        "timeline": timeline,
         "current_price": round(current_price, 4),
         "previous_close": round(previous_close, 4) if previous_close is not None else None,
         "day_change_rate": round(float(day_change_rate), 4) if day_change_rate is not None else None,
@@ -654,6 +663,7 @@ def _fetch_intraday_price_snapshot_from_kis(symbol: str) -> dict[str, Any]:
     return {
         "symbol": normalize_symbol(symbol),
         "series": payload.get("series") or [],
+        "timeline": payload.get("timeline") or [],
         "current_price": payload.get("current_price"),
         "previous_close": payload.get("previous_close"),
         "day_change_rate": payload.get("day_change_rate"),

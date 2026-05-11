@@ -36,6 +36,29 @@ def load_app_module():
 dashboard_app = load_app_module()
 
 
+class ThemeStylesheetTests(unittest.TestCase):
+    """디자인 토큰과 외부 전역 CSS 연결을 검증한다."""
+
+    def test_load_design_tokens_uses_streamlit_theme_values(self) -> None:
+        """Streamlit theme 기본 색상을 토큰의 기준값으로 읽는다."""
+
+        tokens = dashboard_app.load_design_tokens()
+
+        self.assertEqual(tokens["theme_primary_color"], "#0F766E")
+        self.assertEqual(tokens["theme_background_color"], "#F6F7F2")
+        self.assertEqual(tokens["theme_secondary_background_color"], "#E4EFE8")
+        self.assertEqual(tokens["theme_text_color"], "#15281F")
+
+    def test_render_app_stylesheet_substitutes_theme_variables(self) -> None:
+        """외부 CSS 템플릿의 플레이스홀더가 실제 토큰 값으로 치환된다."""
+
+        stylesheet = dashboard_app.render_app_stylesheet()
+
+        self.assertIn("--theme-primary: #0F766E;", stylesheet)
+        self.assertIn(".dashboard-metric-card", stylesheet)
+        self.assertNotIn("${theme_primary_color}", stylesheet)
+
+
 class DashboardSelectionPayloadTests(unittest.TestCase):
     """선택 종목 트렌드와 연결되는 selection payload 해석을 검증한다."""
 
@@ -111,6 +134,8 @@ class HoldingsBarLabelTests(unittest.TestCase):
         self.assertEqual([item["label"]["show"] for item in series_data], [True, True])
         self.assertEqual(series_data[0]["label"]["formatter"], "+12.34%")
         self.assertEqual(series_data[1]["label"]["formatter"], "-5.67%")
+        self.assertEqual(series_data[0]["itemStyle"]["borderRadius"], [10, 10, 0, 0])
+        self.assertEqual(series_data[1]["itemStyle"]["borderRadius"], [0, 0, 10, 10])
 
     def test_holdings_bar_options_keeps_positive_only_axis_above_zero(self) -> None:
         """모든 종목 수익률이 플러스면 Y축 최소값은 0 아래로 내려가지 않는다."""
@@ -506,6 +531,40 @@ class DashboardAllocationStatusTests(unittest.TestCase):
         self.assertIsNone(result)
 
 
+class SelectedHoldingTrendFrameTests(unittest.TestCase):
+    """선택 종목 트렌드 원천 프레임 구성을 검증한다."""
+
+    def test_build_selected_holding_trend_frame_uses_intraday_timeline_for_today(self) -> None:
+        """`당일` 기간은 intraday 타임라인을 장 시작부터 시간순으로 사용한다."""
+
+        holding = {
+            "symbol": "005930",
+            "product_name": "삼성전자",
+            "quantity": 10,
+            "avg_cost": 100.0,
+        }
+        snapshot = {
+            "timeline": [
+                {"datetime": "2026-05-11T09:00:00+09:00", "close": 101.0},
+                {"datetime": "2026-05-11T15:30:00+09:00", "close": 105.0},
+            ]
+        }
+
+        original = dashboard_app.fetch_intraday_price_snapshot
+        dashboard_app.fetch_intraday_price_snapshot = lambda symbol, interval="5m": snapshot
+        try:
+            frame = dashboard_app.build_selected_holding_trend_frame([holding], period="today")
+        finally:
+            dashboard_app.fetch_intraday_price_snapshot = original
+
+        self.assertEqual(frame["date"].dt.strftime("%H:%M").tolist(), ["09:00", "15:30"])
+        self.assertEqual(frame["product_name"].tolist(), ["삼성전자", "삼성전자"])
+        self.assertEqual(frame["market_value"].tolist(), [1010.0, 1050.0])
+        self.assertEqual(frame["cost_basis"].tolist(), [1000.0, 1000.0])
+        self.assertEqual(frame["profit_loss"].tolist(), [10.0, 50.0])
+        self.assertEqual(frame["profit_rate"].tolist(), [1.0, 5.0])
+
+
 class SelectedHoldingTrendOptionTests(unittest.TestCase):
     """선택 종목 트렌드 ECharts 옵션 구성을 검증한다."""
 
@@ -589,6 +648,45 @@ class SelectedHoldingTrendOptionTests(unittest.TestCase):
         assert options is not None
         self.assertIn("markLine", options["series"][0])
         self.assertEqual(options["series"][0]["markLine"]["data"], [{"yAxis": 0}])
+
+    def test_selected_holding_trend_options_shows_time_axis_for_today(self) -> None:
+        """`당일` 옵션은 시간 축과 데이터 보기 시간 컬럼을 함께 노출한다."""
+
+        frame = pd.DataFrame(
+            [
+                {
+                    "date": "2026-05-11T09:00:00+09:00",
+                    "product_name": "삼성전자",
+                    "market_value": 1010000,
+                    "profit_rate": 1.0,
+                    "close": 101.0,
+                },
+                {
+                    "date": "2026-05-11T15:30:00+09:00",
+                    "product_name": "삼성전자",
+                    "market_value": 1050000,
+                    "profit_rate": 5.0,
+                    "close": 105.0,
+                },
+            ]
+        )
+
+        options = dashboard_app.selected_holding_trend_options(
+            frame,
+            selected_holding_name="삼성전자",
+            selected_symbol_code="005930",
+            measure="close",
+            period_label="당일",
+        )
+
+        self.assertIsNotNone(options)
+        assert options is not None
+        self.assertEqual(options["xAxis"]["data"], ["09:00", "15:30"])
+        first_point = options["series"][0]["data"][0]
+        self.assertEqual(first_point["time"], "09:00")
+        self.assertEqual(first_point["date"], "2026-05-11 09:00")
+        option_to_content = str(options["toolbox"]["feature"]["dataView"]["optionToContent"])
+        self.assertIn("시간", option_to_content)
 
     def test_selected_holding_trend_options_data_view_shows_full_daily_columns(self) -> None:
         """데이터 보기는 년월일, 종가, 수익률, 평가금액 컬럼을 함께 노출한다."""

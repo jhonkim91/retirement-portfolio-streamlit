@@ -874,9 +874,17 @@ class KisApiClient:
         if day_change_rate is None and previous_close:
             day_change_rate = (current_price - previous_close) / previous_close * 100
         quote_date = str(output1.get("stck_bsop_date") or datetime.now().strftime("%Y%m%d")).strip()
+        timeline = [
+            {
+                "datetime": _compose_quote_timestamp(quote_date, str(row[time_column])),
+                "close": round(float(row[price_column]), 4),
+            }
+            for _, row in frame.iterrows()
+        ]
         return {
             "symbol": code,
             "series": [round(float(value), 4) for value in frame[price_column].tolist()],
+            "timeline": timeline,
             "current_price": round(current_price, 4),
             "previous_close": round(previous_close, 4) if previous_close is not None else None,
             "day_change_rate": round(float(day_change_rate), 4) if day_change_rate is not None else None,
