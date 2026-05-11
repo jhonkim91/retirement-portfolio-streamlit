@@ -12,7 +12,7 @@
 - [x] GitHub-hosted runner에서 `KIS Realtime Worker` 수동 실행 성공 검증
 - [x] `Memory.md` 장문 로그를 요약형 운영 메모로 정리
 - [ ] 다음 장중 자동 스케줄(`UTC 00:00`, `UTC 02:55`) 1회 추가 확인
-- [ ] 배포 대시보드에서 자산 배분 상태 칩이 실제로 `실시간 연동 중`으로 보이는지 화면 검증
+- [x] 배포 대시보드에서 자산 배분 상태 칩이 실제로 `실시간 연동 중`으로 보이는지 화면 검증
 - [ ] GitHub Actions Node 24 전환 전 액션 버전 점검
 
 ## 프로젝트 개요
@@ -87,6 +87,7 @@ streamlit run app.py
 - GitHub Actions 장중 worker 자동화 workflow 추가
 - `gh` CLI 설치, GitHub Actions secrets 주입, 수동 dispatch/실행 성공 검증 완료
 - 배포 대시보드가 장중에도 `지연 데이터 표시 중`으로 남는 케이스를 재현했고, 최근 quote 시각이 3분 이내면 live 톤으로 승격하는 fallback 및 10초 재확인 로직을 추가
+- 커밋 `2ede61d` 배포 후 세 번째 원격 확인에서 자산 배분 상태 칩이 `실시간 연동 중`으로 전환됨을 확인
 
 ## 최신 검증 결과
 - `python3 -m compileall app.py src scripts tests` 성공
@@ -101,6 +102,10 @@ streamlit run app.py
   - `python3 -m compileall app.py tests/test_app_dashboard.py` 성공
   - `python3 -m unittest tests.test_app_dashboard` 성공 (`20`건)
   - `python3 -m unittest discover -s tests -p "test_*.py"` 성공 (`78`건)
+- 이번 턴 배포 추가 검증:
+  - GitHub Actions run `25646982752` 장중 연결 상태에서 계좌 `24`의 `connection_state=connected`, `last_quote_at=2026-05-11T11:30:26` 확인
+  - `artifacts/deploy-verify-dashboard-live-chip-postdeploy.txt`에서 `실시간 연동 중` 확인
+  - `artifacts/deploy-verify-dashboard-live-chip-postdeploy.png` 스크린샷 저장
 
 ## Git/GitHub 상태
 - 기본 브랜치: `main`
@@ -108,6 +113,7 @@ streamlit run app.py
   - `72f0f41` `Refresh auth UI and allocation status chip`
   - `12748fd` `Add scheduled KIS realtime worker workflow`
   - `7ee4d45` `Fix GitHub worker shutdown handling`
+  - `2ede61d` `Improve dashboard live status fallback`
 - 최근 기록 커밋:
   - `2654620` `Record realtime table activation verification`
   - `00aa563` `Record GitHub worker validation`
