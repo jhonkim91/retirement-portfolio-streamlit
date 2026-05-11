@@ -35,6 +35,7 @@ fetch_latest_price = market_module.fetch_latest_price
 fetch_intraday_price_snapshot = getattr(market_module, "fetch_intraday_price_snapshot", lambda symbol, interval="5m": {})
 search_products = getattr(market_module, "search_products", lambda query, limit=8: [])
 quote_provider_status = getattr(market_module, "quote_provider_status", lambda: {})
+is_kis_domestic_symbol = getattr(market_module, "is_kis_domestic_symbol", lambda symbol: False)
 
 create_account = _db.create_account
 delete_account = _db.delete_account
@@ -2038,12 +2039,14 @@ def dashboard_selected_holding_name(holdings: list[dict[str, Any]], selected_sym
     return normalized_symbol
 
 
-def dashboard_live_refresh_interval(account_id: int) -> str | None:
-    """실시간 worker 연결 시 대시보드 자동 새로고침 간격을 반환한다."""
+def dashboard_live_refresh_interval(account_id: int, holdings: list[dict[str, Any]]) -> str | None:
+    """실시간 worker 상태와 보유 종목 조건에 맞춰 대시보드 새로고침 간격을 반환한다."""
 
     status = get_realtime_worker_status(account_id) or {}
     if str(status.get("connection_state") or "").strip().lower() == "connected":
         return "10s"
+    if any(is_kis_domestic_symbol(str(holding.get("symbol") or "").strip()) for holding in holdings):
+        return "30s"
     return None
 
 
@@ -4240,7 +4243,7 @@ def main() -> None:
         else:
             mark_rollup_synced(int(account["id"]))
     if active_page == "Dashboard":
-        live_refresh_interval = dashboard_live_refresh_interval(int(account["id"]))
+        live_refresh_interval = dashboard_live_refresh_interval(int(account["id"]), holdings)
         if live_refresh_interval and hasattr(st, "fragment"):
             @st.fragment(run_every=live_refresh_interval)
             def render_dashboard_fragment() -> None:

@@ -397,6 +397,48 @@ class DashboardAllocationStatusTests(unittest.TestCase):
 
         self.assertEqual(result, ("실시간 대상 없음", "idle"))
 
+    def test_dashboard_live_refresh_interval_returns_fast_poll_when_connected(self) -> None:
+        """worker 연결 시 대시보드 자동 새로고침은 10초 주기를 사용한다."""
+
+        original_status = dashboard_app.get_realtime_worker_status
+        dashboard_app.get_realtime_worker_status = lambda account_id: {"connection_state": "connected"}
+        try:
+            result = dashboard_app.dashboard_live_refresh_interval(1, [{"symbol": "005930"}])
+        finally:
+            dashboard_app.get_realtime_worker_status = original_status
+
+        self.assertEqual(result, "10s")
+
+    def test_dashboard_live_refresh_interval_polls_slowly_for_domestic_holdings_while_stale(self) -> None:
+        """연결 전이더라도 국내 종목이 있으면 30초 주기로 상태 변화를 재확인한다."""
+
+        original_status = dashboard_app.get_realtime_worker_status
+        dashboard_app.get_realtime_worker_status = lambda account_id: {"connection_state": "disconnected"}
+        try:
+            result = dashboard_app.dashboard_live_refresh_interval(
+                1,
+                [{"symbol": "005930"}, {"symbol": "AAPL"}],
+            )
+        finally:
+            dashboard_app.get_realtime_worker_status = original_status
+
+        self.assertEqual(result, "30s")
+
+    def test_dashboard_live_refresh_interval_skips_poll_without_domestic_holdings(self) -> None:
+        """국내 실시간 대상이 없으면 상태 전이 폴링을 켜지 않는다."""
+
+        original_status = dashboard_app.get_realtime_worker_status
+        dashboard_app.get_realtime_worker_status = lambda account_id: {"connection_state": "disconnected"}
+        try:
+            result = dashboard_app.dashboard_live_refresh_interval(
+                1,
+                [{"symbol": "AAPL"}, {"symbol": "CASH"}],
+            )
+        finally:
+            dashboard_app.get_realtime_worker_status = original_status
+
+        self.assertIsNone(result)
+
 
 class SelectedHoldingTrendOptionTests(unittest.TestCase):
     """선택 종목 트렌드 ECharts 옵션 구성을 검증한다."""
