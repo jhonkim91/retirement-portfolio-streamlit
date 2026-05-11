@@ -17,13 +17,17 @@ from src.db import (
     BACKEND_SUPABASE,
     _demo_workspace_blueprint,
     _select_initial_backend,
+    _sqlite_delete_trade_log,
+    _sqlite_update_trade_log,
     _supabase_adjust_cash_balance,
+    _supabase_delete_trade_log,
     _sync_legacy_interest_history_for_buy,
     _run_with_fallback,
     _should_fallback,
     _supabase_create_account,
     _supabase_record_trade,
     _supabase_replace_interest_history,
+    _supabase_update_trade_log,
     clear_data_cache,
     delete_account,
     is_accounts_hotfix_error,
@@ -961,6 +965,228 @@ class SQLiteRealtimeQuotePersistenceTests(unittest.TestCase):
 
                 self.assertEqual(float(account["cash_balance"]), 620000.0)
                 self.assertEqual(trade_logs, [])
+
+
+class SQLiteTradeLogEditDeleteTests(unittest.TestCase):
+    """SQLite 거래 기록 수정/삭제 후 원장 재계산을 검증한다."""
+
+    def test_update_trade_log_rebuilds_holdings_without_touching_cash(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            database_path = Path(temp_dir) / "portfolio.db"
+            with patch.dict(os.environ, {"RETIREMENT_DB_PATH": str(database_path)}, clear=False):
+                sqlite_module = importlib.reload(sqlite_db)
+                sqlite_module.initialize_database()
+                account_id = sqlite_module.create_account("user-1::수정 테스트", opening_cash=500000)
+                sqlite_module.record_trade(
+                    account_id,
+                    symbol="005930",
+                    product_name="삼성전자",
+                    trade_type="buy",
+                    asset_type="risk",
+                    quantity=10,
+                    price=100,
+                    trade_date="2026-05-10",
+                    notes="원본",
+                )
+                log_id = int(sqlite_module.list_trade_logs(account_id)[0]["id"])
+
+                _sqlite_update_trade_log(
+                    account_id,
+                    log_id,
+                    trade_type="buy",
+                    symbol="005930",
+                    product_name="삼성전자 수정",
+                    asset_type="risk",
+                    quantity=4,
+                    price=150,
+                    trade_date="2026-05-11",
+                    notes="수정 완료",
+                )
+
+                account = sqlite_module.get_account(account_id)
+                holding = sqlite_module.list_holdings(account_id)[0]
+                log = sqlite_module.list_trade_logs(account_id)[0]
+
+                self.assertEqual(float(account["cash_balance"]), 500000.0)
+                self.assertEqual(str(holding["product_name"]), "삼성전자 수정")
+                self.assertEqual(float(holding["quantity"]), 4.0)
+                self.assertEqual(float(holding["avg_cost"]), 150.0)
+                self.assertEqual(str(log["trade_type"]), "buy")
+                self.assertEqual(float(log["total_amount"]), 600.0)
+                self.assertEqual(float(log["cash_delta"]), -600.0)
+                self.assertEqual(str(log["notes"]), "수정 완료")
+
+    def test_delete_trade_log_clears_active_holding_without_touching_cash(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            database_path = Path(temp_dir) / "portfolio.db"
+            with patch.dict(os.environ, {"RETIREMENT_DB_PATH": str(database_path)}, clear=False):
+                sqlite_module = importlib.reload(sqlite_db)
+                sqlite_module.initialize_database()
+                account_id = sqlite_module.create_account("user-1::삭제 테스트", opening_cash=500000)
+                sqlite_module.record_trade(
+                    account_id,
+                    symbol="AAPL",
+                    product_name="Apple",
+                    trade_type="buy",
+                    asset_type="risk",
+                    quantity=2,
+                    price=1000,
+                    trade_date="2026-05-10",
+                    notes="삭제 대상",
+                )
+                log_id = int(sqlite_module.list_trade_logs(account_id)[0]["id"])
+
+                _sqlite_delete_trade_log(account_id, log_id)
+
+                account = sqlite_module.get_account(account_id)
+                holdings = sqlite_module.list_holdings(account_id)
+                all_holdings = sqlite_module.list_holdings(account_id, include_closed=True)
+                trade_logs = sqlite_module.list_trade_logs(account_id)
+
+                self.assertEqual(float(account["cash_balance"]), 500000.0)
+                self.assertEqual(holdings, [])
+                self.assertEqual(len(all_holdings), 1)
+                self.assertEqual(float(all_holdings[0]["quantity"]), 0.0)
+                self.assertEqual(trade_logs, [])
+
+    def test_update_cash_flow_trade_log_recomputes_cash_balance(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            database_path = Path(temp_dir) / "portfolio.db"
+            with patch.dict(os.environ, {"RETIREMENT_DB_PATH": str(database_path)}, clear=False):
+                sqlite_module = importlib.reload(sqlite_db)
+                sqlite_module.initialize_database()
+                account_id = sqlite_module.create_account("user-1::현금 수정 테스트", opening_cash=500000)
+                sqlite_module.record_cash_flow(
+                    account_id,
+                    flow_type="personal_deposit",
+                    amount=100000,
+                    trade_date="2026-05-10",
+                    notes="원본 입금",
+                )
+                log_id = int(sqlite_module.list_trade_logs(account_id)[0]["id"])
+
+                _sqlite_update_trade_log(
+                    account_id,
+                    log_id,
+                    trade_type="withdraw",
+                    amount=50000,
+                    trade_date="2026-05-11",
+                    notes="수정 출금",
+                )
+
+                account = sqlite_module.get_account(account_id)
+                log = sqlite_module.list_trade_logs(account_id)[0]
+
+                self.assertEqual(float(account["cash_balance"]), 450000.0)
+                self.assertEqual(str(log["trade_type"]), "withdraw")
+                self.assertEqual(float(log["total_amount"]), 50000.0)
+                self.assertEqual(float(log["cash_delta"]), -50000.0)
+                self.assertEqual(str(log["product_name"]), "일반 출금")
+
+    def test_delete_cash_flow_trade_log_restores_cash_balance(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            database_path = Path(temp_dir) / "portfolio.db"
+            with patch.dict(os.environ, {"RETIREMENT_DB_PATH": str(database_path)}, clear=False):
+                sqlite_module = importlib.reload(sqlite_db)
+                sqlite_module.initialize_database()
+                account_id = sqlite_module.create_account("user-1::현금 삭제 테스트", opening_cash=500000)
+                sqlite_module.record_cash_flow(
+                    account_id,
+                    flow_type="personal_deposit",
+                    amount=100000,
+                    trade_date="2026-05-10",
+                    notes="삭제할 입금",
+                )
+                log_id = int(sqlite_module.list_trade_logs(account_id)[0]["id"])
+
+                _sqlite_delete_trade_log(account_id, log_id)
+
+                account = sqlite_module.get_account(account_id)
+                trade_logs = sqlite_module.list_trade_logs(account_id)
+
+                self.assertEqual(float(account["cash_balance"]), 500000.0)
+                self.assertEqual(trade_logs, [])
+
+
+class SupabaseTradeLogEditDeleteTests(unittest.TestCase):
+    """Supabase 거래 기록 수정/삭제 경로를 검증한다."""
+
+    @patch("src.db.now_iso", return_value="2026-05-11T09:35:00")
+    @patch("src.db._supabase_update_cash_balance")
+    @patch("src.db._supabase_apply_holding_state")
+    @patch("src.db._supabase_request")
+    @patch("src.db._supabase_list_trade_logs")
+    @patch("src.db._supabase_get_account", return_value={"id": 7, "cash_balance": 1000.0})
+    @patch("src.db._supabase_get_trade_log")
+    def test_supabase_update_trade_log_rebuilds_holdings_without_touching_cash(
+        self,
+        get_trade_log_mock,
+        _get_account_mock,
+        list_trade_logs_mock,
+        request_mock,
+        apply_holding_state_mock,
+        update_cash_balance_mock,
+        _now_iso_mock,
+    ) -> None:
+        existing_log = {
+            "id": 5,
+            "trade_type": "buy",
+            "symbol": "AAPL",
+            "product_name": "Apple",
+            "asset_type": "risk",
+            "quantity": 1.0,
+            "price": 100.0,
+            "trade_date": "2026-05-10",
+            "created_at": "2026-05-10T09:00:00",
+            "cash_delta": -100.0,
+            "total_amount": 100.0,
+            "notes": "원본",
+        }
+        get_trade_log_mock.return_value = dict(existing_log)
+        list_trade_logs_mock.return_value = [dict(existing_log)]
+
+        _supabase_update_trade_log(
+            7,
+            5,
+            trade_type="buy",
+            symbol="AAPL",
+            product_name="Apple 수정",
+            asset_type="risk",
+            quantity=2,
+            price=120,
+            trade_date="2026-05-11",
+            notes="수정",
+        )
+
+        update_cash_balance_mock.assert_not_called()
+        apply_holding_state_mock.assert_called_once()
+        request_mock.assert_called_once()
+        self.assertEqual(request_mock.call_args.args[:2], ("PATCH", "trade_logs"))
+        self.assertEqual(request_mock.call_args.kwargs["data"]["total_amount"], 240.0)
+
+    @patch("src.db._supabase_update_cash_balance")
+    @patch("src.db._supabase_request")
+    @patch("src.db._supabase_get_account", return_value={"id": 7, "cash_balance": 120000.0})
+    @patch(
+        "src.db._supabase_get_trade_log",
+        return_value={
+            "id": 9,
+            "trade_type": "personal_deposit",
+            "cash_delta": 20000.0,
+            "total_amount": 20000.0,
+        },
+    )
+    def test_supabase_delete_cash_flow_trade_log_updates_cash_balance(
+        self,
+        _get_trade_log_mock,
+        _get_account_mock,
+        request_mock,
+        update_cash_balance_mock,
+    ) -> None:
+        _supabase_delete_trade_log(7, 9)
+
+        request_mock.assert_called_once_with("DELETE", "trade_logs", filters={"id": "eq.9"})
+        update_cash_balance_mock.assert_called_once_with(7, 100000.0)
 
 
 if __name__ == "__main__":

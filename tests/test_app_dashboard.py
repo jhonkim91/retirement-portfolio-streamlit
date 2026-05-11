@@ -108,6 +108,26 @@ class TradeFormResetTests(unittest.TestCase):
         self.assertFalse(dashboard_app.is_visible_trade_log({"trade_type": "cash_adjustment"}))
         self.assertTrue(dashboard_app.is_visible_trade_log({"trade_type": "buy"}))
 
+    def test_is_trade_log_editable_allows_supported_types_only(self) -> None:
+        self.assertTrue(dashboard_app.is_trade_log_editable({"trade_type": "buy"}))
+        self.assertTrue(dashboard_app.is_trade_log_editable({"trade_type": "personal_deposit"}))
+        self.assertFalse(dashboard_app.is_trade_log_editable({"trade_type": "transfer_out"}))
+
+    def test_trade_log_editor_option_label_formats_one_line_summary(self) -> None:
+        label = dashboard_app.trade_log_editor_option_label(
+            {
+                "trade_date": "2026-05-11",
+                "trade_type": "buy",
+                "product_name": "삼성전자",
+                "total_amount": 150000,
+            }
+        )
+
+        self.assertIn("2026-05-11", label)
+        self.assertIn("매수", label)
+        self.assertIn("삼성전자", label)
+        self.assertIn("150,000원", label)
+
 
 class HoldingsTableDisplayTests(unittest.TestCase):
     """현재 보유 종목 표 표시 포맷과 컬러 스타일을 검증한다."""

@@ -42,6 +42,8 @@ CASH_EVENT_LABELS = {
     "transfer_in": "계좌 이체 입금",
     "cash_adjustment": "현금 조정",
 }
+EDITABLE_TRADE_LOG_TYPES = {"buy", "sell", "personal_deposit", "employer_deposit", "withdraw"}
+EDITABLE_CASH_FLOW_LOG_TYPES = {"personal_deposit", "employer_deposit", "withdraw"}
 EXPORTABLE_TABLES = {"accounts", "holdings", "trade_logs", "daily_account_snapshot"}
 DEFAULT_ANNUAL_INTEREST_RATE = 0.05
 DEFAULT_ROLLUP_TIMEZONE = "Asia/Seoul"
@@ -1321,6 +1323,98 @@ def _metadata_payload(metadata: dict[str, Any] | None = None) -> dict[str, Any]:
     return dict(metadata or {})
 
 
+def _normalize_trade_log_type(trade_type: Any) -> str:
+    """거래 로그 유형을 현재 앱 기준 값으로 정규화한다."""
+
+    return _normalize_cash_flow_type(str(trade_type or "").strip().lower())
+
+
+def _editable_trade_log_type(log: dict[str, Any]) -> str:
+    """수정/삭제 가능한 거래 로그 유형을 반환하고, 아니면 예외를 던진다."""
+
+    normalized_type = _normalize_trade_log_type(log.get("trade_type"))
+    if normalized_type not in EDITABLE_TRADE_LOG_TYPES:
+        raise ValueError("이 거래 기록은 현재 수정/삭제를 지원하지 않습니다.")
+    return normalized_type
+
+
+def _cash_delta_for_cash_flow(flow_type: str, amount: float) -> float:
+    """현금 흐름 유형과 금액으로 계좌 현금 증감값을 계산한다."""
+
+    normalized_type = _normalize_cash_flow_type(flow_type)
+    flow_amount = float(amount or 0)
+    return flow_amount if normalized_type in {"personal_deposit", "employer_deposit"} else -flow_amount
+
+
+def _sorted_trade_logs_for_replay(trade_logs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """보유 종목 재계산용으로 거래 로그를 오래된 순서대로 정렬한다."""
+
+    return sorted(
+        trade_logs,
+        key=lambda row: (
+            str(row.get("trade_date") or ""),
+            str(row.get("created_at") or ""),
+            int(row.get("id") or 0),
+        ),
+    )
+
+
+def _desired_holdings_by_symbol(trade_logs: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """매수/매도 원장만 기준으로 심볼별 최종 보유 상태를 계산한다."""
+
+    desired_rows: dict[str, dict[str, Any]] = {}
+    for log in _sorted_trade_logs_for_replay(trade_logs):
+        trade_type = _normalize_trade_log_type(log.get("trade_type"))
+        if trade_type not in BUY_SELL_TRADE_TYPES:
+            continue
+
+        symbol = str(log.get("symbol") or "").strip().upper()
+        if not symbol:
+            raise ValueError("종목 코드가 비어 있는 거래 기록은 수정/삭제할 수 없습니다.")
+
+        quantity = float(log.get("quantity") or 0)
+        price = float(log.get("price") or 0)
+        if quantity <= 0 or price <= 0:
+            raise ValueError("수량 또는 단가가 올바르지 않은 거래 기록은 수정/삭제할 수 없습니다.")
+
+        product_name = str(log.get("product_name") or "").strip() or symbol
+        asset_type = str(log.get("asset_type") or "risk").strip().lower() or "risk"
+        if asset_type not in {"risk", "safe"}:
+            raise ValueError("자산군 값이 올바르지 않은 거래 기록은 수정/삭제할 수 없습니다.")
+
+        current_row = desired_rows.get(
+            symbol,
+            {
+                "symbol": symbol,
+                "product_name": product_name,
+                "asset_type": asset_type,
+                "quantity": 0.0,
+                "avg_cost": 0.0,
+            },
+        )
+        current_quantity = float(current_row.get("quantity") or 0)
+        current_avg_cost = float(current_row.get("avg_cost") or 0)
+
+        if trade_type == "buy":
+            next_quantity = current_quantity + quantity
+            next_avg_cost = ((current_quantity * current_avg_cost) + (quantity * price)) / next_quantity
+        else:
+            if current_quantity + 0.000001 < quantity:
+                raise ValueError("거래 기록 수정 결과 보유 수량이 음수가 됩니다.")
+            next_quantity = max(current_quantity - quantity, 0.0)
+            next_avg_cost = current_avg_cost if next_quantity > 0 else 0.0
+
+        desired_rows[symbol] = {
+            "symbol": symbol,
+            "product_name": product_name if trade_type == "buy" else str(current_row.get("product_name") or product_name),
+            "asset_type": asset_type if trade_type == "buy" else str(current_row.get("asset_type") or asset_type),
+            "quantity": float(next_quantity),
+            "avg_cost": float(next_avg_cost),
+        }
+
+    return desired_rows
+
+
 def _supabase_request(
     method: str,
     table: str,
@@ -1817,6 +1911,88 @@ def _supabase_list_trade_logs(account_id: int) -> list[dict[str, Any]]:
     return sorted(logs, key=lambda row: (row.get("trade_date", ""), row.get("id", 0)), reverse=True)
 
 
+def _supabase_get_trade_log(account_id: int, log_id: int) -> dict[str, Any] | None:
+    """Supabase에서 계좌 소유 거래 로그 1건을 조회한다."""
+
+    result = _supabase_request(
+        "GET",
+        "trade_logs",
+        filters={
+            "account_id": f"eq.{account_id}",
+            "id": f"eq.{int(log_id)}",
+        },
+    ) or []
+    row = result[0] if isinstance(result, list) and result else result
+    return dict(row) if isinstance(row, dict) else None
+
+
+def _supabase_apply_holding_state(
+    account_id: int,
+    *,
+    trade_logs: list[dict[str, Any]],
+    timestamp: str,
+) -> None:
+    """Supabase 보유 종목 테이블을 현재 매수/매도 원장 기준으로 다시 맞춘다."""
+
+    desired_rows = _desired_holdings_by_symbol(trade_logs)
+    existing_rows = _supabase_request("GET", "holdings", filters={"account_id": f"eq.{account_id}"}) or []
+    existing_by_symbol = {
+        str(row.get("symbol") or "").strip().upper(): row
+        for row in existing_rows
+        if str(row.get("symbol") or "").strip()
+    }
+
+    for symbol, desired in desired_rows.items():
+        existing_row = existing_by_symbol.pop(symbol, None)
+        if existing_row:
+            _supabase_request(
+                "PATCH",
+                "holdings",
+                data={
+                    "product_name": desired["product_name"],
+                    "asset_type": desired["asset_type"],
+                    "quantity": float(desired["quantity"] or 0),
+                    "avg_cost": float(desired["avg_cost"] or 0),
+                    "updated_at": timestamp,
+                },
+                filters={"id": f"eq.{int(existing_row['id'])}"},
+                prefer_return="minimal",
+            )
+            continue
+
+        current_price = float(desired["avg_cost"] or 0)
+        _supabase_request(
+            "POST",
+            "holdings",
+            data={
+                "account_id": account_id,
+                "symbol": symbol,
+                "product_name": desired["product_name"],
+                "asset_type": desired["asset_type"],
+                "quantity": float(desired["quantity"] or 0),
+                "avg_cost": float(desired["avg_cost"] or 0),
+                "current_price": current_price,
+                "price_updated_at": timestamp,
+                "created_at": timestamp,
+                "updated_at": timestamp,
+            },
+            prefer_return="minimal",
+        )
+
+    for stale_row in existing_by_symbol.values():
+        _supabase_request(
+            "PATCH",
+            "holdings",
+            data={
+                "quantity": 0.0,
+                "avg_cost": 0.0,
+                "updated_at": timestamp,
+            },
+            filters={"id": f"eq.{int(stale_row['id'])}"},
+            prefer_return="minimal",
+        )
+
+
 def _supabase_list_daily_interest(account_id: int) -> list[dict[str, Any]]:
     result = _supabase_request("GET", "daily_interest", filters={"account_id": f"eq.{account_id}"})
     rows = result or []
@@ -2033,6 +2209,167 @@ def _supabase_adjust_cash_balance(
     if abs(cash_delta) <= 0.000001:
         raise ValueError("현재 현금과 동일해 조정할 내용이 없습니다.")
 
+    _supabase_update_cash_balance(account_id, next_cash)
+
+
+def _supabase_update_trade_log(
+    account_id: int,
+    log_id: int,
+    *,
+    trade_type: str,
+    trade_date: str,
+    notes: str = "",
+    symbol: str = "",
+    product_name: str = "",
+    asset_type: str = "risk",
+    quantity: float = 0.0,
+    price: float = 0.0,
+    amount: float = 0.0,
+) -> None:
+    """Supabase 거래 로그 1건을 수정한다."""
+
+    existing_log = _supabase_get_trade_log(account_id, log_id)
+    if not existing_log:
+        raise ValueError("거래 기록을 찾을 수 없습니다.")
+
+    existing_type = _editable_trade_log_type(existing_log)
+    next_type = _normalize_trade_log_type(trade_type)
+    if existing_type in BUY_SELL_TRADE_TYPES and next_type not in BUY_SELL_TRADE_TYPES:
+        raise ValueError("매수/매도 기록은 매수/매도 안에서만 수정할 수 있습니다.")
+    if existing_type in EDITABLE_CASH_FLOW_LOG_TYPES and next_type not in EDITABLE_CASH_FLOW_LOG_TYPES:
+        raise ValueError("현금 흐름 기록은 현금 흐름 안에서만 수정할 수 있습니다.")
+
+    timestamp = now_iso()
+    account = _supabase_get_account(account_id)
+    if not account:
+        raise ValueError("계좌를 찾을 수 없습니다.")
+
+    all_logs = _supabase_list_trade_logs(account_id)
+    candidate_logs: list[dict[str, Any]] = []
+
+    if existing_type in BUY_SELL_TRADE_TYPES:
+        cleaned_symbol = str(symbol or "").strip().upper()
+        cleaned_name = str(product_name or "").strip()
+        cleaned_asset_type = str(asset_type or "risk").strip().lower()
+        share_count = float(quantity or 0)
+        trade_price = float(price or 0)
+        if next_type not in BUY_SELL_TRADE_TYPES:
+            raise ValueError("매수/매도 기록만 수정할 수 있습니다.")
+        if cleaned_asset_type not in {"risk", "safe"}:
+            raise ValueError("자산군 값이 올바르지 않습니다.")
+        if not cleaned_symbol:
+            raise ValueError("종목 코드 또는 심볼을 입력해 주세요.")
+        if not cleaned_name:
+            raise ValueError("종목명을 입력해 주세요.")
+        if share_count <= 0 or trade_price <= 0:
+            raise ValueError("수량과 단가는 모두 0보다 커야 합니다.")
+
+        total_amount = share_count * trade_price
+        cash_delta = -total_amount if next_type == "buy" else total_amount
+        updated_log = dict(existing_log)
+        updated_log.update(
+            {
+                "symbol": cleaned_symbol,
+                "product_name": cleaned_name,
+                "trade_type": next_type,
+                "asset_type": cleaned_asset_type,
+                "quantity": share_count,
+                "price": trade_price,
+                "total_amount": total_amount,
+                "cash_delta": cash_delta,
+                "trade_date": str(trade_date),
+                "notes": str(notes or "").strip(),
+            }
+        )
+        for log in all_logs:
+            candidate_logs.append(updated_log if int(log.get("id") or 0) == int(log_id) else log)
+        _desired_holdings_by_symbol(candidate_logs)
+        _supabase_request(
+            "PATCH",
+            "trade_logs",
+            data={
+                "symbol": cleaned_symbol,
+                "product_name": cleaned_name,
+                "trade_type": next_type,
+                "asset_type": cleaned_asset_type,
+                "quantity": share_count,
+                "price": trade_price,
+                "total_amount": total_amount,
+                "cash_delta": cash_delta,
+                "trade_date": str(trade_date),
+                "notes": str(notes or "").strip(),
+            },
+            filters={"id": f"eq.{int(log_id)}"},
+            prefer_return="minimal",
+        )
+        _supabase_apply_holding_state(account_id, trade_logs=candidate_logs, timestamp=timestamp)
+        return
+
+    normalized_flow_type = _normalize_cash_flow_type(next_type)
+    flow_amount = float(amount or 0)
+    if normalized_flow_type not in EDITABLE_CASH_FLOW_LOG_TYPES:
+        raise ValueError("지원하지 않는 현금 흐름 유형입니다.")
+    if flow_amount <= 0:
+        raise ValueError("금액은 0보다 커야 합니다.")
+
+    old_cash_delta = float(existing_log.get("cash_delta") or 0)
+    new_cash_delta = _cash_delta_for_cash_flow(normalized_flow_type, flow_amount)
+    next_cash = float(account.get("cash_balance") or 0) - old_cash_delta + new_cash_delta
+    if next_cash < -0.000001:
+        raise ValueError("수정 결과 현금이 부족합니다.")
+
+    _supabase_request(
+        "PATCH",
+        "trade_logs",
+        data={
+            "symbol": "",
+            "product_name": _cash_event_label(normalized_flow_type),
+            "trade_type": normalized_flow_type,
+            "asset_type": "cash",
+            "quantity": 0,
+            "price": 0,
+            "total_amount": flow_amount,
+            "cash_delta": new_cash_delta,
+            "trade_date": str(trade_date),
+            "notes": str(notes or "").strip(),
+        },
+        filters={"id": f"eq.{int(log_id)}"},
+        prefer_return="minimal",
+    )
+    _supabase_update_cash_balance(account_id, next_cash)
+
+
+def _supabase_delete_trade_log(account_id: int, log_id: int) -> None:
+    """Supabase 거래 로그 1건을 삭제한다."""
+
+    existing_log = _supabase_get_trade_log(account_id, log_id)
+    if not existing_log:
+        raise ValueError("거래 기록을 찾을 수 없습니다.")
+
+    existing_type = _editable_trade_log_type(existing_log)
+    timestamp = now_iso()
+
+    if existing_type in BUY_SELL_TRADE_TYPES:
+        remaining_logs = [
+            log
+            for log in _supabase_list_trade_logs(account_id)
+            if int(log.get("id") or 0) != int(log_id)
+        ]
+        _desired_holdings_by_symbol(remaining_logs)
+        _supabase_request("DELETE", "trade_logs", filters={"id": f"eq.{int(log_id)}"})
+        _supabase_apply_holding_state(account_id, trade_logs=remaining_logs, timestamp=timestamp)
+        return
+
+    account = _supabase_get_account(account_id)
+    if not account:
+        raise ValueError("계좌를 찾을 수 없습니다.")
+
+    old_cash_delta = float(existing_log.get("cash_delta") or 0)
+    next_cash = float(account.get("cash_balance") or 0) - old_cash_delta
+    if next_cash < -0.000001:
+        raise ValueError("삭제 결과 현금이 부족합니다.")
+
+    _supabase_request("DELETE", "trade_logs", filters={"id": f"eq.{int(log_id)}"})
     _supabase_update_cash_balance(account_id, next_cash)
 
 
@@ -2592,6 +2929,269 @@ def _sqlite_adjust_cash_balance(
     )
 
 
+def _sqlite_get_trade_log(account_id: int, log_id: int) -> dict[str, Any] | None:
+    """SQLite에서 계좌 소유 거래 로그 1건을 조회한다."""
+
+    if not sqlite_db.get_account(account_id):
+        return None
+
+    with sqlite_db.connect() as connection:
+        row = connection.execute(
+            """
+            SELECT *
+            FROM trade_logs
+            WHERE account_id = ?
+              AND id = ?
+            LIMIT 1
+            """,
+            (account_id, int(log_id)),
+        ).fetchone()
+    return dict(row) if row else None
+
+
+def _sqlite_apply_holding_state(
+    connection: Any,
+    account_id: int,
+    *,
+    trade_logs: list[dict[str, Any]],
+    timestamp: str,
+) -> None:
+    """SQLite 보유 종목 테이블을 현재 매수/매도 원장 기준으로 다시 맞춘다."""
+
+    desired_rows = _desired_holdings_by_symbol(trade_logs)
+    existing_rows = connection.execute(
+        """
+        SELECT *
+        FROM holdings
+        WHERE account_id = ?
+        """,
+        (account_id,),
+    ).fetchall()
+    existing_by_symbol = {
+        str(row["symbol"] or "").strip().upper(): row
+        for row in existing_rows
+        if str(row["symbol"] or "").strip()
+    }
+
+    for symbol, desired in desired_rows.items():
+        existing_row = existing_by_symbol.pop(symbol, None)
+        if existing_row:
+            connection.execute(
+                """
+                UPDATE holdings
+                SET product_name = ?, asset_type = ?, quantity = ?, avg_cost = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (
+                    str(desired["product_name"]),
+                    str(desired["asset_type"]),
+                    float(desired["quantity"] or 0),
+                    float(desired["avg_cost"] or 0),
+                    timestamp,
+                    int(existing_row["id"]),
+                ),
+            )
+            continue
+
+        current_price = float(desired["avg_cost"] or 0)
+        connection.execute(
+            """
+            INSERT INTO holdings (
+                account_id, symbol, product_name, asset_type, quantity, avg_cost, current_price,
+                price_updated_at, created_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                account_id,
+                symbol,
+                str(desired["product_name"]),
+                str(desired["asset_type"]),
+                float(desired["quantity"] or 0),
+                float(desired["avg_cost"] or 0),
+                current_price,
+                timestamp,
+                timestamp,
+                timestamp,
+            ),
+        )
+
+    for stale_row in existing_by_symbol.values():
+        connection.execute(
+            """
+            UPDATE holdings
+            SET quantity = 0, avg_cost = 0, updated_at = ?
+            WHERE id = ?
+            """,
+            (timestamp, int(stale_row["id"])),
+        )
+
+
+def _sqlite_update_trade_log(
+    account_id: int,
+    log_id: int,
+    *,
+    trade_type: str,
+    trade_date: str,
+    notes: str = "",
+    symbol: str = "",
+    product_name: str = "",
+    asset_type: str = "risk",
+    quantity: float = 0.0,
+    price: float = 0.0,
+    amount: float = 0.0,
+) -> None:
+    """SQLite 거래 로그 1건을 수정한다."""
+
+    existing_log = _sqlite_get_trade_log(account_id, log_id)
+    if not existing_log:
+        raise ValueError("거래 기록을 찾을 수 없습니다.")
+
+    existing_type = _editable_trade_log_type(existing_log)
+    next_type = _normalize_trade_log_type(trade_type)
+    if existing_type in BUY_SELL_TRADE_TYPES and next_type not in BUY_SELL_TRADE_TYPES:
+        raise ValueError("매수/매도 기록은 매수/매도 안에서만 수정할 수 있습니다.")
+    if existing_type in EDITABLE_CASH_FLOW_LOG_TYPES and next_type not in EDITABLE_CASH_FLOW_LOG_TYPES:
+        raise ValueError("현금 흐름 기록은 현금 흐름 안에서만 수정할 수 있습니다.")
+
+    timestamp = sqlite_db.now_iso()
+    with sqlite_db.connect() as connection:
+        account_row = sqlite_db._require_account(connection, account_id)
+
+        if existing_type in BUY_SELL_TRADE_TYPES:
+            cleaned_symbol = str(symbol or "").strip().upper()
+            cleaned_name = str(product_name or "").strip()
+            cleaned_asset_type = str(asset_type or "risk").strip().lower()
+            share_count = float(quantity or 0)
+            trade_price = float(price or 0)
+            if next_type not in BUY_SELL_TRADE_TYPES:
+                raise ValueError("매수/매도 기록만 수정할 수 있습니다.")
+            if cleaned_asset_type not in {"risk", "safe"}:
+                raise ValueError("자산군 값이 올바르지 않습니다.")
+            if not cleaned_symbol:
+                raise ValueError("종목 코드를 입력해 주세요.")
+            if not cleaned_name:
+                raise ValueError("종목명을 입력해 주세요.")
+            if share_count <= 0 or trade_price <= 0:
+                raise ValueError("수량과 단가는 모두 0보다 커야 합니다.")
+
+            total_amount = share_count * trade_price
+            cash_delta = -total_amount if next_type == "buy" else total_amount
+            connection.execute(
+                """
+                UPDATE trade_logs
+                SET symbol = ?, product_name = ?, trade_type = ?, asset_type = ?, quantity = ?, price = ?,
+                    total_amount = ?, cash_delta = ?, trade_date = ?, notes = ?
+                WHERE id = ?
+                """,
+                (
+                    cleaned_symbol,
+                    cleaned_name,
+                    next_type,
+                    cleaned_asset_type,
+                    share_count,
+                    trade_price,
+                    total_amount,
+                    cash_delta,
+                    str(trade_date),
+                    str(notes or "").strip(),
+                    int(log_id),
+                ),
+            )
+            trade_logs = [
+                dict(row)
+                for row in connection.execute(
+                    """
+                    SELECT *
+                    FROM trade_logs
+                    WHERE account_id = ?
+                    ORDER BY trade_date DESC, id DESC
+                    """,
+                    (account_id,),
+                ).fetchall()
+            ]
+            _sqlite_apply_holding_state(connection, account_id, trade_logs=trade_logs, timestamp=timestamp)
+            connection.commit()
+            return
+
+        normalized_flow_type = _normalize_cash_flow_type(next_type)
+        flow_amount = float(amount or 0)
+        if normalized_flow_type not in EDITABLE_CASH_FLOW_LOG_TYPES:
+            raise ValueError("지원하지 않는 현금 흐름 유형입니다.")
+        if flow_amount <= 0:
+            raise ValueError("금액은 0보다 커야 합니다.")
+
+        old_cash_delta = float(existing_log.get("cash_delta") or 0)
+        new_cash_delta = _cash_delta_for_cash_flow(normalized_flow_type, flow_amount)
+        next_cash = float(account_row["cash_balance"] or 0) - old_cash_delta + new_cash_delta
+        if next_cash < -0.000001:
+            raise ValueError("수정 결과 현금이 부족합니다.")
+
+        sqlite_db._update_account_cash_balance(connection, account_id, next_cash, timestamp)
+        connection.execute(
+            """
+            UPDATE trade_logs
+            SET symbol = ?, product_name = ?, trade_type = ?, asset_type = ?, quantity = ?, price = ?,
+                total_amount = ?, cash_delta = ?, trade_date = ?, notes = ?
+            WHERE id = ?
+            """,
+            (
+                "",
+                _cash_event_label(normalized_flow_type),
+                normalized_flow_type,
+                "cash",
+                0,
+                0,
+                flow_amount,
+                new_cash_delta,
+                str(trade_date),
+                str(notes or "").strip(),
+                int(log_id),
+            ),
+        )
+        connection.commit()
+
+
+def _sqlite_delete_trade_log(account_id: int, log_id: int) -> None:
+    """SQLite 거래 로그 1건을 삭제한다."""
+
+    existing_log = _sqlite_get_trade_log(account_id, log_id)
+    if not existing_log:
+        raise ValueError("거래 기록을 찾을 수 없습니다.")
+
+    existing_type = _editable_trade_log_type(existing_log)
+    timestamp = sqlite_db.now_iso()
+    with sqlite_db.connect() as connection:
+        account_row = sqlite_db._require_account(connection, account_id)
+
+        if existing_type in BUY_SELL_TRADE_TYPES:
+            connection.execute("DELETE FROM trade_logs WHERE id = ?", (int(log_id),))
+            trade_logs = [
+                dict(row)
+                for row in connection.execute(
+                    """
+                    SELECT *
+                    FROM trade_logs
+                    WHERE account_id = ?
+                    ORDER BY trade_date DESC, id DESC
+                    """,
+                    (account_id,),
+                ).fetchall()
+            ]
+            _sqlite_apply_holding_state(connection, account_id, trade_logs=trade_logs, timestamp=timestamp)
+            connection.commit()
+            return
+
+        old_cash_delta = float(existing_log.get("cash_delta") or 0)
+        next_cash = float(account_row["cash_balance"] or 0) - old_cash_delta
+        if next_cash < -0.000001:
+            raise ValueError("삭제 결과 현금이 부족합니다.")
+
+        sqlite_db._update_account_cash_balance(connection, account_id, next_cash, timestamp)
+        connection.execute("DELETE FROM trade_logs WHERE id = ?", (int(log_id),))
+        connection.commit()
+
+
 def _sqlite_record_daily_interest(account_id: int, *, interest_date: str, amount: float) -> None:
     if not _sqlite_get_account(account_id):
         raise ValueError("계좌를 찾을 수 없습니다.")
@@ -3020,6 +3620,63 @@ def record_cash_flow(
             trade_date=trade_date,
             notes=notes,
         ),
+    )
+    mark_data_dirty()
+
+
+def update_trade_log(
+    account_id: int,
+    log_id: int,
+    *,
+    trade_type: str,
+    trade_date: str,
+    notes: str = "",
+    symbol: str = "",
+    product_name: str = "",
+    asset_type: str = "risk",
+    quantity: float = 0.0,
+    price: float = 0.0,
+    amount: float = 0.0,
+) -> None:
+    """거래 기록 1건을 수정하고 필요한 보유 종목/현금 상태를 다시 맞춘다."""
+
+    _run_with_fallback(
+        supabase_call=lambda: _supabase_update_trade_log(
+            account_id,
+            log_id,
+            trade_type=trade_type,
+            trade_date=trade_date,
+            notes=notes,
+            symbol=symbol,
+            product_name=product_name,
+            asset_type=asset_type,
+            quantity=quantity,
+            price=price,
+            amount=amount,
+        ),
+        sqlite_call=lambda: _sqlite_update_trade_log(
+            account_id,
+            log_id,
+            trade_type=trade_type,
+            trade_date=trade_date,
+            notes=notes,
+            symbol=symbol,
+            product_name=product_name,
+            asset_type=asset_type,
+            quantity=quantity,
+            price=price,
+            amount=amount,
+        ),
+    )
+    mark_data_dirty()
+
+
+def delete_trade_log(account_id: int, log_id: int) -> None:
+    """거래 기록 1건을 삭제하고 필요한 보유 종목/현금 상태를 다시 맞춘다."""
+
+    _run_with_fallback(
+        supabase_call=lambda: _supabase_delete_trade_log(account_id, log_id),
+        sqlite_call=lambda: _sqlite_delete_trade_log(account_id, log_id),
     )
     mark_data_dirty()
 

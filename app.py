@@ -203,6 +203,7 @@ REALTIME_QUOTE_FRESHNESS = timedelta(minutes=3)
 create_account = _db.create_account
 delete_account = _db.delete_account
 adjust_cash_balance = _db.adjust_cash_balance
+delete_trade_log = _db.delete_trade_log
 export_dataframe_rows = _db.export_dataframe_rows
 get_account = _db.get_account
 initialize_database = _db.initialize_database
@@ -215,6 +216,7 @@ get_realtime_worker_status = _db.get_realtime_worker_status
 record_account_snapshot = _db.record_account_snapshot
 record_cash_flow = _db.record_cash_flow
 record_trade = _db.record_trade
+update_trade_log = _db.update_trade_log
 seed_demo_workspace = _db.seed_demo_workspace
 set_holding_price = _db.set_holding_price
 backend_status = _db.backend_status
@@ -441,6 +443,35 @@ def is_visible_trade_log(log: dict[str, Any]) -> bool:
     """거래 화면에 노출할 로그만 남긴다."""
 
     return str(log.get("trade_type") or "").strip().lower() != "cash_adjustment"
+
+
+def normalize_trade_log_type(value: Any) -> str:
+    """거래 로그 유형을 현재 앱 기준 값으로 정규화한다."""
+
+    text = str(value or "").strip().lower()
+    return "personal_deposit" if text == "deposit" else text
+
+
+def is_trade_log_editable(log: dict[str, Any]) -> bool:
+    """거래 기록 수정/삭제 UI에서 지원하는 유형인지 반환한다."""
+
+    return normalize_trade_log_type(log.get("trade_type")) in {
+        "buy",
+        "sell",
+        "personal_deposit",
+        "employer_deposit",
+        "withdraw",
+    }
+
+
+def trade_log_editor_option_label(log: dict[str, Any]) -> str:
+    """거래 기록 선택 UI에 표시할 한 줄 라벨을 만든다."""
+
+    trade_date = str(log.get("trade_date") or "-").strip() or "-"
+    trade_type = label_transaction_type(normalize_trade_log_type(log.get("trade_type")))
+    product_name = str(log.get("product_name") or "미지정").strip() or "미지정"
+    amount = float(log.get("total_amount") or 0)
+    return f"{trade_date} | {trade_type} | {product_name} | {amount:,.0f}원"
 
 
 def label_table_name(value: Any) -> str:
@@ -3437,6 +3468,150 @@ def trade_entry_page(account: dict[str, Any], holdings: list[dict[str, Any]], ac
             log_frame[column] = log_frame[column].map(lambda value: f"{float(value or 0):,.0f}")
         st.subheader("거래 기록")
         st.dataframe(log_frame, width="stretch", hide_index=True, height=420)
+        log_by_id = {
+            int(row["id"]): row
+            for row in visible_logs
+            if row.get("id") is not None
+        }
+        if log_by_id:
+            selected_log_id = st.selectbox(
+                "수정/삭제할 기록",
+                options=list(log_by_id),
+                format_func=lambda value: trade_log_editor_option_label(log_by_id[int(value)]),
+                key=f"trade-log-editor-select:{account['id']}",
+            )
+            selected_log = log_by_id[int(selected_log_id)]
+            selected_type = normalize_trade_log_type(selected_log.get("trade_type"))
+            selected_trade_date = date.fromisoformat(str(selected_log.get("trade_date") or date.today().isoformat()))
+
+            with st.container(border=True):
+                st.caption("선택한 거래 기록 수정 / 삭제")
+                if is_trade_log_editable(selected_log):
+                    editor_col, delete_col = st.columns((3, 1), gap="large")
+                    with editor_col:
+                        if selected_type in {"buy", "sell"}:
+                            with st.form(f"trade-log-edit-form:{account['id']}:{selected_log_id}", clear_on_submit=False):
+                                edit_trade_type = st.selectbox(
+                                    "거래 유형",
+                                    ["buy", "sell"],
+                                    index=0 if selected_type == "buy" else 1,
+                                    format_func=label_trade_type,
+                                )
+                                edit_symbol = st.text_input(
+                                    "종목 코드 / 심볼",
+                                    value=str(selected_log.get("symbol") or "").strip(),
+                                )
+                                edit_product_name = st.text_input(
+                                    "종목명",
+                                    value=str(selected_log.get("product_name") or "").strip(),
+                                )
+                                edit_asset_type = st.selectbox(
+                                    "자산군",
+                                    ["risk", "safe"],
+                                    index=0 if str(selected_log.get("asset_type") or "risk").strip().lower() == "risk" else 1,
+                                    format_func=label_asset_type,
+                                )
+                                edit_quantity = st.number_input(
+                                    "수량",
+                                    min_value=0.0,
+                                    step=1.0,
+                                    value=float(selected_log.get("quantity") or 0),
+                                )
+                                edit_price = st.number_input(
+                                    "단가",
+                                    min_value=0.0,
+                                    step=100.0,
+                                    value=float(selected_log.get("price") or 0),
+                                )
+                                edit_trade_date = st.date_input("거래일", value=selected_trade_date)
+                                edit_notes = st.text_area(
+                                    "메모",
+                                    height=90,
+                                    value=str(selected_log.get("notes") or ""),
+                                )
+                                submitted = st.form_submit_button("수정 저장", width="stretch")
+                            if submitted:
+                                try:
+                                    update_trade_log(
+                                        int(account["id"]),
+                                        int(selected_log_id),
+                                        trade_type=edit_trade_type,
+                                        symbol=edit_symbol,
+                                        product_name=edit_product_name,
+                                        asset_type=edit_asset_type,
+                                        quantity=edit_quantity,
+                                        price=edit_price,
+                                        trade_date=edit_trade_date.isoformat(),
+                                        notes=edit_notes,
+                                    )
+                                except ValueError as exc:
+                                    st.error(str(exc))
+                                else:
+                                    mark_rollup_dirty()
+                                    st.session_state[TRADE_PAGE_SUCCESS_MESSAGE_KEY] = "거래 기록을 수정했습니다."
+                                    st.rerun()
+                        else:
+                            flow_options = ["personal_deposit", "employer_deposit", "withdraw"]
+                            selected_flow_index = flow_options.index(selected_type) if selected_type in flow_options else 0
+                            with st.form(f"cash-log-edit-form:{account['id']}:{selected_log_id}", clear_on_submit=False):
+                                edit_flow_type = st.selectbox(
+                                    "현금 흐름",
+                                    flow_options,
+                                    index=selected_flow_index,
+                                    format_func=label_cash_flow_type,
+                                )
+                                edit_amount = st.number_input(
+                                    "금액",
+                                    min_value=0,
+                                    step=100000,
+                                    value=int(round(float(selected_log.get("total_amount") or 0))),
+                                )
+                                edit_trade_date = st.date_input("처리일", value=selected_trade_date)
+                                edit_notes = st.text_area(
+                                    "사유",
+                                    height=90,
+                                    value=str(selected_log.get("notes") or ""),
+                                )
+                                submitted = st.form_submit_button("수정 저장", width="stretch")
+                            if submitted:
+                                try:
+                                    update_trade_log(
+                                        int(account["id"]),
+                                        int(selected_log_id),
+                                        trade_type=edit_flow_type,
+                                        amount=edit_amount,
+                                        trade_date=edit_trade_date.isoformat(),
+                                        notes=edit_notes,
+                                    )
+                                except ValueError as exc:
+                                    st.error(str(exc))
+                                else:
+                                    mark_rollup_dirty()
+                                    st.session_state[TRADE_PAGE_SUCCESS_MESSAGE_KEY] = "거래 기록을 수정했습니다."
+                                    st.rerun()
+
+                    with delete_col:
+                        st.caption("삭제")
+                        confirm_delete = st.checkbox(
+                            "선택한 기록 삭제",
+                            key=f"trade-log-delete-confirm:{account['id']}:{selected_log_id}",
+                        )
+                        if st.button(
+                            "삭제 실행",
+                            width="stretch",
+                            key=f"trade-log-delete-button:{account['id']}:{selected_log_id}",
+                            disabled=not confirm_delete,
+                        ):
+                            try:
+                                delete_trade_log(int(account["id"]), int(selected_log_id))
+                            except ValueError as exc:
+                                st.error(str(exc))
+                            else:
+                                mark_rollup_dirty()
+                                st.session_state[TRADE_PAGE_SUCCESS_MESSAGE_KEY] = "거래 기록을 삭제했습니다."
+                                st.rerun()
+                else:
+                    st.info("이 기록은 현재 수정/삭제를 지원하지 않습니다. 계좌 이체, 이자, 레거시 현금조정은 운영 정리 대상입니다.")
     else:
         st.info("아직 기록된 거래가 없습니다.")
 
