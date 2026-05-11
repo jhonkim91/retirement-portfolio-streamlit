@@ -168,10 +168,16 @@ streamlit run app.py
   - `./.venv/bin/python -m compileall app.py src scripts tests` 성공
   - `./.venv/bin/python -m unittest discover -s tests -p "test_*.py"` 성공 (`86`건)
   - `build_selected_holding_trend_frame()` 테스트에서 intraday 타임라인 부재 시 `current_price/as_of` fallback으로 1포인트를 만드는 회귀 검증 추가
+  - 배포 커밋 `0147543` 푸시 후 `git push origin main` 기준 원격 반영
+  - `./.venv/bin/python scripts/verify_streamlit_deployment.py --page dashboard --expect-backend supabase` 성공
+  - 원격 검증 결과: `backend_storage=supabase`, `allocation_status="지연 데이터 표시 중"`, 로그인/작업공간 노출 정상
+  - 원격 검증 산출물: `artifacts/deploy-verify-selected-trend-0147543.txt`, `artifacts/deploy-verify-selected-trend-0147543.png`
 
 ## Git/GitHub 상태
 - 기본 브랜치: `main`
 - 최근 기능 커밋:
+  - `0147543` `Align today's selected trend with live allocation quotes`
+  - `13a98c7` `Refine dashboard theme and selected intraday trend`
   - `72f0f41` `Refresh auth UI and allocation status chip`
   - `12748fd` `Add scheduled KIS realtime worker workflow`
   - `7ee4d45` `Fix GitHub worker shutdown handling`
