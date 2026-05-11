@@ -179,10 +179,16 @@ streamlit run app.py
   - `python3 -m unittest tests.test_app_dashboard` 성공 (`27`건)
   - `build_holdings_table_display()` 테스트에서 `가격갱신=2026-05-11 09:15:27` 초 단위 포맷 확인
   - `style_holdings_table()` 테스트에서 손익/수익률 셀에 상승/하락/중립 색상 스타일이 포함되는지 확인
+  - `./.venv/bin/python -m compileall app.py src scripts tests` 성공
+  - `./.venv/bin/python -m unittest discover -s tests -p "test_*.py"` 성공 (`88`건)
+  - 배포 커밋 `1d55a5d` 푸시 후 `git push origin main` 기준 원격 반영
+  - `./.venv/bin/python scripts/verify_streamlit_deployment.py --page dashboard --expect-backend supabase` 성공
+  - 원격 검증 산출물: `artifacts/deploy-verify-holdings-table-1d55a5d.txt`, `artifacts/deploy-verify-holdings-table-1d55a5d.png`
 
 ## Git/GitHub 상태
 - 기본 브랜치: `main`
 - 최근 기능 커밋:
+  - `1d55a5d` `Polish holdings table quote timestamps`
   - `0147543` `Align today's selected trend with live allocation quotes`
   - `13a98c7` `Refine dashboard theme and selected intraday trend`
   - `72f0f41` `Refresh auth UI and allocation status chip`
