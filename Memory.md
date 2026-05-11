@@ -614,3 +614,20 @@ python scripts/verify_streamlit_deployment.py --page data --expect-backend supab
 ### 로컬 확인 메모
 - Streamlit 로컬 서버: `python -m streamlit run app.py --server.port 8524 --server.headless true`
 - Playwright 로컬 확인에서는 Streamlit skeleton 단계 스크린샷까지만 안정적으로 캡처됐고, 산출물은 `artifacts/local-dashboard-8524.png`에 남김.
+
+## 2026-05-11 19:42 현재 보유 종목 표 테마 조정
+
+### 변경 파일
+- `app.py`
+- `.streamlit/app.css`
+- `tests/test_app_dashboard.py`
+
+### 변경 내용
+- `현재 보유 종목` 표만 `st.dataframe` 기본 캔버스 렌더 대신 커스텀 HTML 테이블 스킨으로 전환.
+- 헤더 배경, 셀 보더, 숫자 정렬, hover 배경, 손익/수익률 양수·음수 컬러를 첨부 스크린샷 톤에 맞게 정리.
+- 표 스킨 회귀 테스트와 CSS 클래스 존재 검증을 추가.
+
+### 검증 결과
+- `python -m compileall app.py tests/test_app_dashboard.py` 성공
+- `python -m unittest tests.test_app_dashboard.HoldingsTableDisplayTests tests.test_app_dashboard.ThemeStylesheetTests` 성공 (`8`건)
+- `python -m unittest discover -s tests -p "test_*.py"` 성공 (`126`건)

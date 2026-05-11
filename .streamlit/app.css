@@ -1009,6 +1009,87 @@ h6 {
     background: #ffffff;
 }
 
+.holdings-table-shell {
+    width: 100%;
+    overflow: auto;
+    border: 1px solid var(--line-soft);
+    border-radius: var(--panel-radius);
+    background: #ffffff;
+}
+
+.holdings-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    table-layout: fixed;
+    background: #ffffff;
+}
+
+.holdings-table__head,
+.holdings-table__cell {
+    padding: 0.8rem 0.9rem;
+    border-right: 1px solid #e5eaf0;
+    border-bottom: 1px solid #e5eaf0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.holdings-table__head {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: #f8fafc;
+    color: var(--mid-text);
+    font-size: 0.84rem;
+    font-weight: 700;
+    text-align: left;
+}
+
+.holdings-table__head--numeric,
+.holdings-table__cell--numeric {
+    text-align: right;
+}
+
+.holdings-table__cell {
+    background: #ffffff;
+    color: var(--brand-deep);
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+
+.holdings-table tbody tr:hover .holdings-table__cell {
+    background: #fbfdff;
+}
+
+.holdings-table__value--positive {
+    color: var(--chart-up);
+    font-weight: 700;
+}
+
+.holdings-table__value--negative {
+    color: var(--chart-down);
+    font-weight: 700;
+}
+
+.holdings-table__value--neutral {
+    color: var(--text-muted);
+    font-weight: 600;
+}
+
+.holdings-table__head:last-child,
+.holdings-table__cell:last-child {
+    border-right: none;
+}
+
+.holdings-table thead tr:first-child .holdings-table__head:first-child {
+    border-top-left-radius: var(--panel-radius);
+}
+
+.holdings-table thead tr:first-child .holdings-table__head:last-child {
+    border-top-right-radius: var(--panel-radius);
+}
+
 .st-key-dashboard-card-cash,
 .st-key-dashboard-card-total-value {
     position: relative;

@@ -60,6 +60,7 @@ class ThemeStylesheetTests(unittest.TestCase):
         self.assertIn("--theme-primary: #33658A;", stylesheet)
         self.assertIn(".dashboard-metric-card", stylesheet)
         self.assertIn(".dashboard-reference-time", stylesheet)
+        self.assertIn(".holdings-table-shell", stylesheet)
         self.assertIn(".st-key-dashboard-panel-allocation", stylesheet)
         self.assertIn(".st-key-dashboard-panel-holdings-table", stylesheet)
         self.assertIn(".st-key-trade-log-inline-editor-shell", stylesheet)
@@ -255,6 +256,47 @@ class HoldingsTableDisplayTests(unittest.TestCase):
 
         self.assertIn(dashboard_app.FEARGREED_UP_COLOR, html)
         self.assertIn(dashboard_app.FEARGREED_DOWN_COLOR, html)
+
+    def test_build_holdings_table_html_uses_custom_theme_classes(self) -> None:
+        """현재 보유 종목 표는 커스텀 HTML 테이블 테마 클래스를 사용한다."""
+
+        display = pd.DataFrame(
+            [
+                {
+                    "상품명": "TIGER 미국S&P500",
+                    "코드": "360750",
+                    "자산군": "위험자산",
+                    "수량": "27",
+                    "평단가": "128,259",
+                    "현재가": "177,500",
+                    "원금": "3,463,000",
+                    "평가금액": "4,792,500",
+                    "손익": "1,329,500",
+                    "수익률(%)": "+38.39",
+                    "가격갱신": "2026-05-11 00:00:00",
+                },
+                {
+                    "상품명": "KOSEF 국고채10년",
+                    "코드": "148070",
+                    "자산군": "안전자산",
+                    "수량": "17",
+                    "평단가": "112,000",
+                    "현재가": "107,000",
+                    "원금": "1,904,000",
+                    "평가금액": "1,819,000",
+                    "손익": "-85,000",
+                    "수익률(%)": "-4.46",
+                    "가격갱신": "2026-05-11 00:00:00",
+                },
+            ]
+        )
+
+        html = dashboard_app.build_holdings_table_html(display, max_height=380)
+
+        self.assertIn("holdings-table-shell", html)
+        self.assertIn("holdings-table__value--positive", html)
+        self.assertIn("holdings-table__value--negative", html)
+        self.assertIn("max-height:380px", html)
 
     def test_build_holdings_mix_bar_html_includes_cash_inside_safe_ratio(self) -> None:
         """현재 보유 종목 박스 비중 막대는 보유현금을 안전자산에 합산한다."""

@@ -3140,15 +3140,14 @@ def selected_holding_trend_options(
 
 
 def show_holdings_table(frame: pd.DataFrame, *, height: int = 420) -> None:
-    """현재 보유 종목 표를 초 단위 시세 시각과 손익 컬러 스타일로 렌더링한다."""
+    """현재 보유 종목 표를 커스텀 테마 HTML 테이블로 렌더링한다."""
 
     if frame.empty:
         st.info("보유 종목이 없습니다.")
         return
 
     display = build_holdings_table_display(frame)
-    styled = style_holdings_table(display)
-    st.dataframe(styled, width="stretch", hide_index=True, height=height)
+    st.markdown(build_holdings_table_html(display, max_height=height), unsafe_allow_html=True)
 
 
 def build_holdings_mix_bar_html(summary: dict[str, Any]) -> str:
@@ -3314,6 +3313,58 @@ def style_holdings_table(display: pd.DataFrame) -> Any:
     if display.empty:
         return display
     return display.style.map(_holding_value_tone_style, subset=["손익", "수익률(%)"])
+
+
+def _holding_value_tone_class(value: Any) -> str:
+    """손익/수익률 숫자 문자열을 HTML 테이블용 tone class로 변환한다."""
+
+    normalized_value = str(value or "").replace(",", "").replace("%", "").strip()
+    numeric = pd.to_numeric(normalized_value, errors="coerce")
+    if pd.isna(numeric):
+        return ""
+    if float(numeric) > 0:
+        return " holdings-table__value--positive"
+    if float(numeric) < 0:
+        return " holdings-table__value--negative"
+    return " holdings-table__value--neutral"
+
+
+def build_holdings_table_html(display: pd.DataFrame, *, max_height: int = 420) -> str:
+    """현재 보유 종목 표를 스크린샷 스타일에 맞는 HTML 테이블로 변환한다."""
+
+    if display.empty:
+        return ""
+
+    numeric_columns = {"수량", "평단가", "현재가", "원금", "평가금액", "손익", "수익률(%)", "가격갱신"}
+    tone_columns = {"손익", "수익률(%)"}
+
+    header_html = "".join(
+        f'<th class="holdings-table__head{" holdings-table__head--numeric" if column in numeric_columns else ""}">{html.escape(str(column))}</th>'
+        for column in display.columns
+    )
+
+    body_rows: list[str] = []
+    for row in display.to_dict(orient="records"):
+        cells: list[str] = []
+        for column in display.columns:
+            value = str(row.get(column) or "-")
+            tone_class = _holding_value_tone_class(value) if column in tone_columns else ""
+            align_class = " holdings-table__cell--numeric" if column in numeric_columns else ""
+            cells.append(
+                f'<td class="holdings-table__cell{align_class}{tone_class}" title="{html.escape(value)}">{html.escape(value)}</td>'
+            )
+        body_rows.append(f"<tr>{''.join(cells)}</tr>")
+
+    return "".join(
+        [
+            f'<div class="holdings-table-shell" style="max-height:{int(max_height)}px;">',
+            '<table class="holdings-table">',
+            f"<thead><tr>{header_html}</tr></thead>",
+            f"<tbody>{''.join(body_rows)}</tbody>",
+            "</table>",
+            "</div>",
+        ]
+    )
 
 
 def auth_page(auth_enabled: bool = True) -> None:
