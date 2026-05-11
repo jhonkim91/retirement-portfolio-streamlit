@@ -58,6 +58,15 @@ class ThemeStylesheetTests(unittest.TestCase):
         self.assertIn(".dashboard-metric-card", stylesheet)
         self.assertNotIn("${theme_primary_color}", stylesheet)
 
+    def test_render_app_stylesheet_uses_local_system_font_stack(self) -> None:
+        """초기 렌더 지연을 줄이기 위해 외부 CDN 폰트 import 없이 시스템 폰트를 사용한다."""
+
+        stylesheet = dashboard_app.render_app_stylesheet()
+
+        self.assertNotIn("cdn.jsdelivr.net", stylesheet)
+        self.assertNotIn("Pretendard", stylesheet)
+        self.assertIn('font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI"', stylesheet)
+
 
 class TradeFormResetTests(unittest.TestCase):
     """거래 페이지의 rerun 기반 폼 초기화 헬퍼를 검증한다."""
