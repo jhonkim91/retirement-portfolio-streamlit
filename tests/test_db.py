@@ -20,6 +20,8 @@ from src.db import (
     _run_with_fallback,
     _should_fallback,
     _supabase_create_account,
+    _supabase_record_trade,
+    _supabase_replace_interest_history,
     delete_account,
     is_accounts_hotfix_error,
     seed_demo_workspace,
@@ -553,6 +555,70 @@ class LegacyInterestSyncTests(unittest.TestCase):
         _sync_legacy_interest_history_for_buy(7, trade_type="buy")
 
         replace_interest_history_mock.assert_not_called()
+
+
+class SupabaseTradeCashRuleTests(unittest.TestCase):
+    """Supabase 매수/이자 재동기화 시 음수 현금 허용 여부를 검증한다."""
+
+    @patch("src.db._supabase_insert_trade_log")
+    @patch("src.db._supabase_update_cash_balance")
+    @patch("src.db._supabase_request")
+    @patch("src.db._supabase_get_account", return_value={"id": 7, "cash_balance": 0.0})
+    @patch("src.db.now_iso", return_value="2026-05-11T09:35:00")
+    def test_supabase_record_trade_allows_negative_cash_balance_for_buy(
+        self,
+        _now_iso_mock,
+        _get_account_mock,
+        request_mock,
+        update_cash_balance_mock,
+        insert_trade_log_mock,
+    ) -> None:
+        """Supabase 매수는 helper 단계에서도 음수 현금으로 저장할 수 있어야 한다."""
+
+        request_mock.side_effect = [
+            [],
+            None,
+        ]
+
+        _supabase_record_trade(
+            7,
+            symbol="AAPL",
+            product_name="Apple",
+            trade_type="buy",
+            asset_type="risk",
+            quantity=1,
+            price=1000,
+            trade_date="2026-05-11",
+            notes="음수 현금 허용 매수",
+        )
+
+        update_cash_balance_mock.assert_called_once_with(7, -1000.0, allow_negative=True)
+        insert_trade_log_mock.assert_called_once()
+
+    @patch("src.db._supabase_record_daily_interest")
+    @patch("src.db._supabase_update_cash_balance")
+    @patch("src.db._supabase_delete_rows_by_ids")
+    @patch("src.db._supabase_list_daily_interest", return_value=[])
+    @patch("src.db._supabase_list_trade_logs", return_value=[])
+    @patch("src.db._supabase_get_account", return_value={"id": 7, "cash_balance": -40000.0})
+    def test_supabase_replace_interest_history_preserves_negative_cash_balance(
+        self,
+        _get_account_mock,
+        _trade_logs_mock,
+        _interest_rows_mock,
+        _delete_rows_mock,
+        update_cash_balance_mock,
+        _record_daily_interest_mock,
+    ) -> None:
+        """이자 재동기화는 이미 음수인 현금 잔액을 다시 0 이상으로 강제하지 않는다."""
+
+        _supabase_replace_interest_history(
+            7,
+            target_date="2026-05-11",
+            desired_entries=[],
+        )
+
+        update_cash_balance_mock.assert_called_once_with(7, -40000.0, allow_negative=True)
 
 
 class SQLiteRealtimeQuotePersistenceTests(unittest.TestCase):

@@ -1625,8 +1625,10 @@ def _supabase_create_account(name: str, account_type: str = "retirement", openin
     raise RuntimeError("Supabase account insert succeeded but the new account id could not be resolved.")
 
 
-def _supabase_update_cash_balance(account_id: int, amount: float) -> None:
-    if float(amount) < 0:
+def _supabase_update_cash_balance(account_id: int, amount: float, *, allow_negative: bool = False) -> None:
+    """Supabase 계좌의 현금 잔액을 갱신한다."""
+
+    if not allow_negative and float(amount) < 0:
         raise ValueError("현금은 0 이상이어야 합니다.")
 
     if not _supabase_get_account(account_id):
@@ -1941,7 +1943,7 @@ def _supabase_record_trade(
             prefer_return="minimal",
         )
 
-    _supabase_update_cash_balance(account_id, next_cash)
+    _supabase_update_cash_balance(account_id, next_cash, allow_negative=cleaned_type == "buy")
     _supabase_insert_trade_log(
         account_id=account_id,
         symbol=cleaned_symbol,
@@ -2129,10 +2131,6 @@ def _supabase_replace_interest_history(
         target_date=target_date_value,
     )
     base_cash = round(float(account.get("cash_balance") or 0) - removed_interest_total, 4)
-    if base_cash < -INTEREST_AMOUNT_TOLERANCE:
-        raise ValueError("자동 이자 재계산 후 현금 잔액이 음수가 됩니다.")
-    base_cash = max(base_cash, 0.0)
-
     daily_interest_ids = [
         int(row["id"])
         for row in interest_rows
@@ -2149,7 +2147,7 @@ def _supabase_replace_interest_history(
 
     _supabase_delete_rows_by_ids("daily_interest", daily_interest_ids)
     _supabase_delete_rows_by_ids("trade_logs", auto_trade_log_ids)
-    _supabase_update_cash_balance(account_id, base_cash)
+    _supabase_update_cash_balance(account_id, base_cash, allow_negative=True)
     for interest_date, amount in desired_entries:
         _supabase_record_daily_interest(account_id, interest_date=interest_date, amount=amount)
 
@@ -2498,9 +2496,6 @@ def _sqlite_replace_interest_history(
         target_date=target_date_value,
     )
     next_cash = round(float(account.get("cash_balance") or 0) - removed_interest_total, 4)
-    if next_cash < -INTEREST_AMOUNT_TOLERANCE:
-        raise ValueError("자동 이자 재계산 후 현금 잔액이 음수가 됩니다.")
-    next_cash = max(next_cash, 0.0)
 
     timestamp = sqlite_db.now_iso()
     with sqlite_db.connect() as connection:

@@ -22,6 +22,7 @@
 - [x] 현재 보유 종목 비율 막대에서 보유현금을 안전자산에 포함하도록 조정
 - [x] 기존 일별 이자 이력이 있는 계좌의 매수 전 현금 재동기화 복구
 - [x] 입금액과 무관하게 매수 상품 등록 허용
+- [x] Supabase 음수 현금 helper 제약으로 막히던 거래 등록 재수정
 - [x] 운영 배포용 `app.py` 초기 `importlib.reload(src.market)` 제거
 - [ ] 다음 장중 자동 스케줄(`UTC 00:00`, `UTC 02:55`) 1회 추가 확인
 - [x] 배포 대시보드에서 자산 배분 상태 칩이 실제로 `실시간 연동 중`으로 보이는지 화면 검증
@@ -224,6 +225,16 @@ streamlit run app.py
   - `./.venv/bin/python scripts/verify_streamlit_deployment.py --page dashboard --expect-backend supabase` 성공
   - 원격 검증 결과: `backend_storage=supabase`, `allocation_status="실시간 연동 중"`, 로그인/작업공간 노출 정상
   - 원격 검증 산출물: `artifacts/deploy-verify-buy-cash-rule-d44a3b3.txt`, `artifacts/deploy-verify-buy-cash-rule-d44a3b3.png`
+- 이번 턴 거래 등록 재수정 검증:
+  - 실제 배포 UI 재현에서 임시 계좌 `codex-tmp-qbvcsv` 매수 저장 시 `매수하기에 현금이 부족합니다.` 문구가 다시 노출되는 것을 확인
+  - 원인: `record_trade()`의 현금 부족 검사는 제거됐지만 `_supabase_update_cash_balance()` helper가 여전히 음수 잔액을 금지하고 있었음
+  - 조치: `src/db.py`에서 `_supabase_update_cash_balance(..., allow_negative=False)` 플래그를 추가하고, `buy`/기존 이자 재동기화 경로에서만 `allow_negative=True`를 사용하도록 수정
+  - `python3 -m compileall src/db.py tests/test_db.py` 성공
+  - `python3 -m unittest tests.test_db` 성공 (`19`건)
+  - `./.venv/bin/python -m compileall app.py src scripts tests` 성공
+  - `./.venv/bin/python -m unittest discover -s tests -p "test_*.py"` 성공 (`95`건)
+  - 로컬 `streamlit run app.py --server.port 8520 --server.headless true` 재현에서 기존 `매수하기에 현금이 부족합니다.` / `현금은 0 이상이어야 합니다.` 문구가 더 이상 나타나지 않음을 확인
+  - 로컬 재현 산출물: `artifacts/trade-register-local-8520-fixed.txt`, `artifacts/trade-register-local-8520-fixed.png`
 - 이번 턴 `src.market reload` 제거 검증:
   - `python3 -m compileall app.py tests/test_app_dashboard.py` 성공
   - `python3 -m unittest tests.test_app_dashboard` 성공 (`29`건)
