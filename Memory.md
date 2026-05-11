@@ -958,7 +958,58 @@ streamlit run app.py
   - 자동 배포 검증 스크립트는 시스템 Python에 `playwright`가 없어 후속 검증을 건너뛰었고, 저장소 `.venv`로 수동 재실행해 `logged_in=true`, `workspace_visible=true`, `backend_storage_code=supabase`, `ok=true` 확인
   - 산출물: `artifacts/deploy-verify-20260511-alloc-status.txt`, `artifacts/deploy-verify-20260511-alloc-status.png`
 
+## 2026-05-11 운영 Supabase realtime 테이블 직접 생성 시도
+- 변경 파일: `Memory.md`
+- 변경 내용:
+  - 운영 Supabase에 `public.realtime_price_ticks`, `public.realtime_worker_status`를 이 세션에서 직접 생성할 수 있는 경로를 재점검
+  - 로컬 시크릿 기준 `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`는 존재하지만 `SUPABASE_ACCESS_TOKEN`, DB 비밀번호, DB URL, Supabase CLI 로그인 상태는 없음
+  - Supabase Management API `POST /v1/projects/{ref}/database/query`에 service role JWT를 넣어 `select 1` 테스트를 시도했으나 `401 JWT failed verification`로 거절됨
+- 설치:
+  - 추가 설치 없음
+- 검증:
+  - `python3 - <<'PY' ... requests.post('https://api.supabase.com/v1/projects/{ref}/database/query', headers={'Authorization': 'Bearer <service_role>'}, json={'query': 'select 1;'}) ... PY`
+  - `python3 - <<'PY' ... tomllib.loads('.streamlit/secrets.toml') ... PY`
+- 결과:
+  - 현재 세션 권한만으로는 운영 Supabase SQL을 직접 실행할 수 없음
+  - 실제 생성은 Supabase SQL Editor 로그인 세션, Personal Access Token, 또는 DB 직접 접속 비밀번호 중 하나가 추가로 필요
+  - 생성 자체에 필요한 SQL은 `docs/supabase-realtime-schema-hotfix.sql`에 이미 준비되어 있음
+
+## 2026-05-11 Supabase 접근 정보 준비 방법 안내
+- 변경 파일: `Memory.md`
+- 변경 내용:
+  - 운영 realtime 테이블 생성을 위해 사용자에게 `SQL Editor 직접 실행`, `Personal Access Token 제공`, `DB 비밀번호 제공` 세 경로를 안내
+  - 가장 간단한 경로는 Supabase Dashboard `SQL Editor`에서 `docs/supabase-realtime-schema-hotfix.sql` 전체 실행 후 `완료`만 공유받는 방식으로 정리
+  - Codex가 직접 실행하려면 `PAT` 또는 `postgres` DB 비밀번호가 추가로 필요하다는 점과 각각의 준비 위치를 설명
+- 설치:
+  - 추가 설치 없음
+- 검증:
+  - 문서 안내만 수행, 실행 검증 없음
+
+## 2026-05-11 운영 Supabase realtime 테이블 생성 완료 및 장중 검증
+- 변경 파일: `Memory.md`
+- 변경 내용:
+  - 사용자가 Supabase SQL Editor에서 `docs/supabase-realtime-schema-hotfix.sql`을 실행한 뒤 운영 상태를 즉시 재검증
+  - REST 기준 `accounts`, `realtime_worker_status`, `realtime_price_ticks`가 모두 `200`으로 노출되는 것을 확인
+  - `python3 scripts/run_kis_quote_worker.py --backend supabase --preflight-only`가 성공하고, 장중 `45초` 동안 실제 worker를 붙여 WebSocket 연결/quote 적재를 확인
+- 설치:
+  - 추가 설치 없음
+- 검증:
+  - `python3 scripts/run_kis_quote_worker.py --backend supabase --preflight-only`
+  - `timeout 45s python3 scripts/run_kis_quote_worker.py --backend supabase`
+  - `python3 - <<'PY' ... requests.get(.../rest/v1/realtime_worker_status) ... PY`
+  - `python3 - <<'PY' ... requests.get(.../rest/v1/realtime_price_ticks) ... PY`
+  - `PLAYWRIGHT_BROWSERS_PATH=/workspaces/retirement-portfolio-streamlit/.playwright-browsers ./.venv/bin/python scripts/verify_streamlit_deployment.py --page data --expect-backend supabase --wait-ms 30000 --text-output artifacts/deploy-verify-realtime-data-20260511.txt --screenshot artifacts/deploy-verify-realtime-data-20260511.png`
+  - `PLAYWRIGHT_BROWSERS_PATH=/workspaces/retirement-portfolio-streamlit/.playwright-browsers ./.venv/bin/python scripts/verify_streamlit_deployment.py --page dashboard --expect-backend supabase --wait-ms 30000 --text-output artifacts/deploy-verify-realtime-dashboard-20260511.txt --screenshot artifacts/deploy-verify-realtime-dashboard-20260511.png`
+- 결과:
+  - 한국시간 `2026-05-11 09:50:49 KST` 기준 worker가 `backend=supabase accounts=4 holdings=6`으로 사전 점검 통과
+  - 실제 실행 로그에서 `KIS WebSocket 연결 완료: 5개 종목 구독` 확인
+  - `realtime_worker_status`에는 계좌 `24`, `25`가 `connected` 상태로 기록되고 `last_quote_at`도 채워짐
+  - `realtime_price_ticks`는 즉시 적재되었고 검증 시점 누적 `45건`(`content-range: 0-0/45`) 확인
+  - 예시로 계좌 `25`의 `005930`은 `current_price=288000`, `price_updated_at=2026-05-11T09:51:02`로 holdings overwrite까지 반영
+  - 배포 앱 데이터 페이지 검증도 `status_panel_visible=true`, `latest_snapshot_date=2026-05-11`, `hotfix_required=false`, `backend_storage_code=supabase`로 통과
+  - 산출물: `artifacts/deploy-verify-realtime-data-20260511.txt`, `artifacts/deploy-verify-realtime-data-20260511.png`, `artifacts/deploy-verify-realtime-dashboard-20260511.txt`, `artifacts/deploy-verify-realtime-dashboard-20260511.png`
+
 ## 다음 작업 후보
-- 운영 Supabase SQL Editor에서 `docs/supabase-realtime-schema-hotfix.sql` 또는 최신 `setup_supabase.sql` 적용
-- `python3 scripts/run_kis_quote_worker.py --backend supabase --preflight-only`로 realtime 테이블 노출 재확인
-- 한국 장중(`KST 09:00~15:30`)에 `python3 scripts/run_kis_quote_worker.py --backend supabase`로 quote 반영 수동 검증
+- 운영 환경에서 `scripts/run_kis_quote_worker.py --backend supabase`를 장중 상시 프로세스로 띄우는 실행 방식 정리
+- 대시보드 `자산 배분` 상태 칩이 실제 운영 계좌에서 `실시간 연동 중`으로 표시되는지 추가 화면 확인
+- 필요 시 `realtime_price_ticks` 적재량 누적 대비 보존 기간/정리 정책 설계
