@@ -16,6 +16,7 @@ from src.db import (
     BACKEND_SUPABASE,
     _demo_workspace_blueprint,
     _select_initial_backend,
+    _sync_legacy_interest_history_for_buy,
     _run_with_fallback,
     _should_fallback,
     _supabase_create_account,
@@ -488,6 +489,70 @@ class SyncAccountRollupTests(unittest.TestCase):
         )
         self.assertEqual(result["historical_snapshots_updated"], 3)
         self.assertTrue(result["snapshot_updated"])
+
+
+class LegacyInterestSyncTests(unittest.TestCase):
+    """기존 이자 원장 계좌의 매수 전 재동기화 동작을 검증한다."""
+
+    @patch("src.db._replace_interest_history")
+    @patch("src.db._interest_sync_diff")
+    @patch("src.db._build_interest_schedule")
+    @patch("src.db.list_daily_interest")
+    @patch("src.db.list_trade_logs")
+    @patch("src.db.get_account")
+    def test_sync_legacy_interest_history_for_buy_rebuilds_when_interest_history_exists(
+        self,
+        get_account_mock,
+        list_trade_logs_mock,
+        list_daily_interest_mock,
+        build_interest_schedule_mock,
+        interest_sync_diff_mock,
+        replace_interest_history_mock,
+    ) -> None:
+        """기존 이자 이력이 남아 있으면 매수 전에 이자 원장을 재구성한다."""
+
+        get_account_mock.return_value = {"id": 7, "cash_balance": 1000.0}
+        list_trade_logs_mock.return_value = [
+            {
+                "trade_type": "interest",
+                "product_name": "일별 이자",
+                "trade_date": "2026-05-10",
+                "cash_delta": 2.5,
+            }
+        ]
+        list_daily_interest_mock.return_value = [{"date": "2026-05-10", "interest_amount": 2.5}]
+        build_interest_schedule_mock.return_value = [("2026-05-10", 2.5), ("2026-05-11", 2.6)]
+        interest_sync_diff_mock.return_value = {
+            "added_dates": ["2026-05-11"],
+            "requires_rebuild": False,
+            "net_amount_delta": 2.6,
+        }
+
+        _sync_legacy_interest_history_for_buy(7, trade_type="buy")
+
+        replace_interest_history_mock.assert_called_once()
+        self.assertEqual(replace_interest_history_mock.call_args.args[0], 7)
+        self.assertEqual(
+            replace_interest_history_mock.call_args.kwargs["desired_entries"],
+            [("2026-05-10", 2.5), ("2026-05-11", 2.6)],
+        )
+
+    @patch("src.db._replace_interest_history")
+    @patch("src.db.list_daily_interest", return_value=[])
+    @patch("src.db.list_trade_logs", return_value=[])
+    @patch("src.db.get_account", return_value={"id": 7, "cash_balance": 1000.0})
+    def test_sync_legacy_interest_history_for_buy_skips_accounts_without_interest_history(
+        self,
+        _get_account_mock,
+        _list_trade_logs_mock,
+        _list_daily_interest_mock,
+        replace_interest_history_mock,
+    ) -> None:
+        """이자 이력이 없는 계좌는 기존 매수 경로를 그대로 사용한다."""
+
+        _sync_legacy_interest_history_for_buy(7, trade_type="buy")
+
+        replace_interest_history_mock.assert_not_called()
 
 
 class SQLiteRealtimeQuotePersistenceTests(unittest.TestCase):

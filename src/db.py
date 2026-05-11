@@ -2830,6 +2830,8 @@ def record_trade(
     trade_date: str,
     notes: str = "",
 ) -> None:
+    _sync_legacy_interest_history_for_buy(account_id, trade_type=trade_type)
+
     _run_with_fallback(
         supabase_call=lambda: _supabase_record_trade(
             account_id,
@@ -2932,6 +2934,47 @@ def _replace_interest_history(
             target_date=target_date,
             desired_entries=desired_entries,
         ),
+    )
+
+
+def _sync_legacy_interest_history_for_buy(account_id: int, *, trade_type: str) -> None:
+    """기존 이자 원장을 쓰던 계좌는 매수 전에 현재 기준 이자 이력을 재동기화한다."""
+
+    normalized_trade_type = str(trade_type or "").strip().lower()
+    if normalized_trade_type != "buy":
+        return
+
+    account = get_account(account_id)
+    if not account:
+        return
+
+    trade_logs = list_trade_logs(account_id)
+    interest_rows = list_daily_interest(account_id)
+    has_legacy_interest_state = bool(interest_rows) or any(_is_auto_daily_interest_trade(log) for log in trade_logs)
+    if not has_legacy_interest_state:
+        return
+
+    target_date = _rollup_today()
+    desired_entries = _build_interest_schedule(
+        account,
+        trade_logs,
+        interest_rows,
+        target_date=target_date,
+        annual_rate=DEFAULT_ANNUAL_INTEREST_RATE,
+    )
+    diff = _interest_sync_diff(
+        desired_entries,
+        trade_logs,
+        interest_rows,
+        target_date=target_date,
+    )
+    if not (diff["added_dates"] or diff["requires_rebuild"] or abs(float(diff["net_amount_delta"] or 0)) > 0.000001):
+        return
+
+    _replace_interest_history(
+        account_id,
+        target_date=target_date.isoformat(),
+        desired_entries=desired_entries,
     )
 
 

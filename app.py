@@ -3545,7 +3545,7 @@ def data_page(account: dict[str, Any], rollup_state: dict[str, Any] | None = Non
     with st.container(border=True):
         st.subheader("원금 누적 기록")
         st.caption("최초 입금일부터 현재까지 누적 원금과 현재 평가액 기준 수익률을 함께 봅니다.")
-        st.caption("현금 수정과 계좌 이체는 원금이 아닌 순유입 조정으로 반영하며, 현금 이자 적립 기능은 사용하지 않습니다.")
+        st.caption("현금 수정과 계좌 이체는 원금이 아닌 순유입 조정으로 반영합니다. 새 현금 이자는 자동 적립하지 않지만, 기존 일별 이자 이력은 현재 현금 계산에 계속 반영됩니다.")
         st.caption("연금(IRP/퇴직연금) 계좌는 회사 납입금을 투자원금에 포함하고, 현재 수익률은 현재 평가액을 기준으로 계산합니다.")
         if cumulative_frame.empty:
             st.info("누적 원금 기록을 만들 현금 흐름 데이터가 아직 없습니다.")
