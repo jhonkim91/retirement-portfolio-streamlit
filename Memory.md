@@ -22,6 +22,7 @@
 - [x] 현재 보유 종목 비율 막대에서 보유현금을 안전자산에 포함하도록 조정
 - [x] 기존 일별 이자 이력이 있는 계좌의 매수 전 현금 재동기화 복구
 - [x] 입금액과 무관하게 매수 상품 등록 허용
+- [x] 운영 배포용 `app.py` 초기 `importlib.reload(src.market)` 제거
 - [ ] 다음 장중 자동 스케줄(`UTC 00:00`, `UTC 02:55`) 1회 추가 확인
 - [x] 배포 대시보드에서 자산 배분 상태 칩이 실제로 `실시간 연동 중`으로 보이는지 화면 검증
 
@@ -114,6 +115,7 @@ streamlit run app.py
 - `record_trade()` 직전에 기존 `daily_interest`/`interest` 이력이 남은 계좌만 이자 원장을 다시 맞추는 복구 훅을 추가해, 자동 적립 제거 이후 `보유현금 부족` 오탐이 날 수 있는 경로를 보정
 - 누적 원금 화면 문구도 `새 이자는 자동 적립하지 않지만 기존 일별 이자 이력은 현금 계산에 반영된다`는 현재 동작에 맞게 수정
 - 매수 등록은 보유현금 부족이어도 허용하고, 이후 `현금 조정`으로 실제 통장 잔액을 수동 최신화하는 현재 운영 방식에 맞게 `buy` 현금 부족 차단을 제거
+- `app.py` 초기 로딩에서 `src.market` import 직후 다시 호출하던 `importlib.reload()`를 제거해, Streamlit 재실행마다 중복 모듈 초기화 비용이 생기던 경로를 정리
 
 ## 최신 검증 결과
 - `python3 -m compileall app.py src scripts tests` 성공
@@ -222,6 +224,12 @@ streamlit run app.py
   - `./.venv/bin/python scripts/verify_streamlit_deployment.py --page dashboard --expect-backend supabase` 성공
   - 원격 검증 결과: `backend_storage=supabase`, `allocation_status="실시간 연동 중"`, 로그인/작업공간 노출 정상
   - 원격 검증 산출물: `artifacts/deploy-verify-buy-cash-rule-d44a3b3.txt`, `artifacts/deploy-verify-buy-cash-rule-d44a3b3.png`
+- 이번 턴 `src.market reload` 제거 검증:
+  - `python3 -m compileall app.py tests/test_app_dashboard.py` 성공
+  - `python3 -m unittest tests.test_app_dashboard` 성공 (`29`건)
+  - `./.venv/bin/python -m compileall app.py src scripts tests` 성공
+  - `./.venv/bin/python -m unittest discover -s tests -p "test_*.py"` 성공 (`93`건)
+  - 운영 배포 기준 `app.py`에서 `importlib.reload(src.market)` 제거 후 대시보드/차트 테스트 회귀 없음 확인
 
 ## Git/GitHub 상태
 - 기본 브랜치: `main`

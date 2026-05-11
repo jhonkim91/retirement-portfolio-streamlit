@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import html
-import importlib
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from string import Template
@@ -34,7 +33,6 @@ import src.analytics as analytics_module
 import src.db as _db
 import src.market as market_module
 
-market_module = importlib.reload(market_module)
 fetch_latest_price = market_module.fetch_latest_price
 fetch_intraday_price_snapshot = getattr(market_module, "fetch_intraday_price_snapshot", lambda symbol, interval="5m": {})
 search_products = getattr(market_module, "search_products", lambda query, limit=8: [])
