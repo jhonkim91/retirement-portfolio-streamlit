@@ -282,7 +282,6 @@ class DemoWorkspaceSeedTests(unittest.TestCase):
     @patch("src.db.create_account")
     @patch("src.db.record_cash_flow")
     @patch("src.db.record_trade")
-    @patch("src.db.record_account_transfer")
     @patch("src.db.set_holding_price")
     @patch("src.db.record_account_snapshot")
     @patch("src.db._demo_account_totals", return_value=(0.0, 0.0, 0.0))
@@ -293,7 +292,6 @@ class DemoWorkspaceSeedTests(unittest.TestCase):
         _demo_totals_mock,
         record_snapshot_mock,
         _set_holding_price_mock,
-        _record_transfer_mock,
         _record_trade_mock,
         _record_cash_flow_mock,
         create_account_mock,
@@ -364,7 +362,7 @@ class DemoWorkspaceSeedTests(unittest.TestCase):
         self.assertIn("SK하이닉스", all_product_names)
         self.assertIn("두산에너빌리티", all_product_names)
         self.assertTrue(any("원자력" in name for name in all_product_names))
-        self.assertGreaterEqual(len(blueprint["transfers"]), 2)
+        self.assertEqual(tuple(blueprint["transfers"]), ())
 
 
 class SyncAccountRollupTests(unittest.TestCase):

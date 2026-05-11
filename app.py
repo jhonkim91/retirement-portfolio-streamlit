@@ -213,7 +213,6 @@ latest_realtime_quote_time = _db.latest_realtime_quote_time
 list_trade_logs = _db.list_trade_logs
 get_realtime_worker_status = _db.get_realtime_worker_status
 record_account_snapshot = _db.record_account_snapshot
-record_account_transfer = _db.record_account_transfer
 record_cash_flow = _db.record_cash_flow
 record_trade = _db.record_trade
 seed_demo_workspace = _db.seed_demo_workspace
@@ -280,13 +279,8 @@ CASH_FLOW_TYPE_KEY = "cash_flow_type"
 CASH_FLOW_AMOUNT_KEY = "cash_flow_amount"
 CASH_FLOW_DATE_KEY = "cash_flow_date"
 CASH_FLOW_NOTES_KEY = "cash_flow_notes"
-TRANSFER_TARGET_ACCOUNT_KEY = "transfer_target_account_id"
-TRANSFER_AMOUNT_KEY = "transfer_amount"
-TRANSFER_DATE_KEY = "transfer_date"
-TRANSFER_NOTES_KEY = "transfer_notes"
 TRADE_FORM_RESET_PENDING_KEY = "trade_form_reset_pending"
 CASH_FLOW_FORM_RESET_PENDING_KEY = "cash_flow_form_reset_pending"
-TRANSFER_FORM_RESET_PENDING_KEY = "transfer_form_reset_pending"
 TRADE_PAGE_SUCCESS_MESSAGE_KEY = "trade_page_success_message"
 PAGE_LABELS = {
     "Dashboard": "대시보드",
@@ -556,13 +550,8 @@ def init_state() -> None:
     st.session_state.setdefault(CASH_FLOW_AMOUNT_KEY, 0)
     st.session_state.setdefault(CASH_FLOW_DATE_KEY, date.today())
     st.session_state.setdefault(CASH_FLOW_NOTES_KEY, "")
-    st.session_state.setdefault(TRANSFER_TARGET_ACCOUNT_KEY, None)
-    st.session_state.setdefault(TRANSFER_AMOUNT_KEY, 0)
-    st.session_state.setdefault(TRANSFER_DATE_KEY, date.today())
-    st.session_state.setdefault(TRANSFER_NOTES_KEY, "")
     st.session_state.setdefault(TRADE_FORM_RESET_PENDING_KEY, False)
     st.session_state.setdefault(CASH_FLOW_FORM_RESET_PENDING_KEY, False)
-    st.session_state.setdefault(TRANSFER_FORM_RESET_PENDING_KEY, False)
     st.session_state.setdefault(TRADE_PAGE_SUCCESS_MESSAGE_KEY, "")
 
 
@@ -803,7 +792,7 @@ def render_demo_auth_card() -> None:
         <div class="auth-demo-mini-list">
             <div class="auth-demo-mini-item">
                 <div class="auth-demo-mini-item__title">5년 투자 이력</div>
-                <div class="auth-demo-mini-item__desc">입금, 매수, 매도, 계좌 이체, 스냅샷이 모두 준비된 상태로 시작합니다.</div>
+                <div class="auth-demo-mini-item__desc">입금, 매수, 매도, 스냅샷이 모두 준비된 상태로 시작합니다.</div>
             </div>
             <div class="auth-demo-mini-item">
                 <div class="auth-demo-mini-item__title">혼합 포트폴리오 예시</div>
@@ -833,7 +822,7 @@ def render_demo_access_entry() -> None:
         st.markdown('<div class="auth-panel-eyebrow">로그인 없이 바로 확인</div>', unsafe_allow_html=True)
         st.markdown('<h3 class="auth-panel-title">데모 작업공간 시작</h3>', unsafe_allow_html=True)
         st.markdown(
-            '<p class="auth-panel-caption">약 5년치 예시 투자 이력, 계좌 간 이체, 현금 흐름, 스냅샷 데이터가 준비된 작업공간으로 즉시 들어갑니다.</p>',
+            '<p class="auth-panel-caption">약 5년치 예시 투자 이력, 현금 흐름, 스냅샷 데이터가 준비된 작업공간으로 즉시 들어갑니다.</p>',
             unsafe_allow_html=True,
         )
         st.markdown(
@@ -841,7 +830,7 @@ def render_demo_access_entry() -> None:
             <div class="auth-demo-points">
                 <div class="auth-demo-point">
                     <div class="auth-demo-point__title">5년 투자 일지</div>
-                    <div class="auth-demo-point__desc">입금, 매수, 매도, 계좌 이체까지 약 5년치 흐름이 이미 채워져 있습니다.</div>
+                    <div class="auth-demo-point__desc">입금, 매수, 매도까지 약 5년치 흐름이 이미 채워져 있습니다.</div>
                 </div>
                 <div class="auth-demo-point">
                     <div class="auth-demo-point__title">테마 분산 예시</div>
@@ -3251,17 +3240,9 @@ def trade_entry_page(account: dict[str, Any], holdings: list[dict[str, Any]], ac
             CASH_FLOW_NOTES_KEY: "",
         },
     )
-    apply_pending_form_reset(
-        st.session_state,
-        pending_key=TRANSFER_FORM_RESET_PENDING_KEY,
-        reset_values={
-            TRANSFER_AMOUNT_KEY: 0,
-            TRANSFER_NOTES_KEY: "",
-        },
-    )
 
     st.title("거래")
-    st.caption("매수/매도, 현금 흐름, 계좌 간 이체를 한 화면에서 이어서 기록합니다.")
+    st.caption("매수/매도와 현금 흐름을 한 화면에서 이어서 기록합니다.")
     feedback_message = consume_session_message(st.session_state, TRADE_PAGE_SUCCESS_MESSAGE_KEY)
     if feedback_message:
         st.success(feedback_message)
@@ -3377,51 +3358,6 @@ def trade_entry_page(account: dict[str, Any], holdings: list[dict[str, Any]], ac
                 st.session_state[CASH_FLOW_FORM_RESET_PENDING_KEY] = True
                 st.session_state[TRADE_PAGE_SUCCESS_MESSAGE_KEY] = "현금 흐름을 기록했습니다."
                 st.rerun()
-
-        st.divider()
-        with st.container(border=True, key="trade-panel-transfer"):
-            st.subheader("계좌 간 이체")
-            transfer_targets = [item for item in accounts if int(item["id"]) != int(account["id"])]
-            if not transfer_targets:
-                st.info("이체하려면 계좌를 하나 더 만들어 주세요.")
-            else:
-                target_account_options = [int(item["id"]) for item in transfer_targets]
-                saved_target_account_id = st.session_state.get(TRANSFER_TARGET_ACCOUNT_KEY)
-                default_target_account_id = (
-                    saved_target_account_id
-                    if saved_target_account_id in target_account_options
-                    else target_account_options[0]
-                )
-                st.caption(f"출금 계좌: `{account_label(account)}`")
-                target_account_id = st.selectbox(
-                    "입금 계좌",
-                    options=target_account_options,
-                    index=target_account_options.index(default_target_account_id),
-                    format_func=lambda item_id: account_label(
-                        next(item for item in transfer_targets if int(item["id"]) == int(item_id))
-                    ),
-                    key=TRANSFER_TARGET_ACCOUNT_KEY,
-                )
-                transfer_amount = st.number_input("이체 금액", min_value=0, step=100000, key=TRANSFER_AMOUNT_KEY)
-                transfer_date = st.date_input("이체일", key=TRANSFER_DATE_KEY)
-                transfer_notes = st.text_area("이체 메모", height=90, key=TRANSFER_NOTES_KEY)
-                submitted = st.button("이체 기록", width="stretch", key=f"transfer-save:{account['id']}")
-                if submitted:
-                    try:
-                        record_account_transfer(
-                            int(account["id"]),
-                            to_account_id=int(target_account_id),
-                            amount=transfer_amount,
-                            trade_date=transfer_date.isoformat(),
-                            notes=transfer_notes,
-                        )
-                    except ValueError as exc:
-                        st.error(str(exc))
-                    else:
-                        mark_rollup_dirty()
-                        st.session_state[TRANSFER_FORM_RESET_PENDING_KEY] = True
-                        st.session_state[TRADE_PAGE_SUCCESS_MESSAGE_KEY] = "계좌 이체를 기록했습니다."
-                        st.rerun()
 
     logs = list_trade_logs(int(account["id"]))
     realized = realized_summary(logs)
@@ -3593,7 +3529,7 @@ def data_page(account: dict[str, Any], rollup_state: dict[str, Any] | None = Non
     with st.container(border=True):
         st.subheader("원금 누적 기록")
         st.caption("최초 입금일부터 현재까지 누적 원금과 현재 평가액 기준 수익률을 함께 봅니다.")
-        st.caption("현금 수정과 계좌 이체는 원금이 아닌 순유입 조정으로 반영합니다.")
+        st.caption("현금 수정은 원금이 아닌 순유입 조정으로 반영합니다.")
         st.caption("연금(IRP/퇴직연금) 계좌는 회사 납입금을 투자원금에 포함하고, 현재 수익률은 현재 평가액을 기준으로 계산합니다.")
         if cumulative_frame.empty:
             st.info("누적 원금 기록을 만들 현금 흐름 데이터가 아직 없습니다.")

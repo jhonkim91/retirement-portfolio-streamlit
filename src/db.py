@@ -846,15 +846,6 @@ def seed_demo_workspace() -> dict[str, Any]:
                 notes=str(trade.get("notes") or ""),
             )
 
-    for transfer in blueprint["transfers"]:
-        record_account_transfer(
-            created_account_ids[str(transfer["from_account"])],
-            to_account_id=created_account_ids[str(transfer["to_account"])],
-            amount=float(transfer["amount"]),
-            trade_date=str(transfer["trade_date"]),
-            notes=str(transfer.get("notes") or ""),
-        )
-
     for account_spec in blueprint["accounts"]:
         account_id = created_account_ids[str(account_spec["name"])]
         holdings = list_holdings(account_id, include_closed=True)
@@ -1292,22 +1283,7 @@ def _demo_workspace_blueprint() -> dict[str, Any]:
                 "snapshot_date": snapshot_date,
             },
         ),
-        "transfers": (
-            {
-                "from_account": "데모 일반계좌",
-                "to_account": "데모 IRP",
-                "amount": 700_000,
-                "trade_date": demo_date(years=1, months=2),
-                "notes": "연금 계좌 추가 납입용 자금 이동",
-            },
-            {
-                "from_account": "데모 일반계좌",
-                "to_account": "데모 IRP",
-                "amount": 350_000,
-                "trade_date": demo_date(months=5),
-                "notes": "세액공제 한도 맞춤 재배치",
-            },
-        ),
+        "transfers": (),
     }
 
 
