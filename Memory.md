@@ -465,3 +465,62 @@ python scripts/verify_streamlit_deployment.py --page data --expect-backend supab
 
 ### 메모
 - 이번 변경은 `매수/매도`와 `보유현금`의 자동 연동만 끊었고, `거래기록 수정/삭제` 기능은 아직 구현하지 않음
+
+## 2026-05-11 거래기록 수정/삭제 배포
+- [x] 거래 페이지에서 보이는 거래기록을 선택해 수정/삭제하는 UI 추가
+- [x] SQLite/Supabase 공통 거래기록 수정/삭제 백엔드 구현
+- [x] 매수/매도 수정/삭제 시 보유 종목 재계산 반영
+- [x] 현금 흐름 수정/삭제 시 현재 보유현금 재계산 반영
+- [x] 관련 테스트 추가 및 `main` 배포 확인
+
+### 지원 범위
+- 수정/삭제 지원:
+  - `buy`
+  - `sell`
+  - `personal_deposit`
+  - `employer_deposit`
+  - `withdraw`
+- 현재 미지원:
+  - `transfer_in`
+  - `transfer_out`
+  - `interest`
+  - `cash_adjustment`
+
+### 변경 내용
+- `src/db.py`
+  - `update_trade_log()`, `delete_trade_log()` 공개 wrapper 추가
+  - Supabase/SQLite 각각의 거래기록 수정/삭제 구현 추가
+  - 매수/매도 로그를 기준으로 holdings를 다시 계산하는 helper 추가
+  - 현금 흐름 로그 수정/삭제 시 `cash_balance`를 다시 계산하는 helper 추가
+- `app.py`
+  - 거래 기록 표 아래에 `수정/삭제할 기록` 선택 UI 추가
+  - 선택한 기록 유형에 따라 매수/매도 편집 폼 또는 현금 흐름 편집 폼을 표시
+  - 삭제 확인 체크 후 삭제 실행 버튼 추가
+  - 이체/이자/레거시 현금조정은 현재 미지원 안내 추가
+- `tests/test_db.py`
+  - SQLite 거래 수정/삭제 통합 테스트 4건 추가
+  - Supabase 거래 수정/삭제 경로 unit test 2건 추가
+- `tests/test_app_dashboard.py`
+  - 거래기록 편집 가능 유형과 선택 라벨 표시 helper 테스트 추가
+
+### 검증 결과
+- `python3 -m compileall app.py src/db.py tests/test_db.py tests/test_app_dashboard.py` 성공
+- `python3 -m unittest tests.test_db tests.test_app_dashboard` 성공 (`66`건)
+- `python3 -m compileall app.py src scripts tests` 성공
+- `python3 -m unittest discover -s tests -p "test_*.py"` 성공 (`118`건)
+- 배포 검증:
+  - 명령: `./.venv/bin/python scripts/verify_streamlit_deployment.py --page trades --expect-backend supabase --text-output artifacts/deploy-trade-edit.txt --screenshot artifacts/deploy-trade-edit.png --debug-dir artifacts/deploy-trade-edit-debug`
+  - 결과: `logged_in=true`, `workspace_visible=true`, `backend_storage=supabase`, `ok=true`
+  - 본문 텍스트 확인:
+    - `수정/삭제할 기록`
+    - `선택한 거래 기록 수정 / 삭제`
+    - `수정 저장`
+    - `삭제 실행`
+
+### 배포/커밋
+- 기능 커밋: `bec3f67` `Add trade log edit and delete flows`
+- 배포 방법: `git push origin main`
+
+### 메모
+- 거래기록 수정/삭제는 현재 `거래` 페이지에서 보이는 사용자 입력 로그 중심으로 지원한다.
+- 이체/이자/레거시 현금조정까지 편집 대상으로 넓히려면 paired event 정합성과 다계좌 재계산을 추가로 설계해야 한다.
