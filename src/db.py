@@ -44,6 +44,7 @@ CASH_EVENT_LABELS = {
 }
 EDITABLE_TRADE_LOG_TYPES = {"buy", "sell", "personal_deposit", "employer_deposit", "withdraw"}
 EDITABLE_CASH_FLOW_LOG_TYPES = {"personal_deposit", "employer_deposit", "withdraw"}
+EXPORTABLE_TRADE_LOG_TYPES = {"buy", "sell", "personal_deposit", "employer_deposit"}
 EXPORTABLE_TABLES = {"accounts", "holdings", "trade_logs", "daily_account_snapshot"}
 DEFAULT_ANNUAL_INTEREST_RATE = 0.05
 DEFAULT_ROLLUP_TIMEZONE = "Asia/Seoul"
@@ -1338,6 +1339,18 @@ def _editable_trade_log_type(log: dict[str, Any]) -> str:
     return normalized_type
 
 
+def _is_exportable_trade_log(log: dict[str, Any]) -> bool:
+    """데이터 화면과 CSV에 남길 핵심 거래 로그인지 반환한다."""
+
+    return _normalize_trade_log_type(log.get("trade_type")) in EXPORTABLE_TRADE_LOG_TYPES
+
+
+def _filter_exportable_trade_logs(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """거래 기록 내보내기에서 입금/매수/매도 외 행을 제외한다."""
+
+    return [row for row in rows if _is_exportable_trade_log(row)]
+
+
 def _cash_delta_for_cash_flow(flow_type: str, amount: float) -> float:
     """현금 흐름 유형과 금액으로 계좌 현금 증감값을 계산한다."""
 
@@ -2019,6 +2032,8 @@ def _supabase_export_dataframe_rows(table_name: str) -> list[dict[str, Any]]:
 
     result = _supabase_request("GET", table_name) or []
     rows = [row for row in result if int(row.get("account_id", 0) or 0) in account_ids]
+    if table_name == "trade_logs":
+        rows = _filter_exportable_trade_logs(rows)
     return sorted(rows, key=lambda row: row.get("id", 0))
 
 
@@ -2723,6 +2738,8 @@ def _sqlite_export_dataframe_rows(table_name: str) -> list[dict[str, Any]]:
     account_ids = _owned_account_ids(accounts)
     rows = sqlite_db.export_dataframe_rows(table_name)
     filtered = [row for row in rows if int(row.get("account_id", 0) or 0) in account_ids]
+    if table_name == "trade_logs":
+        filtered = _filter_exportable_trade_logs(filtered)
     return sorted(filtered, key=lambda row: row.get("id", 0))
 
 
@@ -3671,7 +3688,7 @@ def update_trade_log(
     mark_data_dirty()
 
 
-def delete_trade_log(account_id: int, log_id: int) -> None:
+def _delete_trade_log_original(account_id: int, log_id: int) -> None:
     """거래 기록 1건을 삭제하고 필요한 보유 종목/현금 상태를 다시 맞춘다."""
 
     _run_with_fallback(
@@ -3679,6 +3696,14 @@ def delete_trade_log(account_id: int, log_id: int) -> None:
         sqlite_call=lambda: _sqlite_delete_trade_log(account_id, log_id),
     )
     mark_data_dirty()
+
+
+def delete_trade_log(*args: Any, **kwargs: Any) -> None:
+    """거래기록 삭제 후 데이터 캐시를 무효화한다."""
+
+    result = _delete_trade_log_original(*args, **kwargs)
+    mark_data_dirty()
+    return result
 
 
 def adjust_cash_balance(

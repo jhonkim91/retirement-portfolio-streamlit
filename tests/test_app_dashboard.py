@@ -104,14 +104,31 @@ class TradeFormResetTests(unittest.TestCase):
         self.assertEqual(first, "거래를 저장했습니다.")
         self.assertEqual(second, "")
 
-    def test_is_visible_trade_log_hides_cash_adjustment_rows(self) -> None:
+    def test_is_visible_trade_log_keeps_core_transaction_types_only(self) -> None:
+        """거래 기록 화면에는 입금/매수/매도 핵심 유형만 남긴다."""
+
         self.assertFalse(dashboard_app.is_visible_trade_log({"trade_type": "cash_adjustment"}))
+        self.assertFalse(dashboard_app.is_visible_trade_log({"trade_type": "transfer_out"}))
+        self.assertFalse(dashboard_app.is_visible_trade_log({"trade_type": "withdraw"}))
+        self.assertTrue(dashboard_app.is_visible_trade_log({"trade_type": "personal_deposit"}))
+        self.assertTrue(dashboard_app.is_visible_trade_log({"trade_type": "employer_deposit"}))
         self.assertTrue(dashboard_app.is_visible_trade_log({"trade_type": "buy"}))
 
     def test_is_trade_log_editable_allows_supported_types_only(self) -> None:
         self.assertTrue(dashboard_app.is_trade_log_editable({"trade_type": "buy"}))
         self.assertTrue(dashboard_app.is_trade_log_editable({"trade_type": "personal_deposit"}))
+        self.assertFalse(dashboard_app.is_trade_log_editable({"trade_type": "withdraw"}))
         self.assertFalse(dashboard_app.is_trade_log_editable({"trade_type": "transfer_out"}))
+
+    def test_trade_log_table_fields_exclude_cash_delta_column(self) -> None:
+        """거래 기록 표 구성에서 현금증감 컬럼을 제외한다."""
+
+        self.assertNotIn("현금증감", dashboard_app.TRADE_LOG_TABLE_HEADER_LABELS)
+        self.assertNotIn("cash_delta", dashboard_app.TRADE_LOG_TABLE_DISPLAY_FIELDS)
+        self.assertEqual(
+            len(dashboard_app.TRADE_LOG_TABLE_HEADER_LABELS),
+            len(dashboard_app.TRADE_LOG_TABLE_COLUMN_WEIGHTS),
+        )
 
     def test_trade_log_editor_option_label_formats_one_line_summary(self) -> None:
         label = dashboard_app.trade_log_editor_option_label(

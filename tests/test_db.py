@@ -370,6 +370,29 @@ class DemoWorkspaceSeedTests(unittest.TestCase):
         self.assertEqual(tuple(blueprint["transfers"]), ())
 
 
+class ExportTradeLogFilterTests(unittest.TestCase):
+    """데이터 화면 거래 기록 export 필터를 검증한다."""
+
+    def test_filter_exportable_trade_logs_keeps_deposits_buys_and_sells_only(self) -> None:
+        """회사/개인 입금, 매수, 매도 외 거래 유형은 데이터 거래 기록에서 제외한다."""
+
+        rows = [
+            {"id": 1, "trade_type": "personal_deposit"},
+            {"id": 2, "trade_type": "employer_deposit"},
+            {"id": 3, "trade_type": "deposit"},
+            {"id": 4, "trade_type": "buy"},
+            {"id": 5, "trade_type": "sell"},
+            {"id": 6, "trade_type": "withdraw"},
+            {"id": 7, "trade_type": "cash_adjustment"},
+            {"id": 8, "trade_type": "transfer_in"},
+            {"id": 9, "trade_type": "interest"},
+        ]
+
+        filtered = db_module._filter_exportable_trade_logs(rows)
+
+        self.assertEqual([row["id"] for row in filtered], [1, 2, 3, 4, 5])
+
+
 class SyncAccountRollupTests(unittest.TestCase):
     """이자 적립 없이 당일 스냅샷만 갱신하는 동작을 검증한다."""
 

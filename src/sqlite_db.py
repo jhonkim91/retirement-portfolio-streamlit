@@ -997,3 +997,200 @@ def record_account_transfer(
             metadata_json=_metadata_json(),
         )
         connection.commit()
+def _rebuild_holdings_from_trade_logs(connection: sqlite3.Connection, account_id: int, timestamp: str) -> None:
+    """남아 있는 매수/매도 원장 기준으로 holdings를 재계산한다.
+
+    거래기록 삭제/수정 후 dashboard에 삭제된 종목이 남는 문제를 방지하기 위해
+    holdings 테이블을 현재 trade_logs 원장 기준으로 다시 만든다.
+    """
+
+    existing_price_rows = connection.execute(
+        """
+        SELECT symbol, current_price, price_updated_at
+        FROM holdings
+        WHERE account_id = ?
+        """,
+        (account_id,),
+    ).fetchall()
+    price_by_symbol = {
+        str(row["symbol"] or "").strip().upper(): {
+            "current_price": float(row["current_price"] or 0),
+            "price_updated_at": row["price_updated_at"],
+        }
+        for row in existing_price_rows
+    }
+
+    trade_rows = connection.execute(
+        """
+        SELECT *
+        FROM trade_logs
+        WHERE account_id = ?
+          AND trade_type IN ('buy', 'sell')
+        ORDER BY trade_date ASC, id ASC
+        """,
+        (account_id,),
+    ).fetchall()
+
+    positions: dict[str, dict[str, Any]] = {}
+
+    for row in trade_rows:
+        symbol = str(row["symbol"] or "").strip().upper()
+        if not symbol:
+            continue
+
+        trade_type = str(row["trade_type"] or "").strip().lower()
+        quantity = float(row["quantity"] or 0)
+        price = float(row["price"] or 0)
+
+        if quantity <= 0:
+            continue
+
+        current = positions.get(
+            symbol,
+            {
+                "quantity": 0.0,
+                "avg_cost": 0.0,
+                "product_name": str(row["product_name"] or "").strip() or symbol,
+                "asset_type": str(row["asset_type"] or "risk").strip().lower() or "risk",
+                "last_price": price,
+            },
+        )
+
+        if trade_type == "buy":
+            previous_quantity = float(current["quantity"] or 0)
+            previous_avg_cost = float(current["avg_cost"] or 0)
+            next_quantity = previous_quantity + quantity
+            if next_quantity <= 0:
+                continue
+
+            current["avg_cost"] = (
+                (previous_quantity * previous_avg_cost) + (quantity * price)
+            ) / next_quantity
+            current["quantity"] = next_quantity
+            current["product_name"] = str(row["product_name"] or current["product_name"]).strip() or symbol
+            current["asset_type"] = str(row["asset_type"] or current["asset_type"]).strip().lower() or "risk"
+            current["last_price"] = price
+            positions[symbol] = current
+
+        elif trade_type == "sell":
+            previous_quantity = float(current["quantity"] or 0)
+            next_quantity = previous_quantity - quantity
+            if next_quantity <= 0.000001:
+                positions.pop(symbol, None)
+            else:
+                current["quantity"] = next_quantity
+                current["last_price"] = price
+                positions[symbol] = current
+
+    connection.execute("DELETE FROM holdings WHERE account_id = ?", (account_id,))
+
+    for symbol, position in positions.items():
+        quantity = float(position["quantity"] or 0)
+        if quantity <= 0.000001:
+            continue
+
+        saved_price = price_by_symbol.get(symbol, {})
+        current_price = float(saved_price.get("current_price") or 0)
+        if current_price <= 0:
+            current_price = float(position.get("last_price") or position.get("avg_cost") or 0)
+
+        connection.execute(
+            """
+            INSERT INTO holdings (
+                account_id, symbol, product_name, asset_type, quantity, avg_cost,
+                current_price, price_updated_at, created_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                account_id,
+                symbol,
+                str(position["product_name"] or symbol).strip(),
+                str(position["asset_type"] or "risk").strip().lower(),
+                quantity,
+                float(position["avg_cost"] or 0),
+                current_price,
+                saved_price.get("price_updated_at") or timestamp,
+                timestamp,
+                timestamp,
+            ),
+        )
+
+
+def rebuild_account_holdings_from_trade_logs(account_id: int) -> None:
+    """외부에서 호출 가능한 holdings 재계산 함수."""
+
+    timestamp = now_iso()
+    with connect() as connection:
+        _require_account(connection, account_id)
+        _rebuild_holdings_from_trade_logs(connection, account_id, timestamp)
+        connection.commit()
+
+
+def delete_trade_log(*args: Any, **kwargs: Any) -> None:
+    """거래 원장 1건을 삭제하고 holdings/dashboard 잔상을 방지한다.
+
+    호환성을 위해 다음 호출 형태를 모두 허용한다.
+    - delete_trade_log(log_id)
+    - delete_trade_log(trade_log_id=log_id)
+    - delete_trade_log(account_id, log_id)
+    """
+
+    if "trade_log_id" in kwargs:
+        log_id = kwargs["trade_log_id"]
+    elif "log_id" in kwargs:
+        log_id = kwargs["log_id"]
+    elif "id" in kwargs:
+        log_id = kwargs["id"]
+    elif len(args) >= 2:
+        log_id = args[1]
+    elif len(args) == 1:
+        log_id = args[0]
+    else:
+        raise ValueError("삭제할 거래기록 ID가 없습니다.")
+
+    timestamp = now_iso()
+
+    with connect() as connection:
+        log_row = connection.execute(
+            "SELECT * FROM trade_logs WHERE id = ?",
+            (int(log_id),),
+        ).fetchone()
+
+        if not log_row:
+            raise ValueError("삭제할 거래 기록을 찾을 수 없습니다.")
+
+        account_id = int(log_row["account_id"])
+        trade_type = str(log_row["trade_type"] or "").strip().lower()
+        cash_delta = float(log_row["cash_delta"] or 0)
+
+        account_row = _require_account(connection, account_id)
+        current_cash = float(account_row["cash_balance"] or 0)
+
+        connection.execute("DELETE FROM trade_logs WHERE id = ?", (int(log_id),))
+
+        # 매수/매도 거래는 record_trade()에서 cash_balance를 직접 변경하지 않는다.
+        # 따라서 삭제 시 현금은 건드리지 않고 holdings만 원장 기준으로 재계산한다.
+        _rebuild_holdings_from_trade_logs(connection, account_id, timestamp)
+
+        # 현금성 이벤트는 record_cash_flow()/adjust_cash_balance()/interest 등에서
+        # 실제 cash_balance에 반영되므로 삭제 시 반대 금액을 반영한다.
+        if trade_type in {
+            "personal_deposit",
+            "employer_deposit",
+            "withdraw",
+            "interest",
+            "transfer_in",
+            "transfer_out",
+            "cash_adjustment",
+        }:
+            _update_account_cash_balance(
+                connection,
+                account_id,
+                current_cash - cash_delta,
+                timestamp,
+            )
+
+        connection.commit()
+
+

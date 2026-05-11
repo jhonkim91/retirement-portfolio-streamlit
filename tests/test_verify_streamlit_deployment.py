@@ -3,7 +3,13 @@ from __future__ import annotations
 import textwrap
 import unittest
 
-from scripts.verify_streamlit_deployment import build_summary, normalize_backend_code
+from scripts.verify_streamlit_deployment import (
+    build_summary,
+    format_debug_dir_hint,
+    has_target_page_content,
+    normalize_backend_code,
+    resolve_optional_output_path,
+)
 
 
 class DeploymentSummaryParserTests(unittest.TestCase):
@@ -103,7 +109,55 @@ class DeploymentSummaryParserTests(unittest.TestCase):
         self.assertEqual(summary.backend_override, "auto")
         self.assertEqual(summary.reason, "secrets configured")
         self.assertEqual(summary.status_message, "현재 배포본은 Supabase를 사용 중입니다.")
+        self.assertEqual(summary.allocation_status, "")
         self.assertTrue(summary.demo_seeded)
+
+    def test_build_summary_extracts_dashboard_allocation_status(self) -> None:
+        """대시보드 화면에서 자산 배분 상태 칩 텍스트를 추출한다."""
+
+        text = textwrap.dedent(
+            """
+            로그인 계정
+            test
+            로그아웃
+            현재 보기: 대시보드
+            현재 저장소: Supabase
+            자산 배분
+            실시간 연동 중
+            -
+            +
+            선택 종목 트렌드
+            """
+        ).strip()
+
+        summary = build_summary("https://example.streamlit.app", "dashboard", text)
+
+        self.assertTrue(summary.logged_in)
+        self.assertTrue(summary.workspace_visible)
+        self.assertEqual(summary.allocation_status, "실시간 연동 중")
+        self.assertEqual(summary.backend_storage_code, "supabase")
+
+    def test_build_summary_detects_auth_rate_limit_error(self) -> None:
+        """로그인 화면의 rate limit 오류를 별도 필드로 추출한다."""
+
+        text = textwrap.dedent(
+            """
+            자산관리 대장
+            이메일
+            비밀번호
+            로그인
+            새 계정 만들기
+            데모 모드
+            Request rate limit reached
+            """
+        ).strip()
+
+        summary = build_summary("https://example.streamlit.app", "data", text)
+
+        self.assertFalse(summary.logged_in)
+        self.assertEqual(summary.auth_error, "Request rate limit reached")
+        self.assertTrue(summary.rate_limited)
+        self.assertFalse(summary.workspace_visible)
 
 
 class BackendNormalizationTests(unittest.TestCase):
@@ -115,6 +169,42 @@ class BackendNormalizationTests(unittest.TestCase):
         self.assertEqual(normalize_backend_code("Supabase"), "supabase")
         self.assertEqual(normalize_backend_code("로컬 SQLite"), "sqlite")
         self.assertEqual(normalize_backend_code("unknown backend"), "unknown")
+
+
+class PageMarkerTests(unittest.TestCase):
+    """페이지별 핵심 마커 판별을 검증한다."""
+
+    def test_has_target_page_content_detects_dashboard_markers(self) -> None:
+        """대시보드 핵심 마커가 모두 있으면 준비 완료로 본다."""
+
+        text = "자산 배분\n실시간 연동 중\n선택 종목 트렌드"
+
+        self.assertTrue(has_target_page_content(text, "dashboard"))
+
+    def test_has_target_page_content_requires_all_dashboard_markers(self) -> None:
+        """대시보드 마커가 하나라도 없으면 아직 준비되지 않은 것으로 본다."""
+
+        text = "자산관리 대장\n로그인되었습니다."
+
+        self.assertFalse(has_target_page_content(text, "dashboard"))
+
+
+class DebugHelperTests(unittest.TestCase):
+    """디버그 경로 헬퍼를 검증한다."""
+
+    def test_resolve_optional_output_path_returns_none_for_empty_input(self) -> None:
+        """빈 경로는 `None`으로 처리한다."""
+
+        self.assertIsNone(resolve_optional_output_path(""))
+        self.assertIsNone(resolve_optional_output_path(None))
+
+    def test_format_debug_dir_hint_includes_resolved_path(self) -> None:
+        """디버그 디렉터리 힌트는 절대 경로를 포함한다."""
+
+        hint = format_debug_dir_hint("artifacts/debug-verify")
+
+        self.assertIn("디버그 산출물:", hint)
+        self.assertIn("artifacts/debug-verify", hint)
 
 
 if __name__ == "__main__":

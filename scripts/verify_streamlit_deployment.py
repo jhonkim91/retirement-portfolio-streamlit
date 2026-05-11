@@ -31,6 +31,11 @@ PAGE_LABEL_INDEX = {
     "trades": 3,
     "data": 4,
 }
+PAGE_READY_MARKERS = {
+    "dashboard": ("자산 배분", "선택 종목 트렌드"),
+    "trades": ("거래 기록",),
+    "data": ("운영 상태", "데이터 저장소"),
+}
 LOCAL_SECRETS_PATH = Path(".streamlit/secrets.toml")
 
 
@@ -58,9 +63,12 @@ class DeploymentSummary:
     backend_override: str
     reason: str
     status_message: str
+    allocation_status: str
     onboarding_visible: bool
     onboarding_error: str
     hotfix_required: bool
+    auth_error: str
+    rate_limited: bool
     demo_button_clicked: bool
     demo_seeded: bool
     text_output: str | None = None
@@ -114,8 +122,18 @@ def parse_args() -> argparse.Namespace:
         default="any",
         help="기대하는 저장소 종류",
     )
+    parser.add_argument(
+        "--expect-allocation-status",
+        default="",
+        help="대시보드 자산 배분 상태 칩에 기대하는 텍스트",
+    )
     parser.add_argument("--screenshot", help="전체 페이지 스크린샷 저장 경로")
     parser.add_argument("--text-output", help="본문 텍스트 저장 경로")
+    parser.add_argument("--debug-dir", help="실패 분석용 단계별 텍스트/스크린샷 저장 디렉터리")
+    parser.add_argument(
+        "--storage-state",
+        help="Playwright storage state JSON 경로. 있으면 재사용하고, 로그인 성공 후 갱신한다.",
+    )
     parser.add_argument("--wait-ms", type=int, default=DEFAULT_WAIT_MS, help="화면 전환 대기 시간(ms)")
     parser.add_argument(
         "--click-demo",
@@ -250,6 +268,94 @@ def has_authenticated_context(text: str) -> bool:
     return has_workspace_context(text) or has_onboarding_context(text)
 
 
+def has_target_page_content(text: str, page_name: str) -> bool:
+    """지정한 페이지의 핵심 마커가 보이는지 판별한다."""
+
+    markers = PAGE_READY_MARKERS.get(page_name, ())
+    if not markers:
+        return True
+    normalized = " ".join(extract_lines(text))
+    return all(marker in normalized for marker in markers)
+
+
+def extract_auth_error(lines: list[str]) -> str:
+    """로그인 화면에 노출된 인증/제한 오류 문구를 추출한다."""
+
+    markers = (
+        "rate limit",
+        "too many requests",
+        "invalid login",
+        "invalid credentials",
+        "email not confirmed",
+        "request rate limit reached",
+    )
+    for line in lines:
+        lowered = line.lower()
+        if any(marker in lowered for marker in markers):
+            return line
+    return ""
+
+
+def resolve_optional_output_path(path_value: str | None) -> Path | None:
+    """옵션 문자열이 있으면 절대 경로 `Path`로 변환한다."""
+
+    if not path_value:
+        return None
+    return Path(path_value).expanduser().resolve()
+
+
+def current_page_text(page: Page, timeout_ms: int = 5_000) -> str:
+    """현재 페이지에서 읽을 수 있는 본문 텍스트를 최대한 회수한다."""
+
+    try:
+        return body_text(select_app_frame(page), timeout_ms)
+    except Exception:
+        pass
+
+    try:
+        return page.locator("body").inner_text(timeout=timeout_ms)
+    except Exception:
+        return ""
+
+
+def capture_debug_artifacts(page: Page, debug_dir: str | None, step_name: str) -> dict[str, str]:
+    """지정한 단계의 텍스트/스크린샷을 디버그 디렉터리에 저장한다."""
+
+    output_dir = resolve_optional_output_path(debug_dir)
+    if output_dir is None:
+        return {}
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    normalized_name = "".join(char if char.isalnum() or char in {"-", "_"} else "-" for char in step_name).strip("-")
+    normalized_name = normalized_name or "debug"
+
+    text_path = output_dir / f"{normalized_name}.txt"
+    screenshot_path = output_dir / f"{normalized_name}.png"
+    url_path = output_dir / f"{normalized_name}.url.txt"
+
+    text_path.write_text(current_page_text(page), encoding="utf-8")
+    url_path.write_text(page.url, encoding="utf-8")
+    try:
+        page.screenshot(path=str(screenshot_path), full_page=True)
+    except Exception:
+        pass
+
+    return {
+        "text": str(text_path),
+        "screenshot": str(screenshot_path),
+        "url": str(url_path),
+    }
+
+
+def format_debug_dir_hint(debug_dir: str | None) -> str:
+    """디버그 디렉터리가 있으면 예외 메시지에 덧붙일 힌트를 만든다."""
+
+    output_dir = resolve_optional_output_path(debug_dir)
+    if output_dir is None:
+        return ""
+    return f" 디버그 산출물: {output_dir}"
+
+
 def choose_button(
     frame: Frame,
     text: str,
@@ -322,6 +428,10 @@ def wait_for_authenticated_app(page: Page, timeout_ms: int) -> Frame:
         if has_authenticated_context(last_text):
             return frame
         page.wait_for_timeout(1_000)
+    lines = extract_lines(last_text)
+    auth_error = extract_auth_error(lines)
+    if auth_error:
+        raise RuntimeError(f"로그인 후 앱 내부 화면을 찾지 못했습니다. 인증 오류: {auth_error}")
     raise RuntimeError(f"로그인 후 앱 내부 화면을 찾지 못했습니다. 마지막 화면: {last_text[:600]}")
 
 
@@ -352,6 +462,21 @@ def open_target_page(page: Page, frame: Frame, page_name: str, timeout_ms: int) 
     return select_app_frame(page)
 
 
+def wait_for_target_page(page: Page, page_name: str, timeout_ms: int) -> tuple[Frame, str]:
+    """지정한 페이지의 핵심 본문이 렌더링될 때까지 기다린다."""
+
+    deadline = time.monotonic() + (timeout_ms / 1000)
+    last_text = ""
+    last_frame = select_app_frame(page)
+    while time.monotonic() < deadline:
+        last_frame = select_app_frame(page)
+        last_text = body_text(last_frame, min(5_000, timeout_ms))
+        if has_target_page_content(last_text, page_name):
+            return last_frame, last_text
+        page.wait_for_timeout(1_000)
+    return last_frame, last_text
+
+
 def extract_onboarding_error(lines: list[str]) -> str:
     """?⑤낫???붾㈃??蹂댁씠?붾뒗 ?ㅻ쪟 臾몄옄?댁쓣 寃異쒗븳??"""
 
@@ -374,12 +499,17 @@ def build_summary(url: str, target_page: str, text: str) -> DeploymentSummary:
     onboarding_visible = has_onboarding_context(text)
     onboarding_error = extract_onboarding_error(lines)
     hotfix_required = "owner_user_id" in onboarding_error.lower() or "row-level security" in onboarding_error.lower()
+    auth_error = extract_auth_error(lines)
+    rate_limited = "rate limit" in auth_error.lower() or "too many requests" in auth_error.lower()
     demo_seeded = has_workspace_context(text)
     status_message = ""
     for line in lines:
         if line.startswith("현재 배포본은 "):
             status_message = line
             break
+    allocation_status = find_value_after_label(lines, "자산 배분")
+    if allocation_status in {"-", "+"}:
+        allocation_status = ""
 
     return DeploymentSummary(
         url=url,
@@ -402,9 +532,12 @@ def build_summary(url: str, target_page: str, text: str) -> DeploymentSummary:
         backend_override=find_prefixed_value(lines, "백엔드 강제 설정:"),
         reason=find_prefixed_value(lines, "감지 사유:"),
         status_message=status_message,
+        allocation_status=allocation_status,
         onboarding_visible=onboarding_visible,
         onboarding_error=onboarding_error,
         hotfix_required=hotfix_required,
+        auth_error=auth_error,
+        rate_limited=rate_limited,
         demo_button_clicked=False,
         demo_seeded=demo_seeded,
     )
@@ -442,28 +575,55 @@ def verify_deployment(args: argparse.Namespace) -> DeploymentSummary:
 
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=True)
-        page = browser.new_page(viewport={"width": 1440, "height": 2200})
-        page.goto(args.url, wait_until="domcontentloaded", timeout=120_000)
-        page.wait_for_timeout(args.wait_ms)
-        frame = login_if_needed(page, args.email, args.password, args.wait_ms)
-        text = body_text(frame, 15_000)
-        demo_button_clicked = False
-        if args.click_demo and has_onboarding_context(text):
-            demo_button_clicked = click_demo_button(frame)
-            if demo_button_clicked:
-                page.wait_for_timeout(args.wait_ms)
-                frame = select_app_frame(page)
-                text = body_text(frame, 15_000)
-        if has_workspace_context(text):
-            frame = open_target_page(page, frame, args.page, max(4_000, args.wait_ms // 2))
+        context_kwargs: dict[str, Any] = {"viewport": {"width": 1440, "height": 2200}}
+        storage_state_path = resolve_optional_output_path(args.storage_state)
+        if storage_state_path is not None and storage_state_path.exists():
+            context_kwargs["storage_state"] = str(storage_state_path)
+        context = browser.new_context(**context_kwargs)
+        page = context.new_page()
+
+        try:
+            page.goto(args.url, wait_until="domcontentloaded", timeout=120_000)
+            page.wait_for_timeout(args.wait_ms)
+            capture_debug_artifacts(page, args.debug_dir, "01-opened")
+
+            frame = login_if_needed(page, args.email, args.password, args.wait_ms)
+            if storage_state_path is not None:
+                storage_state_path.parent.mkdir(parents=True, exist_ok=True)
+                context.storage_state(path=str(storage_state_path))
+            capture_debug_artifacts(page, args.debug_dir, "02-authenticated")
+
             text = body_text(frame, 15_000)
-        summary = build_summary(args.url, args.page, text)
-        summary.demo_button_clicked = demo_button_clicked
-        summary.demo_seeded = has_workspace_context(text)
-        summary.text_output = maybe_write_output(args.text_output, text)
-        summary.screenshot_output = maybe_capture_screenshot(page, args.screenshot)
-        browser.close()
-        return summary
+            demo_button_clicked = False
+            if args.click_demo and has_onboarding_context(text):
+                demo_button_clicked = click_demo_button(frame)
+                if demo_button_clicked:
+                    page.wait_for_timeout(args.wait_ms)
+                    frame = select_app_frame(page)
+                    text = body_text(frame, 15_000)
+                    capture_debug_artifacts(page, args.debug_dir, "03-after-demo")
+            if has_workspace_context(text):
+                frame = open_target_page(page, frame, args.page, max(4_000, args.wait_ms // 2))
+                frame, text = wait_for_target_page(page, args.page, max(12_000, args.wait_ms * 2))
+                capture_debug_artifacts(page, args.debug_dir, f"04-page-{args.page}")
+            summary = build_summary(args.url, args.page, text)
+            summary.demo_button_clicked = demo_button_clicked
+            summary.demo_seeded = has_workspace_context(text)
+            summary.text_output = maybe_write_output(args.text_output, text)
+            summary.screenshot_output = maybe_capture_screenshot(page, args.screenshot)
+            return summary
+        except Exception as exc:
+            capture_debug_artifacts(page, args.debug_dir, "99-error")
+            last_text = current_page_text(page)
+            auth_error = extract_auth_error(extract_lines(last_text))
+            if auth_error:
+                raise RuntimeError(
+                    f"{exc} 마지막 인증 화면 오류: {auth_error}.{format_debug_dir_hint(args.debug_dir)}"
+                ) from exc
+            raise RuntimeError(f"{exc}.{format_debug_dir_hint(args.debug_dir)}") from exc
+        finally:
+            context.close()
+            browser.close()
 
 
 def main() -> int:
@@ -483,6 +643,8 @@ def main() -> int:
 
     if args.expect_backend != "any" and summary.backend_storage_code != args.expect_backend:
         return 2
+    if args.expect_allocation_status and summary.allocation_status != args.expect_allocation_status:
+        return 3
     return 0
 
 
