@@ -59,6 +59,43 @@ class ThemeStylesheetTests(unittest.TestCase):
         self.assertNotIn("${theme_primary_color}", stylesheet)
 
 
+class TradeFormResetTests(unittest.TestCase):
+    """거래 페이지의 rerun 기반 폼 초기화 헬퍼를 검증한다."""
+
+    def test_apply_pending_form_reset_restores_defaults_only_when_flagged(self) -> None:
+        """pending 플래그가 있을 때만 기본값을 세션 상태에 다시 쓴다."""
+
+        session_state = {
+            dashboard_app.TRADE_FORM_RESET_PENDING_KEY: True,
+            dashboard_app.TRADE_SYMBOL_KEY: "AAPL",
+            dashboard_app.TRADE_PRICE_KEY: 1000.0,
+        }
+
+        dashboard_app.apply_pending_form_reset(
+            session_state,
+            pending_key=dashboard_app.TRADE_FORM_RESET_PENDING_KEY,
+            reset_values={
+                dashboard_app.TRADE_SYMBOL_KEY: "",
+                dashboard_app.TRADE_PRICE_KEY: 0.0,
+            },
+        )
+
+        self.assertNotIn(dashboard_app.TRADE_FORM_RESET_PENDING_KEY, session_state)
+        self.assertEqual(session_state[dashboard_app.TRADE_SYMBOL_KEY], "")
+        self.assertEqual(session_state[dashboard_app.TRADE_PRICE_KEY], 0.0)
+
+    def test_consume_session_message_returns_message_once(self) -> None:
+        """세션 메시지는 한 번 읽으면 비워져야 한다."""
+
+        session_state = {dashboard_app.TRADE_PAGE_SUCCESS_MESSAGE_KEY: "거래를 저장했습니다."}
+
+        first = dashboard_app.consume_session_message(session_state, dashboard_app.TRADE_PAGE_SUCCESS_MESSAGE_KEY)
+        second = dashboard_app.consume_session_message(session_state, dashboard_app.TRADE_PAGE_SUCCESS_MESSAGE_KEY)
+
+        self.assertEqual(first, "거래를 저장했습니다.")
+        self.assertEqual(second, "")
+
+
 class HoldingsTableDisplayTests(unittest.TestCase):
     """현재 보유 종목 표 표시 포맷과 컬러 스타일을 검증한다."""
 

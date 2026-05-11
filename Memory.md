@@ -23,6 +23,7 @@
 - [x] 기존 일별 이자 이력이 있는 계좌의 매수 전 현금 재동기화 복구
 - [x] 입금액과 무관하게 매수 상품 등록 허용
 - [x] Supabase 음수 현금 helper 제약으로 막히던 거래 등록 재수정
+- [x] 거래 저장 후 `st.session_state` 직접 초기화 예외 제거
 - [x] 운영 배포용 `app.py` 초기 `importlib.reload(src.market)` 제거
 - [ ] 다음 장중 자동 스케줄(`UTC 00:00`, `UTC 02:55`) 1회 추가 확인
 - [x] 배포 대시보드에서 자산 배분 상태 칩이 실제로 `실시간 연동 중`으로 보이는지 화면 검증
@@ -235,6 +236,17 @@ streamlit run app.py
   - `./.venv/bin/python -m unittest discover -s tests -p "test_*.py"` 성공 (`95`건)
   - 로컬 `streamlit run app.py --server.port 8520 --server.headless true` 재현에서 기존 `매수하기에 현금이 부족합니다.` / `현금은 0 이상이어야 합니다.` 문구가 더 이상 나타나지 않음을 확인
   - 로컬 재현 산출물: `artifacts/trade-register-local-8520-fixed.txt`, `artifacts/trade-register-local-8520-fixed.png`
+  - 후속 확인에서 저장 직후 `st.session_state.trade_symbol cannot be modified after the widget ... is instantiated` 예외가 발생하는 것을 발견
+  - 조치: `app.py` 거래 페이지를 `pending reset + rerun` 구조로 바꿔 거래/현금 흐름/계좌 이체 폼을 다음 실행에서만 초기화하도록 수정
+  - `python3 -m compileall app.py src/db.py tests/test_db.py tests/test_app_dashboard.py` 성공
+  - `python3 -m unittest tests.test_db tests.test_app_dashboard` 성공 (`50`건)
+  - `./.venv/bin/python -m compileall app.py src scripts tests` 성공
+  - `./.venv/bin/python -m unittest discover -s tests -p "test_*.py"` 성공 (`97`건)
+  - 로컬 `streamlit run app.py --server.port 8520 --server.headless true` 재현 후 서버 종료 시 더 이상 `StreamlitAPIException` traceback이 발생하지 않음을 확인
+  - 최신 로컬 재현 산출물: `artifacts/trade-register-local-8520-fixed-2.txt`, `artifacts/trade-register-local-8520-fixed-2.png`
+  - 기능 커밋 `2cb8006`을 `origin/main`에 푸시 완료
+  - 원격 일반 배포 검증: `./.venv/bin/python scripts/verify_streamlit_deployment.py --page dashboard --expect-backend supabase` 성공
+  - 원격 거래 저장 재현은 `2026-05-11 09:39~09:41 UTC` 시점에도 여전히 예전 문구 `매수하기에 현금이 부족합니다.`를 반환해, Streamlit Cloud가 새 커밋을 아직 반영하지 않은 상태로 기록
 - 이번 턴 `src.market reload` 제거 검증:
   - `python3 -m compileall app.py tests/test_app_dashboard.py` 성공
   - `python3 -m unittest tests.test_app_dashboard` 성공 (`29`건)

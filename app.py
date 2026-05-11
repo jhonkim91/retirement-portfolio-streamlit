@@ -4,7 +4,7 @@ import html
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from string import Template
-from typing import Any
+from typing import Any, MutableMapping
 import tomllib
 from zoneinfo import ZoneInfo
 
@@ -285,6 +285,10 @@ TRANSFER_TARGET_ACCOUNT_KEY = "transfer_target_account_id"
 TRANSFER_AMOUNT_KEY = "transfer_amount"
 TRANSFER_DATE_KEY = "transfer_date"
 TRANSFER_NOTES_KEY = "transfer_notes"
+TRADE_FORM_RESET_PENDING_KEY = "trade_form_reset_pending"
+CASH_FLOW_FORM_RESET_PENDING_KEY = "cash_flow_form_reset_pending"
+TRANSFER_FORM_RESET_PENDING_KEY = "transfer_form_reset_pending"
+TRADE_PAGE_SUCCESS_MESSAGE_KEY = "trade_page_success_message"
 PAGE_LABELS = {
     "Dashboard": "대시보드",
     "Trades": "거래",
@@ -557,6 +561,30 @@ def init_state() -> None:
     st.session_state.setdefault(TRANSFER_AMOUNT_KEY, 0)
     st.session_state.setdefault(TRANSFER_DATE_KEY, date.today())
     st.session_state.setdefault(TRANSFER_NOTES_KEY, "")
+    st.session_state.setdefault(TRADE_FORM_RESET_PENDING_KEY, False)
+    st.session_state.setdefault(CASH_FLOW_FORM_RESET_PENDING_KEY, False)
+    st.session_state.setdefault(TRANSFER_FORM_RESET_PENDING_KEY, False)
+    st.session_state.setdefault(TRADE_PAGE_SUCCESS_MESSAGE_KEY, "")
+
+
+def apply_pending_form_reset(
+    session_state: MutableMapping[str, Any],
+    *,
+    pending_key: str,
+    reset_values: dict[str, Any],
+) -> None:
+    """다음 rerun 시점에만 폼 기본값을 다시 주입한다."""
+
+    if not session_state.pop(pending_key, False):
+        return
+    for key, value in reset_values.items():
+        session_state[key] = value
+
+
+def consume_session_message(session_state: MutableMapping[str, Any], key: str) -> str:
+    """세션 메시지를 한 번만 읽고 비운다."""
+
+    return str(session_state.pop(key, "") or "").strip()
 
 
 def mark_rollup_dirty() -> None:
@@ -3204,8 +3232,41 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]], roll
 
 
 def trade_entry_page(account: dict[str, Any], holdings: list[dict[str, Any]], accounts: list[dict[str, Any]]) -> None:
+    apply_pending_form_reset(
+        st.session_state,
+        pending_key=TRADE_FORM_RESET_PENDING_KEY,
+        reset_values={
+            TRADE_SYMBOL_KEY: "",
+            TRADE_PRODUCT_NAME_KEY: "",
+            TRADE_SEARCH_QUERY_KEY: "",
+            TRADE_QUANTITY_KEY: 1.0,
+            TRADE_PRICE_KEY: 0.0,
+            TRADE_NOTES_KEY: "",
+            TRADE_PREFILL_MARKER_KEY: "",
+        },
+    )
+    apply_pending_form_reset(
+        st.session_state,
+        pending_key=CASH_FLOW_FORM_RESET_PENDING_KEY,
+        reset_values={
+            CASH_FLOW_AMOUNT_KEY: 0,
+            CASH_FLOW_NOTES_KEY: "",
+        },
+    )
+    apply_pending_form_reset(
+        st.session_state,
+        pending_key=TRANSFER_FORM_RESET_PENDING_KEY,
+        reset_values={
+            TRANSFER_AMOUNT_KEY: 0,
+            TRANSFER_NOTES_KEY: "",
+        },
+    )
+
     st.title("거래")
     st.caption("매수/매도, 현금 흐름, 계좌 간 이체를 한 화면에서 이어서 기록합니다.")
+    feedback_message = consume_session_message(st.session_state, TRADE_PAGE_SUCCESS_MESSAGE_KEY)
+    if feedback_message:
+        st.success(feedback_message)
     left, right = st.columns((1, 1), gap="large")
 
     with left:
@@ -3286,13 +3347,8 @@ def trade_entry_page(account: dict[str, Any], holdings: list[dict[str, Any]], ac
                 st.error(str(exc))
             else:
                 mark_rollup_dirty()
-                st.success("거래를 저장했습니다.")
-                st.session_state[TRADE_SYMBOL_KEY] = ""
-                st.session_state[TRADE_PRODUCT_NAME_KEY] = ""
-                st.session_state[TRADE_SEARCH_QUERY_KEY] = ""
-                st.session_state[TRADE_QUANTITY_KEY] = 1.0
-                st.session_state[TRADE_PRICE_KEY] = 0.0
-                st.session_state[TRADE_NOTES_KEY] = ""
+                st.session_state[TRADE_FORM_RESET_PENDING_KEY] = True
+                st.session_state[TRADE_PAGE_SUCCESS_MESSAGE_KEY] = "거래를 저장했습니다."
                 st.rerun()
 
     with right:
@@ -3320,9 +3376,8 @@ def trade_entry_page(account: dict[str, Any], holdings: list[dict[str, Any]], ac
                 st.error(str(exc))
             else:
                 mark_rollup_dirty()
-                st.success("현금 흐름을 기록했습니다.")
-                st.session_state[CASH_FLOW_AMOUNT_KEY] = 0
-                st.session_state[CASH_FLOW_NOTES_KEY] = ""
+                st.session_state[CASH_FLOW_FORM_RESET_PENDING_KEY] = True
+                st.session_state[TRADE_PAGE_SUCCESS_MESSAGE_KEY] = "현금 흐름을 기록했습니다."
                 st.rerun()
 
         st.divider()
@@ -3366,9 +3421,8 @@ def trade_entry_page(account: dict[str, Any], holdings: list[dict[str, Any]], ac
                         st.error(str(exc))
                     else:
                         mark_rollup_dirty()
-                        st.success("계좌 이체를 기록했습니다.")
-                        st.session_state[TRANSFER_AMOUNT_KEY] = 0
-                        st.session_state[TRANSFER_NOTES_KEY] = ""
+                        st.session_state[TRANSFER_FORM_RESET_PENDING_KEY] = True
+                        st.session_state[TRADE_PAGE_SUCCESS_MESSAGE_KEY] = "계좌 이체를 기록했습니다."
                         st.rerun()
 
     logs = list_trade_logs(int(account["id"]))
