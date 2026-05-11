@@ -193,6 +193,10 @@ streamlit run app.py
   - `./.venv/bin/python -m compileall app.py src scripts tests` 성공
   - `./.venv/bin/python -m unittest discover -s tests -p "test_*.py"` 성공 (`90`건)
   - `build_holdings_mix_bar_html()` 테스트에서 `보유현금`이 독립 세그먼트로 나오지 않고 `안전자산` 설명에 `보유현금 ₩200,000 포함`으로 합산 표시되는지 확인
+  - 배포 커밋 `cb871df` 푸시 후 `git push origin main` 기준 원격 반영
+  - `./.venv/bin/python scripts/verify_streamlit_deployment.py --page dashboard --expect-backend supabase` 성공
+  - 원격 검증 결과: `backend_storage=supabase`, `allocation_status="실시간 연동 중"`, 로그인/작업공간 노출 정상
+  - 원격 검증 산출물: `artifacts/deploy-verify-holdings-safe-cash-cb871df.txt`, `artifacts/deploy-verify-holdings-safe-cash-cb871df.png`
   - 배포 커밋 `1d55a5d` 푸시 후 `git push origin main` 기준 원격 반영
   - `./.venv/bin/python scripts/verify_streamlit_deployment.py --page dashboard --expect-backend supabase` 성공
   - 원격 검증 산출물: `artifacts/deploy-verify-holdings-table-1d55a5d.txt`, `artifacts/deploy-verify-holdings-table-1d55a5d.png`
@@ -200,6 +204,8 @@ streamlit run app.py
 ## Git/GitHub 상태
 - 기본 브랜치: `main`
 - 최근 기능 커밋:
+  - `cb871df` `Fold holdings cash into safe allocation`
+  - `7337b17` `Improve holdings table visual cues`
   - `1d55a5d` `Polish holdings table quote timestamps`
   - `0147543` `Align today's selected trend with live allocation quotes`
   - `13a98c7` `Refine dashboard theme and selected intraday trend`
