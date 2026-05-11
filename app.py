@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import html
 import importlib
-from datetime import date
+from datetime import date, datetime, timedelta
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import altair as alt
 import pandas as pd
@@ -36,6 +37,9 @@ fetch_intraday_price_snapshot = getattr(market_module, "fetch_intraday_price_sna
 search_products = getattr(market_module, "search_products", lambda query, limit=8: [])
 quote_provider_status = getattr(market_module, "quote_provider_status", lambda: {})
 is_kis_domestic_symbol = getattr(market_module, "is_kis_domestic_symbol", lambda symbol: False)
+
+KST_TIMEZONE = ZoneInfo("Asia/Seoul")
+REALTIME_QUOTE_FRESHNESS = timedelta(minutes=3)
 
 create_account = _db.create_account
 delete_account = _db.delete_account
@@ -2045,9 +2049,50 @@ def dashboard_live_refresh_interval(account_id: int, holdings: list[dict[str, An
     status = get_realtime_worker_status(account_id) or {}
     if str(status.get("connection_state") or "").strip().lower() == "connected":
         return "10s"
+    if is_recent_realtime_quote(latest_realtime_quote_time(account_id)):
+        return "10s"
     if any(is_kis_domestic_symbol(str(holding.get("symbol") or "").strip()) for holding in holdings):
         return "30s"
     return None
+
+
+def parse_realtime_timestamp(value: str | None) -> datetime | None:
+    """실시간 quote 시각 문자열을 KST 기준 aware datetime으로 파싱한다."""
+
+    normalized = str(value or "").strip()
+    if not normalized:
+        return None
+
+    candidate = normalized.replace("Z", "+00:00")
+    try:
+        parsed = datetime.fromisoformat(candidate)
+    except ValueError:
+        return None
+
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=KST_TIMEZONE)
+    return parsed.astimezone(KST_TIMEZONE)
+
+
+def is_recent_realtime_quote(
+    quote_time: str | None,
+    *,
+    now_value: datetime | None = None,
+    freshness_window: timedelta = REALTIME_QUOTE_FRESHNESS,
+) -> bool:
+    """최근 실시간 quote가 freshness window 안에 있으면 True를 반환한다."""
+
+    parsed_quote_time = parse_realtime_timestamp(quote_time)
+    if parsed_quote_time is None:
+        return False
+
+    current_time = now_value or datetime.now(KST_TIMEZONE)
+    if current_time.tzinfo is None:
+        current_time = current_time.replace(tzinfo=KST_TIMEZONE)
+    else:
+        current_time = current_time.astimezone(KST_TIMEZONE)
+
+    return current_time - parsed_quote_time <= freshness_window
 
 
 def dashboard_allocation_status(
@@ -2065,10 +2110,15 @@ def dashboard_allocation_status(
 
     worker_status = get_realtime_worker_status(account_id) or {}
     connection_state = str(worker_status.get("connection_state") or "").strip().lower()
+    quote_time = latest_realtime_quote_time(account_id)
     if connection_state == "connected":
-        if str(latest_realtime_quote_time(account_id) or "").strip():
+        if str(quote_time or "").strip():
             return ("실시간 연동 중", "live")
         return ("실시간 연결 중", "live")
+    if is_recent_realtime_quote(quote_time) and any(
+        is_kis_domestic_symbol(str(holding.get("symbol") or "").strip()) for holding in holdings
+    ):
+        return ("실시간 반영 중", "live")
     return ("지연 데이터 표시 중", "stale")
 
 

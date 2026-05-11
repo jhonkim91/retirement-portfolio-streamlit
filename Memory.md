@@ -10,6 +10,7 @@
 - [x] GitHub Actions 기반 장중 KIS worker 자동 실행 workflow 추가
 - [x] `gh` CLI 로컬 설치 및 Actions secrets 등록
 - [x] GitHub-hosted runner에서 `KIS Realtime Worker` 수동 실행 성공 검증
+- [x] `Memory.md` 장문 로그를 요약형 운영 메모로 정리
 - [ ] 다음 장중 자동 스케줄(`UTC 00:00`, `UTC 02:55`) 1회 추가 확인
 - [ ] 배포 대시보드에서 자산 배분 상태 칩이 실제로 `실시간 연동 중`으로 보이는지 화면 검증
 - [ ] GitHub Actions Node 24 전환 전 액션 버전 점검
@@ -80,10 +81,12 @@ streamlit run app.py
 - 로그인 카드 레이아웃 개편 및 데모 모드 진입 UX 정리
 
 ### 2026-05-11
+- `Memory.md`를 장문 실행 로그에서 요약형 운영 메모로 재정리(`1061`줄 -> `133`줄)
 - 자산 배분 상태 칩을 실제 worker 상태 기반(`실시간 연동 중`, `지연 데이터 표시 중` 등)으로 변경
 - 운영 Supabase realtime 테이블 생성 후 장중 적재 검증 완료
 - GitHub Actions 장중 worker 자동화 workflow 추가
 - `gh` CLI 설치, GitHub Actions secrets 주입, 수동 dispatch/실행 성공 검증 완료
+- 배포 대시보드가 장중에도 `지연 데이터 표시 중`으로 남는 케이스를 재현했고, 최근 quote 시각이 3분 이내면 live 톤으로 승격하는 fallback 및 10초 재확인 로직을 추가
 
 ## 최신 검증 결과
 - `python3 -m compileall app.py src scripts tests` 성공
@@ -94,6 +97,10 @@ streamlit run app.py
   - `artifacts/deploy-verify-realtime-data-20260511.png`
   - `artifacts/deploy-verify-realtime-dashboard-20260511.txt`
   - `artifacts/deploy-verify-realtime-dashboard-20260511.png`
+- 이번 턴 로컬 추가 검증:
+  - `python3 -m compileall app.py tests/test_app_dashboard.py` 성공
+  - `python3 -m unittest tests.test_app_dashboard` 성공 (`20`건)
+  - `python3 -m unittest discover -s tests -p "test_*.py"` 성공 (`78`건)
 
 ## Git/GitHub 상태
 - 기본 브랜치: `main`

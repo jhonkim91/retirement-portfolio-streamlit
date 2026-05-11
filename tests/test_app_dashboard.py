@@ -390,6 +390,41 @@ class DashboardAllocationStatusTests(unittest.TestCase):
 
         self.assertEqual(result, ("지연 데이터 표시 중", "stale"))
 
+    def test_dashboard_allocation_status_returns_live_when_recent_quote_exists(self) -> None:
+        """worker 상태가 늦게 내려와도 최근 quote가 있으면 live 톤으로 표시한다."""
+
+        original_status = dashboard_app.get_realtime_worker_status
+        original_latest_quote = dashboard_app.latest_realtime_quote_time
+        original_now = dashboard_app.datetime
+        dashboard_app.get_realtime_worker_status = lambda account_id: {"connection_state": "stopped"}
+        dashboard_app.latest_realtime_quote_time = lambda account_id: "2026-05-11T11:24:15"
+
+        class FrozenDateTime:
+            """테스트용 현재 시각 제공자."""
+
+            @staticmethod
+            def now(tz=None):
+                current = original_now.fromisoformat("2026-05-11T11:25:30")
+                return current.replace(tzinfo=tz) if tz is not None else current
+
+            @staticmethod
+            def fromisoformat(value: str):
+                return original_now.fromisoformat(value)
+
+        dashboard_app.datetime = FrozenDateTime
+        try:
+            result = dashboard_app.dashboard_allocation_status(
+                1,
+                [{"symbol": "251600", "product_name": "KODEX"}],
+                has_allocation_data=True,
+            )
+        finally:
+            dashboard_app.get_realtime_worker_status = original_status
+            dashboard_app.latest_realtime_quote_time = original_latest_quote
+            dashboard_app.datetime = original_now
+
+        self.assertEqual(result, ("실시간 반영 중", "live"))
+
     def test_dashboard_allocation_status_returns_idle_when_only_cash_is_visible(self) -> None:
         """보유 종목이 없으면 실시간 대상이 없음을 표시한다."""
 
@@ -423,6 +458,37 @@ class DashboardAllocationStatusTests(unittest.TestCase):
             dashboard_app.get_realtime_worker_status = original_status
 
         self.assertEqual(result, "30s")
+
+    def test_dashboard_live_refresh_interval_returns_fast_poll_when_recent_quote_exists(self) -> None:
+        """worker 상태가 늦더라도 최근 quote가 있으면 빠른 재확인을 유지한다."""
+
+        original_status = dashboard_app.get_realtime_worker_status
+        original_latest_quote = dashboard_app.latest_realtime_quote_time
+        original_now = dashboard_app.datetime
+        dashboard_app.get_realtime_worker_status = lambda account_id: {"connection_state": "stopped"}
+        dashboard_app.latest_realtime_quote_time = lambda account_id: "2026-05-11T11:24:15"
+
+        class FrozenDateTime:
+            """테스트용 현재 시각 제공자."""
+
+            @staticmethod
+            def now(tz=None):
+                current = original_now.fromisoformat("2026-05-11T11:25:00")
+                return current.replace(tzinfo=tz) if tz is not None else current
+
+            @staticmethod
+            def fromisoformat(value: str):
+                return original_now.fromisoformat(value)
+
+        dashboard_app.datetime = FrozenDateTime
+        try:
+            result = dashboard_app.dashboard_live_refresh_interval(1, [{"symbol": "251600"}])
+        finally:
+            dashboard_app.get_realtime_worker_status = original_status
+            dashboard_app.latest_realtime_quote_time = original_latest_quote
+            dashboard_app.datetime = original_now
+
+        self.assertEqual(result, "10s")
 
     def test_dashboard_live_refresh_interval_skips_poll_without_domestic_holdings(self) -> None:
         """국내 실시간 대상이 없으면 상태 전이 폴링을 켜지 않는다."""
