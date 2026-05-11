@@ -17,6 +17,7 @@
 - [x] 보유 종목 수익률 음수 막대 모서리 방향 수정
 - [x] 선택 종목 트렌드에 `당일` intraday 구간 추가
 - [x] 선택 종목 `당일` 트렌드가 자산 배분 카드의 금일 시세와 같은 마지막 값을 사용하도록 보정
+- [x] 현재 보유 종목 표에 가격갱신 초 단위 표시 및 손익/수익률 컬러 스타일 적용
 - [ ] 다음 장중 자동 스케줄(`UTC 00:00`, `UTC 02:55`) 1회 추가 확인
 - [x] 배포 대시보드에서 자산 배분 상태 칩이 실제로 `실시간 연동 중`으로 보이는지 화면 검증
 
@@ -103,6 +104,7 @@ streamlit run app.py
 - 선택 종목 트렌드 기간에 `당일`을 추가하고, `fetch_intraday_price_snapshot()`의 세션 타임라인을 사용해 장 시작부터 장 마감까지의 intraday 누적 손익 흐름을 그리도록 연결
 - KIS/Yahoo intraday 스냅샷 반환값에 `timeline(datetime, close)`를 추가하고, 선택 종목 데이터 보기에서 `당일`일 때 `시간` 컬럼과 `HH:MM` 축 라벨을 함께 노출하도록 정리
 - 선택 종목 `당일` 프레임 생성 시 자산 배분 카드가 쓰는 `current_price/as_of`를 마지막 포인트로 덮어써 화면 간 금일 시세 불일치를 줄이고, 타임라인이 비어도 금일 시세 1포인트를 만들도록 fallback 추가
+- 현재 보유 종목 표의 `가격갱신`을 `YYYY-MM-DD HH:MM:SS`로 통일하고, `손익`/`수익률`은 양수/음수/0에 따라 컬러와 굵기를 다르게 표시하도록 `Styler` 기반 렌더로 변경
 
 ## 최신 검증 결과
 - `python3 -m compileall app.py src scripts tests` 성공
@@ -172,6 +174,11 @@ streamlit run app.py
   - `./.venv/bin/python scripts/verify_streamlit_deployment.py --page dashboard --expect-backend supabase` 성공
   - 원격 검증 결과: `backend_storage=supabase`, `allocation_status="지연 데이터 표시 중"`, 로그인/작업공간 노출 정상
   - 원격 검증 산출물: `artifacts/deploy-verify-selected-trend-0147543.txt`, `artifacts/deploy-verify-selected-trend-0147543.png`
+- 이번 턴 현재 보유 종목 표 표시 개선 검증:
+  - `python3 -m compileall app.py tests/test_app_dashboard.py` 성공
+  - `python3 -m unittest tests.test_app_dashboard` 성공 (`27`건)
+  - `build_holdings_table_display()` 테스트에서 `가격갱신=2026-05-11 09:15:27` 초 단위 포맷 확인
+  - `style_holdings_table()` 테스트에서 손익/수익률 셀에 상승/하락/중립 색상 스타일이 포함되는지 확인
 
 ## Git/GitHub 상태
 - 기본 브랜치: `main`

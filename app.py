@@ -2669,9 +2669,32 @@ def selected_holding_trend_options(
 
 
 def show_holdings_table(frame: pd.DataFrame, *, height: int = 420) -> None:
+    """현재 보유 종목 표를 초 단위 시세 시각과 손익 컬러 스타일로 렌더링한다."""
+
     if frame.empty:
         st.info("보유 종목이 없습니다.")
         return
+
+    display = build_holdings_table_display(frame)
+    styled = style_holdings_table(display)
+    st.dataframe(styled, width="stretch", hide_index=True, height=height)
+
+
+def format_holdings_price_updated_at(value: Any) -> str:
+    """보유 종목 현재가 갱신 시각을 초 단위까지 읽기 쉽게 포맷한다."""
+
+    timestamp = pd.to_datetime(value, errors="coerce")
+    if pd.isna(timestamp):
+        raw_value = str(value or "").strip()
+        return raw_value or "-"
+    return timestamp.strftime("%Y-%m-%d %H:%M:%S")
+
+
+def build_holdings_table_display(frame: pd.DataFrame) -> pd.DataFrame:
+    """보유 종목 원본 프레임을 표시용 DataFrame으로 변환한다."""
+
+    if frame.empty:
+        return pd.DataFrame()
 
     display = frame[
         [
@@ -2706,7 +2729,29 @@ def show_holdings_table(frame: pd.DataFrame, *, height: int = 420) -> None:
     for column in ("평단가", "현재가", "원금", "평가금액", "손익"):
         display[column] = display[column].map(lambda value: f"{float(value or 0):,.0f}")
     display["수익률(%)"] = display["수익률(%)"].map(lambda value: f"{float(value or 0):+.2f}")
-    st.dataframe(display, width="stretch", hide_index=True, height=height)
+    display["가격갱신"] = display["가격갱신"].map(format_holdings_price_updated_at)
+    return display
+
+
+def _holding_value_tone_style(value: Any) -> str:
+    """손익/수익률 숫자 문자열을 색상 스타일로 변환한다."""
+
+    numeric = pd.to_numeric(value, errors="coerce")
+    if pd.isna(numeric):
+        return ""
+    if float(numeric) > 0:
+        return f"color: {FEARGREED_UP_COLOR}; font-weight: 700;"
+    if float(numeric) < 0:
+        return f"color: {FEARGREED_DOWN_COLOR}; font-weight: 700;"
+    return f"color: {FEARGREED_MUTED_TEXT_COLOR}; font-weight: 600;"
+
+
+def style_holdings_table(display: pd.DataFrame) -> Any:
+    """보유 종목 표시용 DataFrame에 손익/수익률 컬러 스타일을 적용한다."""
+
+    if display.empty:
+        return display
+    return display.style.map(_holding_value_tone_style, subset=["손익", "수익률(%)"])
 
 
 def auth_page(auth_enabled: bool = True) -> None:

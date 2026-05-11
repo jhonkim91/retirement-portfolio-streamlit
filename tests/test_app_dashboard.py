@@ -59,6 +59,55 @@ class ThemeStylesheetTests(unittest.TestCase):
         self.assertNotIn("${theme_primary_color}", stylesheet)
 
 
+class HoldingsTableDisplayTests(unittest.TestCase):
+    """현재 보유 종목 표 표시 포맷과 컬러 스타일을 검증한다."""
+
+    def test_build_holdings_table_display_formats_price_updated_at_with_seconds(self) -> None:
+        """가격 갱신 시각은 초 단위까지 보이도록 포맷한다."""
+
+        frame = pd.DataFrame(
+            [
+                {
+                    "product_name": "삼성전자",
+                    "symbol": "005930",
+                    "asset_type": "risk",
+                    "quantity": 10,
+                    "avg_cost": 70000,
+                    "current_price": 71200,
+                    "cost_basis": 700000,
+                    "current_value": 712000,
+                    "profit_loss": 12000,
+                    "profit_rate": 1.7142857,
+                    "price_updated_at": "2026-05-11T09:15:27+09:00",
+                }
+            ]
+        )
+
+        display = dashboard_app.build_holdings_table_display(frame)
+
+        self.assertEqual(display.iloc[0]["가격갱신"], "2026-05-11 09:15:27")
+        self.assertEqual(display.iloc[0]["손익"], "12,000")
+        self.assertEqual(display.iloc[0]["수익률(%)"], "+1.71")
+
+    def test_style_holdings_table_colors_profit_and_rate_cells(self) -> None:
+        """손익과 수익률 셀은 부호에 따라 색상을 다르게 적용한다."""
+
+        display = pd.DataFrame(
+            [
+                {"손익": "12,000", "수익률(%)": "+1.71"},
+                {"손익": "-8,000", "수익률(%)": "-3.25"},
+                {"손익": "0", "수익률(%)": "+0.00"},
+            ]
+        )
+
+        styled = dashboard_app.style_holdings_table(display)
+        html = styled.to_html()
+
+        self.assertIn(dashboard_app.FEARGREED_UP_COLOR, html)
+        self.assertIn(dashboard_app.FEARGREED_DOWN_COLOR, html)
+        self.assertIn(dashboard_app.FEARGREED_MUTED_TEXT_COLOR, html)
+
+
 class DashboardSelectionPayloadTests(unittest.TestCase):
     """선택 종목 트렌드와 연결되는 selection payload 해석을 검증한다."""
 
