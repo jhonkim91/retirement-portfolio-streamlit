@@ -2681,13 +2681,13 @@ def show_holdings_table(frame: pd.DataFrame, *, height: int = 420) -> None:
 
 
 def build_holdings_mix_bar_html(summary: dict[str, Any]) -> str:
-    """현재 보유 종목 박스 상단에 넣을 위험/안전/현금 비율 막대 HTML을 만든다."""
+    """현재 보유 종목 박스 상단에 넣을 위험/안전(현금 포함) 비율 막대 HTML을 만든다."""
 
     allocation = summary.get("allocation") or {}
+    cash_amount = float(allocation.get("cash") or summary.get("cash") or 0)
     segments = [
         ("위험자산", float(allocation.get("risk") or 0), "#D8A94D"),
-        ("안전자산", float(allocation.get("safe") or 0), "#83A968"),
-        ("보유현금", float(allocation.get("cash") or summary.get("cash") or 0), "#5A8AA8"),
+        ("안전자산", float(allocation.get("safe") or 0) + cash_amount, "#83A968"),
     ]
     total_value = sum(max(amount, 0.0) for _, amount, _ in segments)
     if total_value <= 0:
@@ -2719,6 +2719,11 @@ def build_holdings_mix_bar_html(summary: dict[str, Any]) -> str:
                     f'<span style="font-size:12px; color:{FEARGREED_MUTED_TEXT_COLOR};">{label}</span>',
                     f'<span style="font-size:12px; font-weight:700; color:{CHART_TEXT_COLOR};">{percentage:.1f}%</span>',
                     f'<span style="font-size:12px; color:{FEARGREED_MUTED_TEXT_COLOR};">{format_won(amount)}</span>',
+                    (
+                        f'<span style="font-size:11px; color:{FEARGREED_MUTED_TEXT_COLOR};">(보유현금 {format_won(cash_amount)} 포함)</span>'
+                        if label == "안전자산" and cash_amount > 0
+                        else ""
+                    ),
                     "</div>",
                 ]
             )

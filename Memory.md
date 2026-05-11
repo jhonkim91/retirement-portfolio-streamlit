@@ -19,6 +19,7 @@
 - [x] 선택 종목 `당일` 트렌드가 자산 배분 카드의 금일 시세와 같은 마지막 값을 사용하도록 보정
 - [x] 현재 보유 종목 표에 가격갱신 초 단위 표시 및 손익/수익률 컬러 스타일 적용
 - [x] 현재 보유 종목 박스에 위험/안전/보유현금 비율 막대바 추가
+- [x] 현재 보유 종목 비율 막대에서 보유현금을 안전자산에 포함하도록 조정
 - [ ] 다음 장중 자동 스케줄(`UTC 00:00`, `UTC 02:55`) 1회 추가 확인
 - [x] 배포 대시보드에서 자산 배분 상태 칩이 실제로 `실시간 연동 중`으로 보이는지 화면 검증
 
@@ -107,6 +108,7 @@ streamlit run app.py
 - 선택 종목 `당일` 프레임 생성 시 자산 배분 카드가 쓰는 `current_price/as_of`를 마지막 포인트로 덮어써 화면 간 금일 시세 불일치를 줄이고, 타임라인이 비어도 금일 시세 1포인트를 만들도록 fallback 추가
 - 현재 보유 종목 표의 `가격갱신`을 `YYYY-MM-DD HH:MM:SS`로 통일하고, `손익`/`수익률`은 양수/음수/0에 따라 컬러와 굵기를 다르게 표시하도록 `Styler` 기반 렌더로 변경
 - 현재 보유 종목 박스 상단에 `위험자산/안전자산/보유현금` 스택 막대바와 비중/금액 legend를 추가해 자산 구성을 표 안에서 바로 읽을 수 있게 정리
+- 현재 보유 종목 비중 막대는 별도 `보유현금` 세그먼트를 없애고 `안전자산` 금액에 현금을 합산해, `안전자산(보유현금 포함)` 기준으로 보이도록 조정
 
 ## 최신 검증 결과
 - `python3 -m compileall app.py src scripts tests` 성공
@@ -185,6 +187,12 @@ streamlit run app.py
   - `build_holdings_mix_bar_html()` 테스트에서 위험/안전/보유현금 `50.0/30.0/20.0%` 비율 렌더 확인
   - `./.venv/bin/python -m compileall app.py src scripts tests` 성공
   - `./.venv/bin/python -m unittest discover -s tests -p "test_*.py"` 성공 (`90`건)
+- 이번 턴 현재 보유 종목 비율 막대 보정 검증:
+  - `python3 -m compileall app.py tests/test_app_dashboard.py` 성공
+  - `python3 -m unittest tests.test_app_dashboard` 성공 (`29`건)
+  - `./.venv/bin/python -m compileall app.py src scripts tests` 성공
+  - `./.venv/bin/python -m unittest discover -s tests -p "test_*.py"` 성공 (`90`건)
+  - `build_holdings_mix_bar_html()` 테스트에서 `보유현금`이 독립 세그먼트로 나오지 않고 `안전자산` 설명에 `보유현금 ₩200,000 포함`으로 합산 표시되는지 확인
   - 배포 커밋 `1d55a5d` 푸시 후 `git push origin main` 기준 원격 반영
   - `./.venv/bin/python scripts/verify_streamlit_deployment.py --page dashboard --expect-backend supabase` 성공
   - 원격 검증 산출물: `artifacts/deploy-verify-holdings-table-1d55a5d.txt`, `artifacts/deploy-verify-holdings-table-1d55a5d.png`
