@@ -953,6 +953,10 @@ streamlit run app.py
 - 결과:
   - 전체 테스트 `72`건 통과
   - 자산 배분 헤더가 더 이상 데이터 존재 여부만으로 `데이터 로드됨`을 띄우지 않고, 실제 worker 연결 상태와 마지막 quote 반영 여부를 기준으로 문구를 표시하도록 변경
+  - 커밋 `72f0f41af3d12d01761732f11599481595597537`를 `origin/main`에 푸시
+  - 배포 앱 `https://retirement-portfolio-app-nh2vq9ferqnpehsslbykbe.streamlit.app/`에서 로그인 후 `dashboard` 진입 재검증 성공
+  - 자동 배포 검증 스크립트는 시스템 Python에 `playwright`가 없어 후속 검증을 건너뛰었고, 저장소 `.venv`로 수동 재실행해 `logged_in=true`, `workspace_visible=true`, `backend_storage_code=supabase`, `ok=true` 확인
+  - 산출물: `artifacts/deploy-verify-20260511-alloc-status.txt`, `artifacts/deploy-verify-20260511-alloc-status.png`
 
 ## 다음 작업 후보
 - 운영 Supabase SQL Editor에서 `docs/supabase-realtime-schema-hotfix.sql` 또는 최신 `setup_supabase.sql` 적용
