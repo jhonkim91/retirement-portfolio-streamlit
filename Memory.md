@@ -230,10 +230,15 @@ streamlit run app.py
   - `./.venv/bin/python -m compileall app.py src scripts tests` 성공
   - `./.venv/bin/python -m unittest discover -s tests -p "test_*.py"` 성공 (`93`건)
   - 운영 배포 기준 `app.py`에서 `importlib.reload(src.market)` 제거 후 대시보드/차트 테스트 회귀 없음 확인
+  - 배포 커밋 `89038db` 푸시 후 `git push origin main` 기준 원격 반영
+  - `./.venv/bin/python scripts/verify_streamlit_deployment.py --page dashboard --expect-backend supabase` 성공
+  - 원격 검증 결과: `backend_storage=supabase`, `allocation_status="실시간 연동 중"`, 로그인/작업공간 노출 정상
+  - 원격 검증 산출물: `artifacts/deploy-verify-remove-reload-89038db.txt`, `artifacts/deploy-verify-remove-reload-89038db.png`
 
 ## Git/GitHub 상태
 - 기본 브랜치: `main`
 - 최근 기능 커밋:
+  - `89038db` `Remove market module reload on app startup`
   - `d44a3b3` `Allow buys regardless of current cash`
   - `b57ab5a` `Restore legacy interest cash sync before buys`
   - `cb871df` `Fold holdings cash into safe allocation`
