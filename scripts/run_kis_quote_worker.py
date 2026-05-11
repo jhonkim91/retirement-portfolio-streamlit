@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import signal
 import sys
 import time
 import tomllib
@@ -461,6 +462,18 @@ def main() -> int:
     backoff_seconds = max(int(args.reconnect_delay or 5), 1)
     client = KisApiClient()
     active_account_ids = list(preflight_account_ids)
+    previous_signal_handlers: dict[int, Any] = {}
+
+    def raise_keyboard_interrupt(signum: int, _frame: Any) -> None:
+        """SIGINT/SIGTERM을 KeyboardInterrupt로 바꿔 정리 루틴을 타게 한다."""
+
+        raise KeyboardInterrupt(f"signal:{signum}")
+
+    for sig in (getattr(signal, "SIGINT", None), getattr(signal, "SIGTERM", None)):
+        if sig is None:
+            continue
+        previous_signal_handlers[int(sig)] = signal.getsignal(sig)
+        signal.signal(sig, raise_keyboard_interrupt)
 
     try:
         while True:
@@ -594,6 +607,9 @@ def main() -> int:
         )
         print("종료 신호를 받아 KIS quote worker를 중지합니다.", flush=True)
         return 0
+    finally:
+        for sig_num, previous_handler in previous_signal_handlers.items():
+            signal.signal(sig_num, previous_handler)
 
 
 if __name__ == "__main__":
