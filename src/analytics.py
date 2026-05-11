@@ -13,7 +13,6 @@ CAPITAL_INFLOW_TYPES = {"personal_deposit", "employer_deposit"}
 CAPITAL_OUTFLOW_TYPES = {"withdraw"}
 TRANSFER_IN_TYPES = {"transfer_in"}
 TRANSFER_OUT_TYPES = {"transfer_out"}
-MANUAL_ADJUSTMENT_TYPES = {"cash_adjustment"}
 INTEREST_TYPES = {"interest"}
 DEFAULT_ANNUAL_INTEREST_RATE = 0.05
 LEGACY_EMPLOYER_DEPOSIT_NAMES = {"회사 현금입금", "회사 납입금"}
@@ -172,13 +171,6 @@ def _cash_flow_summary(
             summary["has_capital_events"] = True
         elif trade_type in TRANSFER_OUT_TYPES:
             summary["transfer_out"] += amount
-            summary["has_capital_events"] = True
-        elif trade_type in MANUAL_ADJUSTMENT_TYPES:
-            delta = float(log.get("cash_delta") or 0)
-            if delta >= 0:
-                summary["cash_adjustment_in"] += abs(delta)
-            else:
-                summary["cash_adjustment_out"] += abs(delta)
             summary["has_capital_events"] = True
         elif trade_type in INTEREST_TYPES and not interest_rows:
             summary["total_interest"] += amount
@@ -509,9 +501,6 @@ def _cash_flow_event_frame(
             event["capital_event_flag"] = 1
         elif trade_type in TRANSFER_OUT_TYPES:
             event["flow_delta"] = -amount
-            event["capital_event_flag"] = 1
-        elif trade_type in MANUAL_ADJUSTMENT_TYPES:
-            event["flow_delta"] = float(log.get("cash_delta") or 0)
             event["capital_event_flag"] = 1
         elif trade_type in INTEREST_TYPES and not interest_rows:
             event["interest_delta"] = amount

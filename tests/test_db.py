@@ -17,6 +17,7 @@ from src.db import (
     BACKEND_SUPABASE,
     _demo_workspace_blueprint,
     _select_initial_backend,
+    _supabase_adjust_cash_balance,
     _sync_legacy_interest_history_for_buy,
     _run_with_fallback,
     _should_fallback,
@@ -695,6 +696,25 @@ class SupabaseTradeCashRuleTests(unittest.TestCase):
 
         update_cash_balance_mock.assert_called_once_with(7, -40000.0, allow_negative=True)
 
+    @patch("src.db._supabase_insert_trade_log")
+    @patch("src.db._supabase_update_cash_balance")
+    @patch("src.db._supabase_get_account", return_value={"id": 7, "cash_balance": 1000.0})
+    def test_supabase_adjust_cash_balance_updates_balance_without_trade_log(
+        self,
+        _get_account_mock,
+        update_cash_balance_mock,
+        insert_trade_log_mock,
+    ) -> None:
+        _supabase_adjust_cash_balance(
+            7,
+            target_amount=1300.0,
+            trade_date="2026-05-11",
+            notes="대시보드 현금 카드 조정",
+        )
+
+        update_cash_balance_mock.assert_called_once_with(7, 1300.0)
+        insert_trade_log_mock.assert_not_called()
+
 
 class SQLiteRealtimeQuotePersistenceTests(unittest.TestCase):
     """SQLite 실시간 quote overwrite/append 동작을 검증한다."""
@@ -773,6 +793,27 @@ class SQLiteRealtimeQuotePersistenceTests(unittest.TestCase):
                 self.assertEqual(float(account["cash_balance"]), -40000.0)
                 self.assertEqual(len(holdings), 1)
                 self.assertEqual(float(holdings[0]["quantity"]), 2.0)
+
+    def test_adjust_cash_balance_updates_account_without_trade_log(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            database_path = Path(temp_dir) / "portfolio.db"
+            with patch.dict(os.environ, {"RETIREMENT_DB_PATH": str(database_path)}, clear=False):
+                sqlite_module = importlib.reload(sqlite_db)
+                sqlite_module.initialize_database()
+                account_id = sqlite_module.create_account("user-1::테스트 계좌", opening_cash=500000)
+
+                sqlite_module.adjust_cash_balance(
+                    account_id,
+                    target_amount=620000,
+                    trade_date="2026-05-11",
+                    notes="현금 카드 수정",
+                )
+
+                account = sqlite_module.get_account(account_id)
+                trade_logs = sqlite_module.list_trade_logs(account_id)
+
+                self.assertEqual(float(account["cash_balance"]), 620000.0)
+                self.assertEqual(trade_logs, [])
 
 
 if __name__ == "__main__":

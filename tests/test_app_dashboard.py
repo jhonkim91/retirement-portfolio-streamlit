@@ -104,6 +104,10 @@ class TradeFormResetTests(unittest.TestCase):
         self.assertEqual(first, "거래를 저장했습니다.")
         self.assertEqual(second, "")
 
+    def test_is_visible_trade_log_hides_cash_adjustment_rows(self) -> None:
+        self.assertFalse(dashboard_app.is_visible_trade_log({"trade_type": "cash_adjustment"}))
+        self.assertTrue(dashboard_app.is_visible_trade_log({"trade_type": "buy"}))
+
 
 class HoldingsTableDisplayTests(unittest.TestCase):
     """현재 보유 종목 표 표시 포맷과 컬러 스타일을 검증한다."""

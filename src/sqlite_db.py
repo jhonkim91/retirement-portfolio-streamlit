@@ -866,7 +866,7 @@ def adjust_cash_balance(
     trade_date: str,
     notes: str,
 ) -> None:
-    """목표 현금 잔액에 맞추도록 현금 조정 이벤트를 기록한다."""
+    """목표 현금 잔액으로 계좌 현금을 직접 맞춘다."""
 
     next_cash = float(target_amount or 0)
     if next_cash < 0:
@@ -876,7 +876,6 @@ def adjust_cash_balance(
     if not cleaned_notes:
         raise ValueError("현금 조정 사유를 입력해 주세요.")
 
-    timestamp = now_iso()
     with connect() as connection:
         account_row = _require_account(connection, account_id)
         current_cash = float(account_row["cash_balance"] or 0)
@@ -884,23 +883,7 @@ def adjust_cash_balance(
         if abs(cash_delta) <= 0.000001:
             raise ValueError("현재 현금과 동일해 조정할 내용이 없습니다.")
 
-        _update_account_cash_balance(connection, account_id, next_cash, timestamp)
-        _insert_trade_log(
-            connection,
-            account_id=account_id,
-            symbol="",
-            product_name=_cash_event_label("cash_adjustment"),
-            trade_type="cash_adjustment",
-            asset_type="cash",
-            quantity=0,
-            price=0,
-            total_amount=abs(cash_delta),
-            cash_delta=cash_delta,
-            trade_date=trade_date,
-            notes=cleaned_notes,
-            created_at=timestamp,
-            metadata_json=_metadata_json({"target_amount": round(next_cash, 4)}),
-        )
+        _update_account_cash_balance(connection, account_id, next_cash, now_iso())
         connection.commit()
 
 

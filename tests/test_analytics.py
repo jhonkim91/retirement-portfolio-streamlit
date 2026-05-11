@@ -92,6 +92,22 @@ class AccountSummaryTests(unittest.TestCase):
         self.assertEqual(summary["contribution_principal"], 800_000.0)
         self.assertEqual(summary["total_principal"], 800_000.0)
 
+    def test_account_summary_ignores_cash_adjustment_logs_in_flow_metrics(self) -> None:
+        account = {"cash_balance": 900_000}
+        holdings = [
+            {"quantity": 5, "avg_cost": 100_000, "current_price": 110_000, "asset_type": "risk"},
+        ]
+        trade_logs = [
+            {"trade_type": "personal_deposit", "trade_date": "2026-01-01", "total_amount": 700_000, "cash_delta": 700_000},
+            {"trade_type": "cash_adjustment", "trade_date": "2026-01-02", "total_amount": 200_000, "cash_delta": 200_000},
+        ]
+
+        summary = account_summary(account, holdings, trade_logs=trade_logs, interest_rows=[])
+
+        self.assertEqual(summary["total_principal"], 700_000.0)
+        self.assertEqual(summary["net_flow"], 700_000.0)
+        self.assertEqual(summary["cash_flow"]["net_adjustment"], 0.0)
+
     def test_allocation_treemap_nodes_groups_holdings_and_cash(self) -> None:
         account = {"cash_balance": 300_000}
         holdings = [

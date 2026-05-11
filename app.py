@@ -437,6 +437,12 @@ def label_transaction_type(value: Any) -> str:
     return TRADE_TYPE_LABELS.get(text, CASH_FLOW_TYPE_LABELS.get(text, text))
 
 
+def is_visible_trade_log(log: dict[str, Any]) -> bool:
+    """거래 화면에 노출할 로그만 남긴다."""
+
+    return str(log.get("trade_type") or "").strip().lower() != "cash_adjustment"
+
+
 def label_table_name(value: Any) -> str:
     return TABLE_LABELS.get(str(value), str(value))
 
@@ -3360,6 +3366,7 @@ def trade_entry_page(account: dict[str, Any], holdings: list[dict[str, Any]], ac
                 st.rerun()
 
     logs = list_trade_logs(int(account["id"]))
+    visible_logs = [row for row in logs if is_visible_trade_log(row)]
     realized = realized_summary(logs)
 
     metric_1, metric_2, metric_3, metric_4 = st.columns(4)
@@ -3398,9 +3405,9 @@ def trade_entry_page(account: dict[str, Any], holdings: list[dict[str, Any]], ac
         st.subheader("실현 손익 요약")
         st.dataframe(position_frame, width="stretch", hide_index=True, height=280)
 
-    if logs:
+    if visible_logs:
         account_name_map = {int(item["id"]): account_label(item) for item in accounts}
-        log_frame = pd.DataFrame(logs)
+        log_frame = pd.DataFrame(visible_logs)
         for column_name in ("counterparty_account_id", "cash_delta"):
             if column_name not in log_frame.columns:
                 log_frame[column_name] = None if column_name == "counterparty_account_id" else 0.0
@@ -3444,13 +3451,11 @@ def data_page(account: dict[str, Any], rollup_state: dict[str, Any] | None = Non
     holdings = list_holdings(account_id)
     worker_status = get_realtime_worker_status(account_id) or {}
     trade_logs = list_trade_logs(account_id)
+    visible_trade_logs = [row for row in trade_logs if is_visible_trade_log(row)]
     snapshot_rows = list_account_snapshots(account_id)
     last_quote_at = latest_realtime_quote_time(account_id)
     snapshot_date = str((rollup_state or {}).get("snapshot_date") or date.today().isoformat()).strip()
     summary = account_summary(account, holdings, trade_logs=trade_logs)
-    cash_adjustment_logs = [
-        row for row in trade_logs if str(row.get("trade_type") or "").strip().lower() == "cash_adjustment"
-    ]
     cumulative_frame = cumulative_contribution_frame(
         trade_logs=trade_logs,
         snapshots=snapshot_rows,
@@ -3466,8 +3471,8 @@ def data_page(account: dict[str, Any], rollup_state: dict[str, Any] | None = Non
         st.caption(f"기준 계좌: `{account['name']}`")
         status_col_1, status_col_2, status_col_3, status_col_4 = st.columns(4)
         status_col_1.metric("데이터 저장소", "Supabase" if status["name"] == "supabase" else "로컬 SQLite")
-        status_col_2.metric("거래 기록", f"{len(trade_logs):,}건", latest_date_text(trade_logs, "trade_date"))
-        status_col_3.metric("현금 수정 순반영", format_won(summary["cash_flow"]["net_adjustment"]))
+        status_col_2.metric("거래 기록", f"{len(visible_trade_logs):,}건", latest_date_text(visible_trade_logs, "trade_date"))
+        status_col_3.metric("현재 보유현금", format_won(summary["cash"]))
         status_col_4.metric("자산 스냅샷", f"{len(snapshot_rows):,}건", latest_date_text(snapshot_rows, "snapshot_date"))
         quote_col_1, quote_col_2, quote_col_3 = st.columns(3)
         quote_col_1.metric(
@@ -3485,11 +3490,6 @@ def data_page(account: dict[str, Any], rollup_state: dict[str, Any] | None = Non
             str(last_quote_at or "-"),
             str(worker_status.get("last_quote_at") or "-"),
         )
-        if cash_adjustment_logs:
-            st.caption(
-                f"현금 수정 기록 `{len(cash_adjustment_logs):,}`건이 현재 현금과 평가액에 반영됩니다. "
-                f"최근 수정일: `{latest_date_text(cash_adjustment_logs, 'trade_date')}`"
-            )
         if status.get("override", "auto") != "auto":
             st.caption(f"백엔드 강제 설정: `{status['override']}`")
         st.caption(f"Supabase 설정 감지: `{'예' if status.get('has_supabase_config') else '아니오'}`")
@@ -3529,7 +3529,6 @@ def data_page(account: dict[str, Any], rollup_state: dict[str, Any] | None = Non
     with st.container(border=True):
         st.subheader("원금 누적 기록")
         st.caption("최초 입금일부터 현재까지 누적 원금과 현재 평가액 기준 수익률을 함께 봅니다.")
-        st.caption("현금 수정은 원금이 아닌 순유입 조정으로 반영합니다.")
         st.caption("연금(IRP/퇴직연금) 계좌는 회사 납입금을 투자원금에 포함하고, 현재 수익률은 현재 평가액을 기준으로 계산합니다.")
         if cumulative_frame.empty:
             st.info("누적 원금 기록을 만들 현금 흐름 데이터가 아직 없습니다.")
