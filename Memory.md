@@ -1028,7 +1028,34 @@ streamlit run app.py
   - 전체 테스트 `73`건 통과
   - 저장소만 푸시되면 GitHub Actions에서 바로 사용할 수 있는 상태로 정리됨
 
+## 2026-05-11 gh CLI 설치 및 GitHub Actions KIS worker 실운영 점검
+- 변경 파일: `scripts/run_kis_quote_worker.py`, `.github/workflows/kis-realtime-worker.yml`, `Memory.md`
+- 변경 내용:
+  - 로컬 `./.local/bin/gh`에 GitHub CLI `2.92.0` 설치 후 device flow로 `jhonkim91` 계정 인증 완료
+  - GitHub Actions secrets에 `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `KIS_APP_KEY`, `KIS_APP_SECRET`, `KIS_ENV=prod` 등록
+  - 첫 수동 실행 `25646136285`(`manual 10분`)은 tick 적재는 됐지만 종료 구간에서 `exit code 137`로 실패하는 것을 확인
+  - 이후 worker에 `SIGTERM`도 `KeyboardInterrupt` 정리 루틴으로 보내도록 보강하고, workflow는 GitHub Actions 전용 `worker_name=kis-quote-worker-github-actions`를 사용한 뒤 종료 후 `post-check` 단계에서 `stopped` 상태를 명시적으로 정리하도록 수정
+  - 수정분은 커밋 `7ee4d458a5e60fc482674c9a3beda2ff978cbda6`(`Fix GitHub worker shutdown handling`)로 `origin/main`에 푸시
+- 설치:
+  - 로컬 도구: `./.local/bin/gh` (공식 GitHub release tarball 사용)
+- 검증:
+  - `./.local/bin/gh auth status`
+  - `./.local/bin/gh secret list`
+  - `./.local/bin/gh workflow run "KIS Realtime Worker" -f segment=manual -f run_minutes=10 -f backend=supabase`
+  - `./.local/bin/gh workflow run "KIS Realtime Worker" -f segment=manual -f run_minutes=2 -f backend=supabase`
+  - `./.local/bin/gh run watch 25646510735 --interval 10 --exit-status`
+  - `./.local/bin/gh run view 25646510735 --log --job 75276348989`
+  - `python3 - <<'PY' ... requests.get(.../rest/v1/realtime_worker_status) ... PY`
+  - `python3 - <<'PY' ... requests.get(.../rest/v1/realtime_price_ticks) ... PY`
+- 결과:
+  - 첫 run `25646136285`는 `11m13s` 후 실패했지만 `realtime_price_ticks` 누적이 `247건`까지 증가해 GitHub-hosted runner에서도 실적재가 일어나는 것은 확인
+  - 수정 후 run `25646510735`는 `3m8s` 만에 `success`로 종료
+  - 완료 직후 `realtime_worker_status`는 계좌 `23`, `24`, `25`, `26` 모두 `worker_name=kis-quote-worker-github-actions`, `connection_state=stopped`로 정리
+  - 같은 시점 `realtime_price_ticks` 누적은 `397건`
+  - run `25646510735`의 post-check 로그에서 `worker_status [...] connection_state='stopped'`, `realtime_price_ticks_count 0-0/397` 확인
+  - GitHub Actions 경고로 `actions/checkout@v4`, `actions/setup-python@v5`의 `Node.js 20` deprecation notice가 출력되었으나 실행 자체에는 영향 없음
+
 ## 다음 작업 후보
-- GitHub 저장소 Actions secrets에 `KIS_APP_KEY`, `KIS_APP_SECRET`, `KIS_ENV` 추가
-- `KIS Realtime Worker` workflow를 수동 `manual 10~15분`으로 1회 실행해 실제 GitHub-hosted runner 경로 점검
+- 다음 장중 스케줄(`UTC 00:00`, `UTC 02:55`) 자동 실행 결과를 1회 더 확인
 - 대시보드 `자산 배분` 상태 칩이 실제 운영 계좌에서 `실시간 연동 중`으로 표시되는지 추가 화면 확인
+- 필요 시 GitHub Actions의 Node 24 전환 전 `actions/checkout`, `actions/setup-python` 상위 메이저 업데이트 검토
