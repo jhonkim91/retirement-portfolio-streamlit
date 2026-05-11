@@ -1001,6 +1001,32 @@ h6 {
     min-height: 2.65rem;
 }
 
+.st-key-trade-search-suggestions [data-testid="stButton"] > button {
+    min-height: 4.25rem;
+    border-radius: 12px;
+    border: 1px solid transparent;
+    background: transparent;
+    box-shadow: none;
+    justify-content: flex-start;
+    align-items: flex-start;
+    padding: 0.8rem 0.9rem;
+}
+
+.st-key-trade-search-suggestions [data-testid="stButton"] > button:hover,
+.st-key-trade-search-suggestions [data-testid="stButton"] > button:focus,
+.st-key-trade-search-suggestions [data-testid="stButton"] > button:focus-visible {
+    background: color-mix(in srgb, var(--theme-primary) 10%, white);
+    border-color: var(--border-emphasis);
+}
+
+.st-key-trade-search-suggestions [data-testid="stButton"] > button p {
+    margin: 0;
+    width: 100%;
+    text-align: left;
+    white-space: pre-line;
+    line-height: 1.5;
+}
+
 /* 반응형 */
 @media (max-width: 860px) {
     .block-container:has(.auth-page-shell) {

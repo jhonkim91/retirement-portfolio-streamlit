@@ -128,6 +128,50 @@ class TradeFormResetTests(unittest.TestCase):
         self.assertIn("삼성전자", label)
         self.assertIn("150,000원", label)
 
+    def test_trade_and_cash_flow_copy_helpers_match_requested_labels(self) -> None:
+        """거래/현금흐름 카드 문구 헬퍼가 현재 화면 표기를 유지한다."""
+
+        self.assertEqual(dashboard_app.trade_submit_button_label("buy"), "상품 추가")
+        self.assertEqual(dashboard_app.trade_submit_button_label("sell"), "상품 저장")
+        self.assertEqual(dashboard_app.trade_price_label("buy"), "매입가/기준가")
+        self.assertEqual(dashboard_app.trade_date_label("sell"), "매매일")
+        self.assertEqual(dashboard_app.cash_flow_panel_title("employer_deposit"), "회사 현금입금")
+        self.assertIn("퇴직금 원금", dashboard_app.cash_flow_panel_caption("employer_deposit"))
+        self.assertEqual(dashboard_app.cash_flow_submit_label("withdraw"), "출금 기록")
+
+    def test_format_trade_log_cell_formats_numeric_values(self) -> None:
+        """거래 기록 표 숫자 컬럼은 천 단위 구분으로 노출한다."""
+
+        log = {
+            "quantity": 12.5,
+            "price": 10400,
+            "total_amount": 130000,
+            "cash_delta": -130000,
+        }
+
+        self.assertEqual(dashboard_app.format_trade_log_cell(log, "quantity", {}), "12.5")
+        self.assertEqual(dashboard_app.format_trade_log_cell(log, "price", {}), "10,400")
+        self.assertEqual(dashboard_app.format_trade_log_cell(log, "total_amount", {}), "130,000")
+        self.assertEqual(dashboard_app.format_trade_log_cell(log, "cash_delta", {}), "-130,000")
+
+    def test_product_search_option_label_builds_two_line_summary(self) -> None:
+        """자동완성 후보 라벨은 이름과 부가 정보를 두 줄로 묶는다."""
+
+        label = dashboard_app.product_search_option_label(
+            {
+                "name": "삼성전자",
+                "code": "005930",
+                "exchange": "KRX",
+                "source": "Naver",
+            }
+        )
+
+        self.assertIn("삼성전자", label)
+        self.assertIn("\n", label)
+        self.assertIn("005930", label)
+        self.assertIn("국내", label)
+        self.assertIn("Naver", label)
+
 
 class HoldingsTableDisplayTests(unittest.TestCase):
     """현재 보유 종목 표 표시 포맷과 컬러 스타일을 검증한다."""
