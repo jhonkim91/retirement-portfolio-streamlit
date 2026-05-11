@@ -30,6 +30,7 @@
 - [x] 사용자별 DB 조회 캐시 및 이자 조회 제거 반영
 - [x] 외부 CDN 폰트 import 제거 및 시스템 폰트 스택 전환
 - [x] 거래 페이지 계좌 간 이체 기능 삭제
+- [x] 보유현금 수정 로그 비노출 및 거래 흐름 분리
 - [ ] 다음 장중 자동 스케줄(`UTC 00:00`, `UTC 02:55`) 1회 추가 확인
 - [x] 배포 대시보드에서 자산 배분 상태 칩이 실제로 `실시간 연동 중`으로 보이는지 화면 검증
 
@@ -137,13 +138,16 @@ streamlit run app.py
 - `src/db.py` 데모 블루프린트의 `transfers` 예시와 `seed_demo_workspace()` 이체 생성 루프를 제거해 데모 작업공간도 더 이상 계좌 이체 이벤트를 만들지 않도록 맞춤
 - `tests/test_db.py`에서 데모 시드 회귀를 계좌 이체 없는 블루프린트 기준으로 갱신
 - 앱 코드 커밋 `83861ad`를 `origin/main`에 푸시했고, 원격 Streamlit 앱 `거래` 페이지에서 로그인/작업공간/`Supabase` 저장소 상태 검증을 다시 통과함
+- 대시보드 `보유 현금` 카드 수정이 `trade_logs`에 `cash_adjustment` 행을 남기지 않도록 `src/db.py`/`src/sqlite_db.py` 조정 경로를 바꾸고, 기존 `cash_adjustment` 이력도 거래 화면에서는 숨기도록 정리
+- `src/analytics.py`에서는 과거 `cash_adjustment` 로그를 원금/순유입 계산에서 제외해, 보유현금은 현재 잔액으로만 자산배분·평가손익·원금대비 수익률에 반영되도록 정리
+- 앱 코드 커밋 `e7a445c`를 `origin/main`에 푸시했고, 원격 Streamlit 앱 `거래`/`데이터` 페이지에서 로그인·작업공간·`Supabase` 저장소 상태 검증을 다시 통과함
 - 배포 웹 검증이 불안정하던 원인을 `반복 로그인에 따른 인증 rate limit`과 `실패 시 마지막 화면 증거 부족`으로 분리했고, `scripts/verify_streamlit_deployment.py`에 `--storage-state`, `--debug-dir` 옵션과 `auth_error`/`rate_limited` 진단 필드를 추가
 - 검증 실패 시 단계별 `txt/png/url` 아티팩트를 남기도록 보강해, 로그인 실패/페이지 전환 실패/배포 미반영 상태를 이후 세션에서도 바로 재확인할 수 있게 정리
 
 ## 최신 검증 결과
 - `python3 -m compileall app.py src scripts tests` 성공
 - `python3 -m unittest discover -s tests -p "test_*.py"` 성공
-- 최신 테스트 수: `104`건 통과
+- 최신 테스트 수: `108`건 통과
 - 배포 검증 산출물:
   - `artifacts/deploy-verify-realtime-data-20260511.txt`
   - `artifacts/deploy-verify-realtime-data-20260511.png`
@@ -180,6 +184,13 @@ streamlit run app.py
   - `python3 -m unittest discover -s tests -p "test_*.py"` 성공 (`104`건)
   - `./.venv/bin/python scripts/verify_streamlit_deployment.py --page trades --expect-backend supabase --debug-dir artifacts/deploy-verify-remove-transfer-83861ad` 성공
   - 원격 검증 결과: `backend_storage=supabase`, `logged_in=true`, `workspace_visible=true`, `target_page="trades"`
+- 이번 턴 보유현금 수정 로그 분리 검증:
+  - `python3 -m compileall app.py src tests` 성공
+  - `python3 -m unittest tests.test_db tests.test_analytics tests.test_app_dashboard` 성공 (`70`건)
+  - `python3 -m unittest discover -s tests -p "test_*.py"` 성공 (`108`건)
+  - `./.venv/bin/python scripts/verify_streamlit_deployment.py --page trades --expect-backend supabase --debug-dir artifacts/deploy-verify-cash-adjustment-e7a445c` 성공
+  - `./.venv/bin/python scripts/verify_streamlit_deployment.py --page data --expect-backend supabase --debug-dir artifacts/deploy-verify-cash-adjustment-data-e7a445c` 성공
+  - 원격 검증 결과: `backend_storage=supabase`, `logged_in=true`, `workspace_visible=true`, `target_page in {"trades","data"}`
 - 이번 턴 디자인 토큰/CSS 구조 검증:
   - `python3 -m compileall app.py tests/test_app_dashboard.py` 성공
   - `python3 -m unittest tests.test_app_dashboard` 성공 (`22`건)
