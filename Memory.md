@@ -122,6 +122,7 @@ streamlit run app.py
 - `app.py` 초기 로딩에서 `src.market` import 직후 다시 호출하던 `importlib.reload()`를 제거해, Streamlit 재실행마다 중복 모듈 초기화 비용이 생기던 경로를 정리
 - `src/market.py`의 `search_products()`를 정규화 질의값 기준 내부 캐시(`ttl=3600`, `max_entries=300`)로 감싸, 동일 검색어의 공백/표기 차이로 외부 검색 API를 반복 호출하던 경로를 줄임
 - `tests/test_market.py`에 `" 삼성전자 "`와 `"삼성전자"`가 동일 캐시 엔트리를 재사용하는지 검증하는 회귀 테스트를 추가
+- 검색 캐시 보강 커밋 `e2dd5fd`를 `origin/main`에 푸시했고, 원격 Streamlit 앱 대시보드 로그인/저장소 검증을 다시 통과함
 - 배포 웹 검증이 불안정하던 원인을 `반복 로그인에 따른 인증 rate limit`과 `실패 시 마지막 화면 증거 부족`으로 분리했고, `scripts/verify_streamlit_deployment.py`에 `--storage-state`, `--debug-dir` 옵션과 `auth_error`/`rate_limited` 진단 필드를 추가
 - 검증 실패 시 단계별 `txt/png/url` 아티팩트를 남기도록 보강해, 로그인 실패/페이지 전환 실패/배포 미반영 상태를 이후 세션에서도 바로 재확인할 수 있게 정리
 
@@ -227,6 +228,11 @@ streamlit run app.py
   - `python3 -m unittest tests.test_market` 성공 (`11`건)
   - `python3 -m compileall app.py src scripts tests` 성공
   - `python3 -m unittest discover -s tests -p "test_*.py"` 성공 (`101`건)
+- 이번 턴 검색 캐시 배포 검증:
+  - 배포 커밋 `e2dd5fd` 푸시 후 `git push origin main` 기준 원격 반영
+  - 로컬 `.streamlit/secrets.toml`의 검증 계정 값을 환경 변수로 주입해 원격 검증 실행
+  - `./.venv/bin/python scripts/verify_streamlit_deployment.py --page dashboard --expect-backend supabase --debug-dir artifacts/deploy-verify-search-cache-e2dd5fd` 성공
+  - 원격 검증 결과: `backend_storage=supabase`, `allocation_status="데이터 대기"`, 로그인/작업공간 노출 정상
 - 이번 턴 매수 현금 부족 차단 해제 검증:
   - `python3 -m compileall src/db.py src/sqlite_db.py tests/test_db.py` 성공
   - `python3 -m unittest tests.test_db` 성공 (`17`건)
