@@ -687,7 +687,7 @@ def record_trade(
     trade_date: str,
     notes: str = "",
 ) -> None:
-    """매수 또는 매도 거래를 저장하고 현금 잔액을 함께 갱신한다."""
+    """매수 또는 매도 거래를 저장하고 보유 종목만 갱신한다."""
 
     cleaned_symbol = str(symbol or "").strip().upper()
     cleaned_name = str(product_name or "").strip()
@@ -713,16 +713,11 @@ def record_trade(
     timestamp = now_iso()
 
     with connect() as connection:
-        account_row = _require_account(connection, account_id)
+        _require_account(connection, account_id)
         holding_row = connection.execute(
             "SELECT * FROM holdings WHERE account_id = ? AND symbol = ?",
             (account_id, cleaned_symbol),
         ).fetchone()
-
-        current_cash = float(account_row["cash_balance"] or 0)
-        next_cash = current_cash + cash_delta
-        if cleaned_type != "buy" and next_cash < -0.000001:
-            raise ValueError("현금 잔액 계산에 실패했습니다.")
 
         if cleaned_type == "buy":
             if holding_row:
@@ -788,10 +783,9 @@ def record_trade(
                     avg_cost if next_quantity > 0 else 0,
                     timestamp,
                     int(holding_row["id"]),
-                ),
-            )
+                    ),
+                )
 
-        _update_account_cash_balance(connection, account_id, next_cash, timestamp)
         _insert_trade_log(
             connection,
             account_id=account_id,

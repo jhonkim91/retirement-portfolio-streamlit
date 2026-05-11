@@ -308,16 +308,16 @@ def _interest_amount_matches(left: float, right: float) -> bool:
 def _daily_interest_row_amount_by_date(
     interest_rows: list[dict[str, Any]],
     *,
-    target_date: date,
+    target_date: date | None,
 ) -> dict[str, float]:
     """daily_interest 테이블 값을 날짜별로 정리한다."""
 
-    target_iso = target_date.isoformat()
+    target_iso = target_date.isoformat() if target_date is not None else ""
     existing: dict[str, float] = {}
 
     for row in interest_rows:
         interest_date = str(row.get("date") or row.get("interest_date") or "").strip()
-        if not interest_date or interest_date > target_iso:
+        if not interest_date or (target_iso and interest_date > target_iso):
             continue
         existing[interest_date] = float(row.get("interest_amount") or 0)
 
@@ -327,18 +327,18 @@ def _daily_interest_row_amount_by_date(
 def _trade_interest_amount_by_date(
     trade_logs: list[dict[str, Any]],
     *,
-    target_date: date,
+    target_date: date | None,
 ) -> dict[str, float]:
     """자동 적립된 interest trade log 금액을 날짜별로 정리한다."""
 
-    target_iso = target_date.isoformat()
+    target_iso = target_date.isoformat() if target_date is not None else ""
     existing: dict[str, float] = {}
 
     for log in trade_logs:
         if not _is_auto_daily_interest_trade(log):
             continue
         trade_date = str(log.get("trade_date") or "").strip()
-        if not trade_date or trade_date > target_iso:
+        if not trade_date or (target_iso and trade_date > target_iso):
             continue
         amount = abs(float(log.get("cash_delta") or 0)) or abs(float(log.get("total_amount") or 0))
         if amount > 0:
@@ -526,16 +526,16 @@ def _cash_delta_by_date(
     trade_logs: list[dict[str, Any]],
     interest_rows: list[dict[str, Any]],
     *,
-    target_date: date,
+    target_date: date | None,
 ) -> dict[str, float]:
     """거래 원장과 orphan 이자 행을 합쳐 날짜별 현금 증감을 계산한다."""
 
-    target_iso = target_date.isoformat()
+    target_iso = target_date.isoformat() if target_date is not None else ""
     delta_by_date: dict[str, float] = {}
 
     for log in trade_logs:
         trade_date = str(log.get("trade_date") or "").strip()
-        if not trade_date or trade_date > target_iso:
+        if not trade_date or (target_iso and trade_date > target_iso):
             continue
         delta_by_date[trade_date] = delta_by_date.get(trade_date, 0.0) + float(log.get("cash_delta") or 0)
 
@@ -562,23 +562,43 @@ def _historical_cash_balance_by_date(
     if not snapshot_dates:
         return {}
 
-    trade_interest_by_date = _trade_interest_amount_by_date(trade_logs, target_date=target_date)
-    row_interest_by_date = _daily_interest_row_amount_by_date(interest_rows, target_date=target_date)
+    trade_interest_by_date = _trade_interest_amount_by_date(trade_logs, target_date=None)
+    row_interest_by_date = _daily_interest_row_amount_by_date(interest_rows, target_date=None)
     orphaned_interest_total = sum(
         amount
         for interest_date, amount in row_interest_by_date.items()
         if interest_date not in trade_interest_by_date
     )
     current_cash = float(account.get("cash_balance") or 0)
-    ledger_cash_delta_total = sum(float(log.get("cash_delta") or 0) for log in trade_logs)
+    ledger_cash_delta_total = sum(
+        float(log.get("cash_delta") or 0)
+        for log in trade_logs
+        if _parse_iso_date(log.get("trade_date")) is not None
+    )
     opening_cash = current_cash - ledger_cash_delta_total - orphaned_interest_total
-    delta_by_date = _cash_delta_by_date(trade_logs, interest_rows, target_date=target_date)
+    delta_by_date = _cash_delta_by_date(trade_logs, interest_rows, target_date=None)
 
     snapshot_date_values = [date.fromisoformat(item) for item in snapshot_dates]
     account_created_date = _parse_iso_date(account.get("created_at"))
+    earliest_cash_event_date: date | None = None
+    for log in trade_logs:
+        trade_date = _parse_iso_date(log.get("trade_date"))
+        if trade_date is None:
+            continue
+        if earliest_cash_event_date is None or trade_date < earliest_cash_event_date:
+            earliest_cash_event_date = trade_date
+    for row in interest_rows:
+        interest_date = _parse_iso_date(row.get("date") or row.get("interest_date"))
+        if interest_date is None:
+            continue
+        if earliest_cash_event_date is None or interest_date < earliest_cash_event_date:
+            earliest_cash_event_date = interest_date
+
     iter_start = min(snapshot_date_values)
     if account_created_date and account_created_date < iter_start:
         iter_start = account_created_date
+    if earliest_cash_event_date and earliest_cash_event_date < iter_start:
+        iter_start = earliest_cash_event_date
 
     running_cash = opening_cash
     result: dict[str, float] = {}
@@ -1867,11 +1887,6 @@ def _supabase_record_trade(
     holdings = _supabase_request("GET", "holdings", filters={"account_id": f"eq.{account_id}"}) or []
     holdings = [row for row in holdings if row.get("symbol") == cleaned_symbol]
     holding_row = holdings[0] if holdings else None
-    cash_balance = float(account.get("cash_balance", 0) or 0)
-    next_cash = cash_balance + cash_delta
-
-    if cleaned_type != "buy" and next_cash < -0.000001:
-        raise ValueError("현금 잔액 계산에 실패했습니다.")
 
     if cleaned_type == "buy":
         if holding_row:
@@ -1932,7 +1947,6 @@ def _supabase_record_trade(
             prefer_return="minimal",
         )
 
-    _supabase_update_cash_balance(account_id, next_cash, allow_negative=cleaned_type == "buy")
     _supabase_insert_trade_log(
         account_id=account_id,
         symbol=cleaned_symbol,

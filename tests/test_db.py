@@ -537,6 +537,153 @@ class SyncAccountRollupTests(unittest.TestCase):
         self.assertEqual(result["historical_snapshots_updated"], 3)
         self.assertTrue(result["snapshot_updated"])
 
+    @patch("src.db.record_account_snapshot")
+    @patch(
+        "src.db.list_account_snapshots",
+        return_value=[
+            {
+                "snapshot_date": "2026-05-09",
+                "cash_balance": 750.0,
+                "market_value": 0.0,
+                "total_value": 750.0,
+                "total_cost": 0.0,
+            },
+            {
+                "snapshot_date": "2026-05-10",
+                "cash_balance": 750.0,
+                "market_value": 0.0,
+                "total_value": 750.0,
+                "total_cost": 0.0,
+            },
+        ],
+    )
+    @patch("src.db.list_daily_interest", return_value=[])
+    @patch(
+        "src.db.list_trade_logs",
+        return_value=[
+            {"trade_type": "personal_deposit", "trade_date": "2026-05-09", "cash_delta": 1000.0, "total_amount": 1000.0},
+            {"trade_type": "buy", "trade_date": "2026-05-11", "cash_delta": -250.0, "total_amount": 250.0, "quantity": 1.0, "price": 250.0, "symbol": "AAA"},
+        ],
+    )
+    @patch("src.db._demo_account_totals", return_value=(750.0, 250.0, 250.0))
+    @patch("src.db.get_account")
+    def test_sync_account_rollup_keeps_future_trade_deltas_out_of_prior_cash_snapshots(
+        self,
+        get_account_mock,
+        _demo_account_totals_mock,
+        _list_trade_logs_mock,
+        _list_daily_interest_mock,
+        _list_account_snapshots_mock,
+        record_snapshot_mock,
+    ) -> None:
+        """기준일 이후 거래는 과거 현금 스냅샷 재계산에 섞이면 안 된다."""
+
+        get_account_mock.return_value = {
+            "id": 7,
+            "cash_balance": 750.0,
+            "created_at": "2026-05-09T09:00:00",
+        }
+
+        result = sync_account_rollup(7, today_date="2026-05-11")
+
+        self.assertEqual(
+            record_snapshot_mock.call_args_list,
+            [
+                unittest.mock.call(
+                    7,
+                    snapshot_date="2026-05-09",
+                    cash_balance=1000.0,
+                    market_value=0.0,
+                    total_value=1000.0,
+                    total_cost=0.0,
+                ),
+                unittest.mock.call(
+                    7,
+                    snapshot_date="2026-05-10",
+                    cash_balance=1000.0,
+                    market_value=0.0,
+                    total_value=1000.0,
+                    total_cost=0.0,
+                ),
+                unittest.mock.call(
+                    7,
+                    snapshot_date="2026-05-11",
+                    cash_balance=750.0,
+                    market_value=250.0,
+                    total_value=1000.0,
+                    total_cost=250.0,
+                ),
+            ],
+        )
+        self.assertEqual(result["historical_snapshots_updated"], 2)
+        self.assertTrue(result["snapshot_updated"])
+
+    @patch("src.db.record_account_snapshot")
+    @patch(
+        "src.db.list_account_snapshots",
+        return_value=[
+            {
+                "snapshot_date": "2026-05-09",
+                "cash_balance": 0.0,
+                "market_value": 200.0,
+                "total_value": 200.0,
+                "total_cost": 0.0,
+            },
+        ],
+    )
+    @patch("src.db.list_daily_interest", return_value=[])
+    @patch(
+        "src.db.list_trade_logs",
+        return_value=[
+            {"trade_type": "personal_deposit", "trade_date": "2026-05-01", "cash_delta": 1000.0, "total_amount": 1000.0},
+            {"trade_type": "buy", "trade_date": "2026-05-02", "cash_delta": -200.0, "total_amount": 200.0, "quantity": 1.0, "price": 200.0, "symbol": "AAA"},
+        ],
+    )
+    @patch("src.db._demo_account_totals", return_value=(800.0, 200.0, 200.0))
+    @patch("src.db.get_account")
+    def test_sync_account_rollup_includes_backdated_trades_before_account_created_at(
+        self,
+        get_account_mock,
+        _demo_account_totals_mock,
+        _list_trade_logs_mock,
+        _list_daily_interest_mock,
+        _list_account_snapshots_mock,
+        record_snapshot_mock,
+    ) -> None:
+        """계좌 생성 이후에 입력했더라도 거래일이 더 과거면 스냅샷 재계산에 포함해야 한다."""
+
+        get_account_mock.return_value = {
+            "id": 7,
+            "cash_balance": 800.0,
+            "created_at": "2026-05-09T09:00:00",
+        }
+
+        result = sync_account_rollup(7, today_date="2026-05-10")
+
+        self.assertEqual(
+            record_snapshot_mock.call_args_list,
+            [
+                unittest.mock.call(
+                    7,
+                    snapshot_date="2026-05-09",
+                    cash_balance=800.0,
+                    market_value=200.0,
+                    total_value=1000.0,
+                    total_cost=200.0,
+                ),
+                unittest.mock.call(
+                    7,
+                    snapshot_date="2026-05-10",
+                    cash_balance=800.0,
+                    market_value=200.0,
+                    total_value=1000.0,
+                    total_cost=200.0,
+                ),
+            ],
+        )
+        self.assertEqual(result["historical_snapshots_updated"], 1)
+        self.assertTrue(result["snapshot_updated"])
+
 
 class RecordTradeInterestRemovalTests(unittest.TestCase):
     """매수 저장 경로에서 legacy 이자 재동기화가 제거되었는지 검증한다."""
@@ -634,14 +781,14 @@ class LegacyInterestSyncTests(unittest.TestCase):
 
 
 class SupabaseTradeCashRuleTests(unittest.TestCase):
-    """Supabase 매수/이자 재동기화 시 음수 현금 허용 여부를 검증한다."""
+    """Supabase 거래/현금 규칙을 검증한다."""
 
     @patch("src.db._supabase_insert_trade_log")
     @patch("src.db._supabase_update_cash_balance")
     @patch("src.db._supabase_request")
     @patch("src.db._supabase_get_account", return_value={"id": 7, "cash_balance": 0.0})
     @patch("src.db.now_iso", return_value="2026-05-11T09:35:00")
-    def test_supabase_record_trade_allows_negative_cash_balance_for_buy(
+    def test_supabase_record_trade_keeps_manual_cash_balance_unchanged(
         self,
         _now_iso_mock,
         _get_account_mock,
@@ -649,7 +796,7 @@ class SupabaseTradeCashRuleTests(unittest.TestCase):
         update_cash_balance_mock,
         insert_trade_log_mock,
     ) -> None:
-        """Supabase 매수는 helper 단계에서도 음수 현금으로 저장할 수 있어야 한다."""
+        """매수/매도 저장은 보유현금을 자동으로 바꾸지 않아야 한다."""
 
         request_mock.side_effect = [
             [],
@@ -668,7 +815,7 @@ class SupabaseTradeCashRuleTests(unittest.TestCase):
             notes="음수 현금 허용 매수",
         )
 
-        update_cash_balance_mock.assert_called_once_with(7, -1000.0, allow_negative=True)
+        update_cash_balance_mock.assert_not_called()
         insert_trade_log_mock.assert_called_once()
 
     @patch("src.db._supabase_record_daily_interest")
@@ -765,8 +912,8 @@ class SQLiteRealtimeQuotePersistenceTests(unittest.TestCase):
                 self.assertEqual(str(ticks[0]["metadata_json"]), '{"source":"unit-test"}')
                 self.assertEqual(sqlite_module.latest_realtime_quote_time(account_id), "2026-05-10T09:15:00")
 
-    def test_record_trade_allows_buy_even_when_cash_balance_becomes_negative(self) -> None:
-        """수동 현금 조정 흐름을 위해 매수는 보유현금보다 커도 기록할 수 있다."""
+    def test_record_trade_keeps_manual_cash_balance_unchanged_after_buy(self) -> None:
+        """상품 매수는 보유 종목만 반영하고 보유현금은 직접 수정값을 유지한다."""
 
         with tempfile.TemporaryDirectory() as temp_dir:
             database_path = Path(temp_dir) / "portfolio.db"
@@ -790,7 +937,7 @@ class SQLiteRealtimeQuotePersistenceTests(unittest.TestCase):
                 account = sqlite_module.get_account(account_id)
                 holdings = sqlite_module.list_holdings(account_id)
 
-                self.assertEqual(float(account["cash_balance"]), -40000.0)
+                self.assertEqual(float(account["cash_balance"]), 100000.0)
                 self.assertEqual(len(holdings), 1)
                 self.assertEqual(float(holdings[0]["quantity"]), 2.0)
 
