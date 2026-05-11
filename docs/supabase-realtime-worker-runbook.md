@@ -53,6 +53,33 @@ python scripts/run_kis_quote_worker.py --backend supabase
 - 재연결 반복 없이 `KIS WebSocket 연결 완료: <N>개 종목 구독`
 - 장중이면 `realtime_worker_status.last_quote_at`과 `realtime_price_ticks` 행이 증가
 
+### GitHub Actions로 장중 자동 실행
+
+상시 켜진 서버가 없으면 [`.github/workflows/kis-realtime-worker.yml`](.github/workflows/kis-realtime-worker.yml)로 한국 장중을 둘로 나눠 자동 실행할 수 있습니다.
+
+- `UTC 00:00` (`KST 09:00`) 시작, 약 `175분`
+- `UTC 02:55` (`KST 11:55`) 시작, 약 `225분`
+
+필수 GitHub Actions 시크릿:
+
+```text
+SUPABASE_URL
+SUPABASE_SERVICE_ROLE_KEY
+KIS_APP_KEY
+KIS_APP_SECRET
+KIS_ENV
+```
+
+수동 점검:
+
+1. GitHub 저장소 `Actions` 탭 이동
+2. `KIS Realtime Worker` 선택
+3. `Run workflow`
+4. `segment`를 `manual`, `morning`, `afternoon` 중 하나로 선택
+5. `manual`일 때만 `run_minutes`를 넣어 짧게 점검
+
+이 workflow는 `timeout --signal=SIGINT`로 worker를 멈추며, 종료 신호를 받으면 `realtime_worker_status.connection_state=stopped`를 남기도록 구성했습니다.
+
 ## 4. 앱/REST 후속 검증
 
 1. `데이터 > 운영 상태`에서 `KIS WebSocket worker=connected` 확인

@@ -1,0 +1,166 @@
+name: KIS Realtime Worker
+
+on:
+  schedule:
+    - cron: "0 0 * * 1-5"
+    - cron: "55 2 * * 1-5"
+  workflow_dispatch:
+    inputs:
+      segment:
+        description: "실행 구간"
+        required: false
+        default: "manual"
+        type: choice
+        options:
+          - manual
+          - morning
+          - afternoon
+      run_minutes:
+        description: "manual 선택 시 실행 분(1~330)"
+        required: false
+        default: "30"
+        type: string
+      backend:
+        description: "실행 백엔드"
+        required: false
+        default: "supabase"
+        type: choice
+        options:
+          - supabase
+          - auto
+
+jobs:
+  run-kis-realtime-worker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      KIS_APP_KEY: ${{ secrets.KIS_APP_KEY }}
+      KIS_APP_SECRET: ${{ secrets.KIS_APP_SECRET }}
+      KIS_ENV: ${{ secrets.KIS_ENV }}
+      WORKER_BACKEND: ${{ github.event.inputs.backend || 'supabase' }}
+
+    steps:
+      - name: 코드 체크아웃
+        uses: actions/checkout@v4
+
+      - name: Python 설정
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 필수 시크릿 확인
+        shell: bash
+        run: |
+          missing=0
+          for name in SUPABASE_URL SUPABASE_SERVICE_ROLE_KEY KIS_APP_KEY KIS_APP_SECRET; do
+            if [ -z "${!name}" ]; then
+              echo "${name} 시크릿이 필요합니다."
+              missing=1
+            fi
+          done
+          if [ "${missing}" -ne 0 ]; then
+            exit 1
+          fi
+          if [ -z "${KIS_ENV}" ]; then
+            echo "KIS_ENV가 비어 있어 prod로 실행합니다."
+            echo "KIS_ENV=prod" >> "${GITHUB_ENV}"
+          fi
+
+      - name: 장중 세션 길이 계산
+        shell: bash
+        run: |
+          EVENT_NAME="${{ github.event_name }}"
+          SCHEDULE_VALUE="${{ github.event.schedule }}"
+          INPUT_SEGMENT="${{ github.event.inputs.segment }}"
+          INPUT_MINUTES="${{ github.event.inputs.run_minutes }}"
+
+          if [ "${EVENT_NAME}" = "schedule" ]; then
+            if [ "${SCHEDULE_VALUE}" = "0 0 * * 1-5" ]; then
+              echo "WORKER_SECONDS=10500" >> "${GITHUB_ENV}"
+              echo "WORKER_SEGMENT=morning" >> "${GITHUB_ENV}"
+            else
+              echo "WORKER_SECONDS=13500" >> "${GITHUB_ENV}"
+              echo "WORKER_SEGMENT=afternoon" >> "${GITHUB_ENV}"
+            fi
+            exit 0
+          fi
+
+          case "${INPUT_SEGMENT:-manual}" in
+            morning)
+              echo "WORKER_SECONDS=10500" >> "${GITHUB_ENV}"
+              echo "WORKER_SEGMENT=morning" >> "${GITHUB_ENV}"
+              ;;
+            afternoon)
+              echo "WORKER_SECONDS=13500" >> "${GITHUB_ENV}"
+              echo "WORKER_SEGMENT=afternoon" >> "${GITHUB_ENV}"
+              ;;
+            *)
+              MINUTES="${INPUT_MINUTES:-30}"
+              if ! [[ "${MINUTES}" =~ ^[0-9]+$ ]]; then
+                echo "run_minutes는 숫자여야 합니다."
+                exit 1
+              fi
+              if [ "${MINUTES}" -lt 1 ] || [ "${MINUTES}" -gt 330 ]; then
+                echo "run_minutes는 1~330 범위여야 합니다."
+                exit 1
+              fi
+              echo "WORKER_SECONDS=$((MINUTES * 60))" >> "${GITHUB_ENV}"
+              echo "WORKER_SEGMENT=manual-${MINUTES}m" >> "${GITHUB_ENV}"
+              ;;
+          esac
+
+      - name: 의존성 설치
+        run: python -m pip install -r requirements.txt
+
+      - name: realtime preflight
+        run: python scripts/run_kis_quote_worker.py --backend "${WORKER_BACKEND}" --preflight-only
+
+      - name: KIS realtime worker 실행
+        shell: bash
+        run: |
+          echo "segment=${WORKER_SEGMENT} seconds=${WORKER_SECONDS} backend=${WORKER_BACKEND}"
+          set +e
+          timeout --signal=SIGINT --kill-after=30s "${WORKER_SECONDS}" \
+            python scripts/run_kis_quote_worker.py --backend "${WORKER_BACKEND}"
+          exit_code=$?
+          set -e
+          if [ "${exit_code}" -ne 0 ] && [ "${exit_code}" -ne 124 ]; then
+            echo "worker 종료 코드: ${exit_code}"
+            exit "${exit_code}"
+          fi
+          echo "worker 세션 종료 코드: ${exit_code}"
+
+      - name: post-check 요약 출력
+        shell: bash
+        run: |
+          python - <<'PY'
+          import os
+          import requests
+
+          url = os.environ["SUPABASE_URL"].rstrip("/")
+          key = os.environ["SUPABASE_SERVICE_ROLE_KEY"].strip()
+          headers = {"apikey": key, "Authorization": f"Bearer {key}"}
+
+          status = requests.get(
+              f"{url}/rest/v1/realtime_worker_status",
+              params={
+                  "select": "account_id,connection_state,last_seen_at,last_quote_at,updated_at",
+                  "order": "updated_at.desc",
+                  "limit": "10",
+              },
+              headers=headers,
+              timeout=20,
+          )
+          status.raise_for_status()
+          ticks = requests.get(
+              f"{url}/rest/v1/realtime_price_ticks",
+              params={"select": "id", "limit": "1"},
+              headers={**headers, "Prefer": "count=exact"},
+              timeout=20,
+          )
+          ticks.raise_for_status()
+          print("worker_status", status.json())
+          print("realtime_price_ticks_count", ticks.headers.get("content-range", "unknown"))
+          PY

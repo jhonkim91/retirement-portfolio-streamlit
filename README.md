@@ -128,6 +128,28 @@ python scripts/run_kis_quote_worker.py --backend supabase
 - 수신한 quote마다 `holdings.current_price`를 overwrite하고 `realtime_price_ticks` 이력 테이블에도 append 합니다.
 - `데이터 > 운영 상태`에서 `KIS REST`, `KIS WebSocket worker`, `마지막 quote 반영` 상태를 확인할 수 있습니다.
 
+### GitHub Actions로 장중 worker 자동 실행
+
+별도 유료 worker를 두지 않을 경우, 저장소의 [`.github/workflows/kis-realtime-worker.yml`](.github/workflows/kis-realtime-worker.yml)로 한국 장중 세션을 둘로 나눠 자동 실행할 수 있습니다.
+
+- 스케줄 1: `KST 09:00` 시작, 약 `175분`
+- 스케줄 2: `KST 11:55` 시작, 약 `225분`
+- 두 실행 모두 `timeout --signal=SIGINT`로 종료되어 worker 상태를 `stopped`로 남기도록 구성했습니다.
+
+GitHub 저장소의 **Settings > Secrets and variables > Actions** 에 아래 시크릿을 추가하세요.
+
+```text
+SUPABASE_URL
+SUPABASE_SERVICE_ROLE_KEY
+KIS_APP_KEY
+KIS_APP_SECRET
+KIS_ENV
+```
+
+- `KIS_ENV`를 비워두면 workflow는 기본값 `prod`로 실행합니다.
+- 수동 실행은 **Actions > KIS Realtime Worker > Run workflow** 에서 `manual / morning / afternoon` 세그먼트를 선택해 바로 점검할 수 있습니다.
+- 실행 후 workflow 로그 마지막 `post-check 요약 출력` 단계에서 `worker_status`, `realtime_price_ticks_count`를 확인할 수 있습니다.
+
 ### 일별 스냅샷 자동 실행
 
 일별 자산 스냅샷 저장은 GitHub Actions 워크플로 [`.github/workflows/daily-rollup.yml`](.github/workflows/daily-rollup.yml)로 자동 실행할 수 있습니다.

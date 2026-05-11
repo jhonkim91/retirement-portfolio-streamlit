@@ -1009,7 +1009,26 @@ streamlit run app.py
   - 배포 앱 데이터 페이지 검증도 `status_panel_visible=true`, `latest_snapshot_date=2026-05-11`, `hotfix_required=false`, `backend_storage_code=supabase`로 통과
   - 산출물: `artifacts/deploy-verify-realtime-data-20260511.txt`, `artifacts/deploy-verify-realtime-data-20260511.png`, `artifacts/deploy-verify-realtime-dashboard-20260511.txt`, `artifacts/deploy-verify-realtime-dashboard-20260511.png`
 
+## 2026-05-11 GitHub Actions 장중 KIS worker 자동 실행 추가
+- 변경 파일: `.github/workflows/kis-realtime-worker.yml`, `scripts/run_kis_quote_worker.py`, `tests/test_run_kis_quote_worker.py`, `README.md`, `docs/supabase-realtime-worker-runbook.md`, `Memory.md`
+- 변경 내용:
+  - GitHub Actions에서 한국 장중을 둘로 나눠 `run_kis_quote_worker.py --backend supabase`를 자동 실행하는 workflow 추가
+  - 스케줄은 `UTC 00:00`(KST 09:00, 약 175분)과 `UTC 02:55`(KST 11:55, 약 225분)로 구성
+  - workflow는 `timeout --signal=SIGINT`로 종료하고, worker는 `KeyboardInterrupt`를 받아 `realtime_worker_status.connection_state=stopped`를 남기고 정상 종료하도록 수정
+  - README와 realtime worker runbook에 GitHub Actions 시크릿/수동 실행 방법을 문서화
+  - 현재 세션에는 `gh` CLI가 없어 workflow 수동 dispatch까지는 수행하지 못함
+- 설치:
+  - 추가 설치 없음
+- 검증:
+  - `python3 -m compileall app.py src scripts tests`
+  - `python3 -m unittest tests.test_run_kis_quote_worker`
+  - `python3 -m unittest discover -s tests -p "test_*.py"`
+- 결과:
+  - `tests.test_run_kis_quote_worker`에 종료 신호 처리 회귀 테스트 추가 후 통과
+  - 전체 테스트 `73`건 통과
+  - 저장소만 푸시되면 GitHub Actions에서 바로 사용할 수 있는 상태로 정리됨
+
 ## 다음 작업 후보
-- 운영 환경에서 `scripts/run_kis_quote_worker.py --backend supabase`를 장중 상시 프로세스로 띄우는 실행 방식 정리
+- GitHub 저장소 Actions secrets에 `KIS_APP_KEY`, `KIS_APP_SECRET`, `KIS_ENV` 추가
+- `KIS Realtime Worker` workflow를 수동 `manual 10~15분`으로 1회 실행해 실제 GitHub-hosted runner 경로 점검
 - 대시보드 `자산 배분` 상태 칩이 실제 운영 계좌에서 `실시간 연동 중`으로 표시되는지 추가 화면 확인
-- 필요 시 `realtime_price_ticks` 적재량 누적 대비 보존 기간/정리 정책 설계

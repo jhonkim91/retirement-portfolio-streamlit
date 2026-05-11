@@ -113,5 +113,79 @@ class SupabaseRealtimeSchemaPreflightTests(unittest.TestCase):
         self.assertIn("realtime_price_ticks", message)
 
 
+class QuoteWorkerShutdownTests(unittest.TestCase):
+    """worker 종료 신호 처리 동작을 검증한다."""
+
+    def test_main_marks_worker_stopped_on_keyboard_interrupt(self) -> None:
+        """장기 실행 worker가 중단되면 상태를 stopped로 남기고 0으로 종료한다."""
+
+        fake_args = type(
+            "Args",
+            (),
+            {
+                "backend": "supabase",
+                "account_id": None,
+                "worker_name": "kis-quote-worker",
+                "reconnect_delay": 5,
+                "preflight_only": False,
+            },
+        )()
+
+        class FakeStorage:
+            """main 테스트용 최소 저장소."""
+
+            def verify_runtime_ready(self) -> None:
+                return None
+
+            def known_account_ids(self, account_ids=None):
+                return [24]
+
+            def list_target_holdings(self, account_ids=None):
+                return [
+                    quote_worker.HoldingRef(
+                        account_id=24,
+                        holding_id=14,
+                        symbol="005930",
+                        product_name="삼성전자",
+                    )
+                ]
+
+        class FakeWebSocketApp:
+            """run_forever 시점에 종료 신호를 흉내 낸다."""
+
+            def __init__(self, *args, **kwargs) -> None:
+                return None
+
+            def run_forever(self, *args, **kwargs) -> None:
+                raise KeyboardInterrupt
+
+        fake_websocket = type("FakeWebSocketModule", (), {"WebSocketApp": FakeWebSocketApp, "ABNF": object()})
+        status_updates: list[dict[str, object]] = []
+
+        def record_status(storage, account_ids, *, worker_name, connection_state, last_seen_at=None, last_quote_at=None, metadata_json=None):
+            status_updates.append(
+                {
+                    "account_ids": list(account_ids),
+                    "worker_name": worker_name,
+                    "connection_state": connection_state,
+                    "metadata_json": dict(metadata_json or {}),
+                }
+            )
+
+        with patch.object(quote_worker, "parse_args", return_value=fake_args), \
+            patch.object(quote_worker, "choose_backend", return_value="supabase"), \
+            patch.object(quote_worker, "build_storage", return_value=FakeStorage()), \
+            patch.object(quote_worker, "kis_settings", return_value={"enabled": True, "env": "prod"}), \
+            patch.object(quote_worker, "KisApiClient", return_value=type("FakeClient", (), {"ws_url": "ws://example"})()), \
+            patch.dict(sys.modules, {"websocket": fake_websocket}), \
+            patch.object(quote_worker, "update_status_for_accounts", side_effect=record_status):
+            result = quote_worker.main()
+
+        self.assertEqual(result, 0)
+        self.assertTrue(status_updates)
+        self.assertEqual(status_updates[-1]["connection_state"], "stopped")
+        self.assertEqual(status_updates[-1]["account_ids"], [24])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -460,126 +460,140 @@ def main() -> int:
 
     backoff_seconds = max(int(args.reconnect_delay or 5), 1)
     client = KisApiClient()
+    active_account_ids = list(preflight_account_ids)
 
-    while True:
-        holdings = storage.list_target_holdings(selected_account_ids or None)
-        account_ids = storage.known_account_ids(selected_account_ids or None)
-        if not holdings:
-            update_status_for_accounts(
-                storage,
-                account_ids,
-                worker_name=args.worker_name,
-                connection_state="idle",
-                last_seen_at=now_iso(),
-                metadata_json={"reason": "국내 KIS 실시간 구독 대상 보유 종목이 없습니다.", "backend": backend},
-            )
-            print("구독할 국내 보유 종목이 없어 30초 뒤 다시 확인합니다.", flush=True)
-            time.sleep(30)
-            continue
+    try:
+        while True:
+            holdings = storage.list_target_holdings(selected_account_ids or None)
+            account_ids = storage.known_account_ids(selected_account_ids or None)
+            active_account_ids = list(account_ids)
+            if not holdings:
+                update_status_for_accounts(
+                    storage,
+                    account_ids,
+                    worker_name=args.worker_name,
+                    connection_state="idle",
+                    last_seen_at=now_iso(),
+                    metadata_json={"reason": "국내 KIS 실시간 구독 대상 보유 종목이 없습니다.", "backend": backend},
+                )
+                print("구독할 국내 보유 종목이 없어 30초 뒤 다시 확인합니다.", flush=True)
+                time.sleep(30)
+                continue
 
-        holdings_by_symbol: dict[str, list[HoldingRef]] = {}
-        for holding in holdings:
-            holdings_by_symbol.setdefault(holding.symbol, []).append(holding)
-        subscribed_symbols = sorted(holdings_by_symbol)
-        reconnect_state = {"delay_seconds": backoff_seconds}
+            holdings_by_symbol: dict[str, list[HoldingRef]] = {}
+            for holding in holdings:
+                holdings_by_symbol.setdefault(holding.symbol, []).append(holding)
+            subscribed_symbols = sorted(holdings_by_symbol)
+            reconnect_state = {"delay_seconds": backoff_seconds}
 
-        def on_open(ws: Any) -> None:
-            approval_key = client.get_approval_key()
-            for symbol in subscribed_symbols:
-                ws.send(websocket_subscription_message(approval_key, symbol, subscribe=True))
-                time.sleep(0.08)
-            reconnect_state["delay_seconds"] = max(int(args.reconnect_delay or 5), 1)
-            update_status_for_accounts(
-                storage,
-                account_ids,
-                worker_name=args.worker_name,
-                connection_state="connected",
-                last_seen_at=now_iso(),
-                metadata_json={"backend": backend, "symbols": subscribed_symbols, "tr_id": KIS_WS_QUOTE_TR_ID},
-            )
-            print(f"KIS WebSocket 연결 완료: {len(subscribed_symbols)}개 종목 구독", flush=True)
-
-        def on_message(ws: Any, message: str) -> None:
-            parsed = parse_websocket_message(message)
-            if not parsed:
-                return
-            if parsed["message_type"] == "control":
-                if parsed.get("tr_id") == "PINGPONG":
-                    try:
-                        ws.send(message, opcode=websocket.ABNF.OPCODE_PING)
-                    except Exception:
-                        pass
-                    return
+            def on_open(ws: Any) -> None:
+                approval_key = client.get_approval_key()
+                for symbol in subscribed_symbols:
+                    ws.send(websocket_subscription_message(approval_key, symbol, subscribe=True))
+                    time.sleep(0.08)
+                reconnect_state["delay_seconds"] = max(int(args.reconnect_delay or 5), 1)
                 update_status_for_accounts(
                     storage,
                     account_ids,
                     worker_name=args.worker_name,
                     connection_state="connected",
                     last_seen_at=now_iso(),
+                    metadata_json={"backend": backend, "symbols": subscribed_symbols, "tr_id": KIS_WS_QUOTE_TR_ID},
+                )
+                print(f"KIS WebSocket 연결 완료: {len(subscribed_symbols)}개 종목 구독", flush=True)
+
+            def on_message(ws: Any, message: str) -> None:
+                parsed = parse_websocket_message(message)
+                if not parsed:
+                    return
+                if parsed["message_type"] == "control":
+                    if parsed.get("tr_id") == "PINGPONG":
+                        try:
+                            ws.send(message, opcode=websocket.ABNF.OPCODE_PING)
+                        except Exception:
+                            pass
+                        return
+                    update_status_for_accounts(
+                        storage,
+                        account_ids,
+                        worker_name=args.worker_name,
+                        connection_state="connected",
+                        last_seen_at=now_iso(),
+                        metadata_json={
+                            "backend": backend,
+                            "symbols": subscribed_symbols,
+                            "control_message": str(parsed.get("message") or ""),
+                        },
+                    )
+                    return
+
+                symbol = str(parsed.get("symbol") or "").strip().upper()
+                if symbol not in holdings_by_symbol:
+                    return
+                quote_time = str(parsed.get("quote_time") or now_iso())
+                for holding_ref in holdings_by_symbol[symbol]:
+                    storage.record_quote(holding_ref, parsed)
+                    storage.update_account_status(
+                        holding_ref.account_id,
+                        worker_name=args.worker_name,
+                        connection_state="connected",
+                        last_seen_at=now_iso(),
+                        last_quote_at=quote_time,
+                        metadata_json={"backend": backend, "last_symbol": symbol, "symbols": subscribed_symbols},
+                    )
+
+            def on_error(_ws: Any, error: Any) -> None:
+                message = str(error or "알 수 없는 WebSocket 오류")
+                update_status_for_accounts(
+                    storage,
+                    account_ids,
+                    worker_name=args.worker_name,
+                    connection_state="error",
+                    last_seen_at=now_iso(),
+                    metadata_json={"backend": backend, "error": message, "symbols": subscribed_symbols},
+                )
+                print(f"KIS WebSocket 오류: {message}", flush=True)
+
+            def on_close(_ws: Any, status_code: Any, close_message: Any) -> None:
+                update_status_for_accounts(
+                    storage,
+                    account_ids,
+                    worker_name=args.worker_name,
+                    connection_state="disconnected",
+                    last_seen_at=now_iso(),
                     metadata_json={
                         "backend": backend,
+                        "status_code": status_code,
+                        "close_message": str(close_message or ""),
                         "symbols": subscribed_symbols,
-                        "control_message": str(parsed.get("message") or ""),
                     },
                 )
-                return
+                print(f"KIS WebSocket 연결 종료: code={status_code} message={close_message}", flush=True)
 
-            symbol = str(parsed.get("symbol") or "").strip().upper()
-            if symbol not in holdings_by_symbol:
-                return
-            quote_time = str(parsed.get("quote_time") or now_iso())
-            for holding_ref in holdings_by_symbol[symbol]:
-                storage.record_quote(holding_ref, parsed)
-                storage.update_account_status(
-                    holding_ref.account_id,
-                    worker_name=args.worker_name,
-                    connection_state="connected",
-                    last_seen_at=now_iso(),
-                    last_quote_at=quote_time,
-                    metadata_json={"backend": backend, "last_symbol": symbol, "symbols": subscribed_symbols},
-                )
-
-        def on_error(_ws: Any, error: Any) -> None:
-            message = str(error or "알 수 없는 WebSocket 오류")
-            update_status_for_accounts(
-                storage,
-                account_ids,
-                worker_name=args.worker_name,
-                connection_state="error",
-                last_seen_at=now_iso(),
-                metadata_json={"backend": backend, "error": message, "symbols": subscribed_symbols},
+            ws_app = websocket.WebSocketApp(
+                client.ws_url,
+                on_open=on_open,
+                on_message=on_message,
+                on_error=on_error,
+                on_close=on_close,
             )
-            print(f"KIS WebSocket 오류: {message}", flush=True)
-
-        def on_close(_ws: Any, status_code: Any, close_message: Any) -> None:
-            update_status_for_accounts(
-                storage,
-                account_ids,
-                worker_name=args.worker_name,
-                connection_state="disconnected",
-                last_seen_at=now_iso(),
-                metadata_json={
-                    "backend": backend,
-                    "status_code": status_code,
-                    "close_message": str(close_message or ""),
-                    "symbols": subscribed_symbols,
-                },
-            )
-            print(f"KIS WebSocket 연결 종료: code={status_code} message={close_message}", flush=True)
-
-        ws_app = websocket.WebSocketApp(
-            client.ws_url,
-            on_open=on_open,
-            on_message=on_message,
-            on_error=on_error,
-            on_close=on_close,
+            print(f"KIS quote worker 시작: backend={backend} env={settings['env']} ws={client.ws_url}", flush=True)
+            ws_app.run_forever(ping_interval=20, ping_timeout=10)
+            backoff_seconds = reconnect_state["delay_seconds"]
+            print(f"{backoff_seconds}초 뒤 KIS WebSocket 재연결을 시도합니다.", flush=True)
+            time.sleep(backoff_seconds)
+            backoff_seconds = min(backoff_seconds * 2, 60)
+    except KeyboardInterrupt:
+        update_status_for_accounts(
+            storage,
+            active_account_ids,
+            worker_name=args.worker_name,
+            connection_state="stopped",
+            last_seen_at=now_iso(),
+            metadata_json={"backend": backend, "reason": "종료 신호를 받아 worker를 중지했습니다."},
         )
-        print(f"KIS quote worker 시작: backend={backend} env={settings['env']} ws={client.ws_url}", flush=True)
-        ws_app.run_forever(ping_interval=20, ping_timeout=10)
-        backoff_seconds = reconnect_state["delay_seconds"]
-        print(f"{backoff_seconds}초 뒤 KIS WebSocket 재연결을 시도합니다.", flush=True)
-        time.sleep(backoff_seconds)
-        backoff_seconds = min(backoff_seconds * 2, 60)
+        print("종료 신호를 받아 KIS quote worker를 중지합니다.", flush=True)
+        return 0
 
 
 if __name__ == "__main__":
