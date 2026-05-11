@@ -342,6 +342,62 @@ class AllocationTreemapVisualMapTests(unittest.TestCase):
         self.assertIn("<svg", us_index_leaf["sparkline_svg"])
 
 
+class DashboardAllocationStatusTests(unittest.TestCase):
+    """자산 배분 헤더의 실시간 상태 문구를 검증한다."""
+
+    def test_dashboard_allocation_status_returns_idle_when_data_missing(self) -> None:
+        """배분 데이터가 없으면 대기 상태를 표시한다."""
+
+        result = dashboard_app.dashboard_allocation_status(1, [], has_allocation_data=False)
+
+        self.assertEqual(result, ("데이터 대기", "idle"))
+
+    def test_dashboard_allocation_status_returns_live_when_worker_connected_with_quote(self) -> None:
+        """worker가 연결되고 quote가 있으면 실시간 연동 중으로 표시한다."""
+
+        original_status = dashboard_app.get_realtime_worker_status
+        original_latest_quote = dashboard_app.latest_realtime_quote_time
+        dashboard_app.get_realtime_worker_status = lambda account_id: {"connection_state": "connected"}
+        dashboard_app.latest_realtime_quote_time = lambda account_id: "2026-05-11T09:25:00+09:00"
+        try:
+            result = dashboard_app.dashboard_allocation_status(
+                1,
+                [{"symbol": "005930", "product_name": "삼성전자"}],
+                has_allocation_data=True,
+            )
+        finally:
+            dashboard_app.get_realtime_worker_status = original_status
+            dashboard_app.latest_realtime_quote_time = original_latest_quote
+
+        self.assertEqual(result, ("실시간 연동 중", "live"))
+
+    def test_dashboard_allocation_status_returns_stale_when_worker_not_connected(self) -> None:
+        """보유 종목은 있지만 worker 연결이 없으면 지연 데이터 상태를 표시한다."""
+
+        original_status = dashboard_app.get_realtime_worker_status
+        original_latest_quote = dashboard_app.latest_realtime_quote_time
+        dashboard_app.get_realtime_worker_status = lambda account_id: {"connection_state": "disconnected"}
+        dashboard_app.latest_realtime_quote_time = lambda account_id: ""
+        try:
+            result = dashboard_app.dashboard_allocation_status(
+                1,
+                [{"symbol": "005930", "product_name": "삼성전자"}],
+                has_allocation_data=True,
+            )
+        finally:
+            dashboard_app.get_realtime_worker_status = original_status
+            dashboard_app.latest_realtime_quote_time = original_latest_quote
+
+        self.assertEqual(result, ("지연 데이터 표시 중", "stale"))
+
+    def test_dashboard_allocation_status_returns_idle_when_only_cash_is_visible(self) -> None:
+        """보유 종목이 없으면 실시간 대상이 없음을 표시한다."""
+
+        result = dashboard_app.dashboard_allocation_status(1, [], has_allocation_data=True)
+
+        self.assertEqual(result, ("실시간 대상 없음", "idle"))
+
+
 class SelectedHoldingTrendOptionTests(unittest.TestCase):
     """선택 종목 트렌드 ECharts 옵션 구성을 검증한다."""
 

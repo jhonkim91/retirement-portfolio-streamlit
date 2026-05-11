@@ -879,6 +879,81 @@ streamlit run app.py
   - `artifacts/deploy-verify-postpush.txt`
   - `artifacts/deploy-verify-postpush.png`
 
+## 2026-05-10 로그인 카드 폭/입력창 톤 조정 및 라벨 정렬 보정
+- 변경 파일: `app.py`, `Memory.md`
+- 변경 내용:
+  - 인증 카드 최대 너비와 중앙 컬럼 비중을 키워 로그인 패널이 더 넓게 보이도록 조정
+  - 비밀번호 표시 버튼 영역이 입력창과 동일한 톤으로 보이도록 `data-baseweb="input"` 래퍼와 내부 버튼 배경을 통일
+  - 로그인 폼의 `이메일` 라벨을 폼 바깥에서 렌더링하던 구조를 폼 내부로 옮겨 입력 박스 상단 정렬로 보정
+- 설치:
+  - 추가 설치 없음
+- 검증:
+  - `python3 -m compileall app.py` 성공
+- 결과:
+  - 로그인 카드 폭이 기존보다 넓어지고, 비밀번호 토글 버튼 배경이 입력창과 같은 계열로 정렬되도록 코드 반영
+  - `이메일` 라벨이 로그인 폼 박스 안쪽에 위치하도록 수정
+
+## 2026-05-10 작업공간 셸 배경을 로그인 톤으로 통일
+- 변경 파일: `app.py`, `Memory.md`
+- 변경 내용:
+  - 인증 이후 기본 앱 배경 `.stApp`를 로그인 화면과 같은 남색 그라디언트로 통일
+  - 사이드바 배경도 같은 남색으로 맞추고, `내 작업공간` 제목/설명은 흰 계열 전용 클래스(`sidebar-shell__title`, `sidebar-shell__caption`)로 렌더링
+  - 실제 계좌/페이지/입력 내용이 들어가는 `st.container(border=True)` 카드들은 계속 흰 배경으로 유지되도록 `stVerticalBlockBorderWrapper` 배경을 `#ffffff`로 고정
+- 설치:
+  - 추가 설치 없음
+- 검증:
+  - `python3 -m compileall app.py` 성공
+- 결과:
+  - 작업공간 셸은 로그인 배경과 동일한 남색 톤, 내용 카드 영역은 흰색 카드 계층으로 분리되도록 코드 반영
+
+## 2026-05-10 작업공간 배경 원복
+- 변경 파일: `app.py`, `Memory.md`
+- 변경 내용:
+  - `내 작업공간` 요청으로 바꿨던 앱 본문/사이드바 남색 배경을 이전 밝은 테마로 되돌림
+  - 사이드바 제목/설명 전용 흰색 클래스 사용을 제거하고 기존 `st.title`, `st.caption` 구조로 복귀
+  - `stVerticalBlockBorderWrapper` 카드 배경도 기존의 밝은 그라디언트 카드 스타일로 원복
+- 설치:
+  - 추가 설치 없음
+- 검증:
+  - `python3 -m compileall app.py` 성공
+- 결과:
+  - 로그인 화면은 유지하고, 인증 이후 작업공간 화면만 기존 밝은 배경/사이드바 톤으로 복귀
+
+## 2026-05-11 자산 배분 실시간 반영 상태 장중 재확인
+- 변경 파일: `Memory.md`
+- 변경 내용:
+  - 한국시간 `2026-05-11 09:21:32 KST` 장중 기준으로 자산 배분 실시간 반영 선행 조건을 다시 점검
+  - 대시보드 자산 배분은 `get_realtime_worker_status(account_id).connection_state == "connected"`일 때만 `10초` 주기 fragment 자동 새로고침이 켜지는 구조임을 코드에서 재확인
+  - 현재 헤더 칩 `데이터 로드됨`은 실시간 연결 상태가 아니라 `treemap_options is not None` 기준이라는 점을 다시 확인
+- 설치:
+  - 추가 설치 없음
+- 검증:
+  - `python3 scripts/run_kis_quote_worker.py --backend supabase --preflight-only`
+  - `python3 - <<'PY' ... from src.db import list_accounts, get_realtime_worker_status, latest_realtime_quote_time, backend_status ... PY`
+- 결과:
+  - 운영 Supabase preflight는 여전히 `public.realtime_worker_status`, `public.realtime_price_ticks` 누락으로 즉시 실패
+  - 따라서 한국 장중이어도 현재 운영 자산 배분은 실시간 quote 기반 자동 반영 상태로 들어가지 못함
+  - `backend_status()`는 `supabase`를 감지했지만 bare script 기준 `list_accounts()`는 `0`건으로 확인되어, 장중 확인은 worker preflight 결과를 기준으로 판단
+  - 다음 실제 선행 작업은 운영 Supabase SQL Editor에서 `docs/supabase-realtime-schema-hotfix.sql` 또는 최신 `setup_supabase.sql` 적용
+
+## 2026-05-11 자산 배분 상태 칩을 실제 실시간 상태 기준으로 전환
+- 변경 파일: `app.py`, `tests/test_app_dashboard.py`, `Memory.md`
+- 변경 내용:
+  - 자산 배분 헤더 상태 칩을 단순 `데이터 로드됨`에서 실제 상태 기반 문구로 변경
+  - `dashboard_allocation_status()` 헬퍼를 추가해 `실시간 연동 중`, `실시간 연결 중`, `지연 데이터 표시 중`, `실시간 대상 없음`, `데이터 대기`를 구분
+  - 상태 톤도 `live`, `stale`, `idle`로 나눠 도트 색을 분리
+  - 자산 배분 패널은 `get_realtime_worker_status()`와 `latest_realtime_quote_time()`를 함께 참고해 실시간 여부를 표시하도록 연결
+- 설치:
+  - 추가 설치 없음
+- 검증:
+  - `python3 -m compileall app.py tests/test_app_dashboard.py`
+  - `python3 -m unittest tests.test_app_dashboard`
+  - `python3 -m compileall app.py src scripts tests`
+  - `python3 -m unittest discover -s tests -p "test_*.py"`
+- 결과:
+  - 전체 테스트 `72`건 통과
+  - 자산 배분 헤더가 더 이상 데이터 존재 여부만으로 `데이터 로드됨`을 띄우지 않고, 실제 worker 연결 상태와 마지막 quote 반영 여부를 기준으로 문구를 표시하도록 변경
+
 ## 다음 작업 후보
 - 운영 Supabase SQL Editor에서 `docs/supabase-realtime-schema-hotfix.sql` 또는 최신 `setup_supabase.sql` 적용
 - `python3 scripts/run_kis_quote_worker.py --backend supabase --preflight-only`로 realtime 테이블 노출 재확인

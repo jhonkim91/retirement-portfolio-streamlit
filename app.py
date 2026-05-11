@@ -689,6 +689,101 @@ def inject_app_styles() -> None:
             margin: 0 0 1.2rem;
         }
 
+        .stApp:has(.auth-page-shell) {
+            background: linear-gradient(180deg, #1d3d5e 0%, #1a3551 100%);
+        }
+
+        .stApp:has(.auth-page-shell) [data-testid="stHeader"] {
+            background: transparent;
+        }
+
+        .block-container:has(.auth-page-shell) {
+            max-width: 100%;
+            padding-top: min(11vh, 6rem);
+            padding-bottom: min(8vh, 4rem);
+        }
+
+        .auth-page-shell {
+            width: 100%;
+            height: 0;
+        }
+
+        .auth-card-brand {
+            margin-bottom: 1.55rem;
+        }
+
+        .auth-card-brand__title {
+            color: #17334f;
+            font-size: clamp(2rem, 2.6vw, 2.55rem);
+            font-weight: 900;
+            line-height: 1.08;
+            letter-spacing: -0.05em;
+            margin: 0;
+        }
+
+        .auth-card-brand__caption {
+            color: #4f6683;
+            font-size: 0.98rem;
+            line-height: 1.6;
+            margin: 0.7rem 0 0;
+        }
+
+        .auth-card-mode {
+            color: #3f6c95;
+            font-size: 0.82rem;
+            font-weight: 800;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            margin-bottom: 0.6rem;
+        }
+
+        .auth-card-section-label {
+            color: #17334f;
+            font-size: 0.95rem;
+            font-weight: 800;
+            margin: 0 0 0.85rem;
+        }
+
+        .auth-card-helper {
+            color: #607285;
+            font-size: 0.92rem;
+            line-height: 1.55;
+            margin: 0 0 1rem;
+        }
+
+        .auth-demo-mini-list {
+            display: grid;
+            gap: 0.6rem;
+            margin: 1rem 0 1rem;
+        }
+
+        .auth-demo-mini-item {
+            padding: 0.75rem 0.85rem;
+            border-radius: 12px;
+            background: #eff4fb;
+            border: 1px solid rgba(59, 108, 151, 0.12);
+        }
+
+        .auth-demo-mini-item__title {
+            color: #17334f;
+            font-size: 0.86rem;
+            font-weight: 800;
+            margin-bottom: 0.2rem;
+        }
+
+        .auth-demo-mini-item__desc {
+            color: #5c728d;
+            font-size: 0.81rem;
+            line-height: 1.45;
+        }
+
+        .auth-card-note {
+            color: #6c7f95;
+            font-size: 0.82rem;
+            line-height: 1.45;
+            margin-top: 0.85rem;
+        }
+
         .auth-demo-points {
             display: grid;
             grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -723,6 +818,100 @@ def inject_app_styles() -> None:
             background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(250, 251, 250, 0.94));
             border-radius: 22px;
             box-shadow: 0 16px 44px rgba(15, 23, 42, 0.05);
+        }
+
+        .st-key-auth-card-shell {
+            max-width: 500px;
+            margin: 0 auto;
+            padding: 2.05rem 2rem 1.75rem;
+            border-radius: 18px;
+            background: rgba(255, 255, 255, 0.98);
+            border: 1px solid rgba(12, 30, 52, 0.08);
+            box-shadow: 0 28px 70px rgba(8, 25, 44, 0.28);
+        }
+
+        .st-key-auth-pending-panel {
+            max-width: 500px;
+            margin: 0 auto 1rem;
+            border-radius: 16px;
+            background: rgba(255, 255, 255, 0.96);
+            box-shadow: 0 16px 44px rgba(8, 25, 44, 0.16);
+        }
+
+        .st-key-auth-card-shell [data-testid="stTextInput"] label p {
+            color: #17334f;
+            font-weight: 800;
+        }
+
+        .st-key-auth-card-shell [data-testid="stTextInput"] [data-baseweb="input"] {
+            border-radius: 10px;
+            border: 1px solid rgba(59, 108, 151, 0.16);
+            background: #dfe8f4;
+            overflow: hidden;
+            box-shadow: none;
+        }
+
+        .st-key-auth-card-shell [data-testid="stTextInput"] input {
+            min-height: 2.85rem;
+            border: none !important;
+            background: #dfe8f4;
+            color: #17334f;
+            box-shadow: none;
+        }
+
+        .st-key-auth-card-shell [data-testid="stTextInput"] [data-baseweb="input"] button {
+            min-height: 2.85rem;
+            border: none;
+            border-radius: 0;
+            background: #dfe8f4;
+            color: #17334f;
+            box-shadow: none;
+        }
+
+        .st-key-auth-card-shell [data-testid="stTextInput"] [data-baseweb="input"] button:hover,
+        .st-key-auth-card-shell [data-testid="stTextInput"] [data-baseweb="input"] button:focus,
+        .st-key-auth-card-shell [data-testid="stTextInput"] [data-baseweb="input"] button:focus-visible {
+            background: #d8e4f2;
+            color: #17334f;
+            box-shadow: none;
+            outline: none;
+        }
+
+        .st-key-auth-card-shell [data-testid="stTextInput"] input::placeholder {
+            color: #7d90a9;
+        }
+
+        .st-key-auth-card-shell [data-testid="stFormSubmitButton"] > button,
+        .st-key-auth-demo-primary-action [data-testid="stButton"] > button {
+            min-height: 2.95rem;
+            border-radius: 8px;
+            border: none;
+            background: #3f6f99;
+            color: #ffffff;
+            font-weight: 800;
+            box-shadow: none;
+        }
+
+        .st-key-auth-card-shell [data-testid="stFormSubmitButton"] > button:hover,
+        .st-key-auth-demo-primary-action [data-testid="stButton"] > button:hover {
+            background: #355f85;
+            color: #ffffff;
+        }
+
+        .st-key-auth-card-links [data-testid="stButton"] > button {
+            min-height: auto;
+            padding: 0.25rem 0;
+            border: none;
+            background: transparent;
+            color: #3f6f99;
+            font-weight: 800;
+            box-shadow: none;
+            justify-content: center;
+        }
+
+        .st-key-auth-card-links [data-testid="stButton"] > button:hover {
+            background: transparent;
+            color: #2c567b;
         }
 
         .st-key-auth-panel-login [data-testid="stTextInput"] input,
@@ -816,6 +1005,14 @@ def inject_app_styles() -> None:
         .dashboard-load-status--live .dashboard-load-status__dot {
             background: #26a69a;
             animation: dashboard-live-blink 2.4s ease-in-out infinite;
+        }
+
+        .dashboard-load-status--stale .dashboard-load-status__dot {
+            background: #f59e0b;
+        }
+
+        .dashboard-load-status--idle .dashboard-load-status__dot {
+            background: #94a3b8;
         }
 
         .dashboard-load-palette {
@@ -1196,6 +1393,16 @@ def inject_app_styles() -> None:
         }
 
         @media (max-width: 860px) {
+            .block-container:has(.auth-page-shell) {
+                padding-top: 2.25rem;
+                padding-bottom: 2rem;
+            }
+
+            .st-key-auth-card-shell {
+                max-width: 100%;
+                padding: 1.45rem 1.2rem 1.2rem;
+            }
+
             .auth-hero {
                 padding: 2rem 1.35rem 1.5rem;
             }
@@ -1215,6 +1422,10 @@ def inject_app_styles() -> None:
         }
 
         @media (max-width: 560px) {
+            .auth-card-brand__title {
+                font-size: 1.9rem;
+            }
+
             .auth-hero__title {
                 font-size: 2rem;
             }
@@ -1266,9 +1477,189 @@ def render_auth_feedback() -> None:
 
 
 def render_auth_landing_header() -> None:
-    """초기 인증 화면 상단 제목을 렌더링한다."""
+    """초기 인증 카드 상단 브랜드 영역을 렌더링한다."""
 
-    st.markdown('<h1 class="auth-simple-title">자산관리 대장</h1>', unsafe_allow_html=True)
+    st.markdown(
+        """
+        <div class="auth-card-brand">
+            <h1 class="auth-card-brand__title">자산관리 대장</h1>
+            <p class="auth-card-brand__caption">퇴직연금과 주식 통장을 함께 관리하는 개인 자산 기록</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def set_auth_mode(mode: str) -> None:
+    """인증 화면 표시 모드를 바꾸고 즉시 다시 그린다."""
+
+    st.session_state["auth_mode"] = str(mode or "sign-in").strip() or "sign-in"
+    st.rerun()
+
+
+def start_demo_workspace_session() -> None:
+    """데모 계정 또는 로컬 데모 작업공간으로 진입한다."""
+
+    demo_identity: dict[str, str] | None = None
+    try:
+        with st.spinner("데모 계정으로 접속하고 테스트 데이터를 준비하는 중입니다..."):
+            demo_identity = app_auth.sign_in_demo_user()
+            initialize_database()
+            result = seed_demo_workspace()
+    except Exception as exc:  # noqa: BLE001
+        if demo_identity:
+            set_auth_feedback("error", f"데모 계정 로그인 후 테스트 데이터 준비에 실패했습니다: {exc}")
+            st.rerun()
+        st.error(f"데모 접속에 실패했습니다: {exc}")
+        return
+
+    st.session_state[PENDING_CONFIRMATION_EMAIL_KEY] = ""
+    st.session_state["selected_account_id"] = int(result["selected_account_id"])
+    st.session_state["active_page"] = PAGES[0]
+    mark_rollup_dirty()
+    demo_mode = str(demo_identity.get("mode") or "").strip()
+    result_message = str(result.get("message") or "데모 데이터를 준비했습니다.").strip()
+    if demo_mode == "supabase":
+        demo_email = str(demo_identity.get("email") or "데모 계정").strip()
+        set_auth_feedback("success", f"`{demo_email}` 계정으로 접속했습니다. {result_message}")
+    else:
+        set_auth_feedback("success", f"로컬 데모 작업공간으로 접속했습니다. {result_message}")
+    st.rerun()
+
+
+def render_auth_mode_links(current_mode: str) -> None:
+    """카드 하단의 인증 모드 전환 링크를 렌더링한다."""
+
+    current_mode = str(current_mode or "sign-in").strip() or "sign-in"
+    with st.container(key="auth-card-links"):
+        if current_mode == "sign-in":
+            if st.button("새 계정 만들기", key="auth-link-sign-up", width="stretch"):
+                set_auth_mode("sign-up")
+            if st.button("데모 모드", key="auth-link-demo", width="stretch"):
+                set_auth_mode("demo")
+            return
+
+        if current_mode == "sign-up":
+            if st.button("로그인으로 돌아가기", key="auth-link-sign-in", width="stretch"):
+                set_auth_mode("sign-in")
+            if st.button("데모 모드", key="auth-link-demo-from-sign-up", width="stretch"):
+                set_auth_mode("demo")
+            return
+
+        if st.button("로그인으로 돌아가기", key="auth-link-sign-in-from-demo", width="stretch"):
+            set_auth_mode("sign-in")
+        if st.button("새 계정 만들기", key="auth-link-sign-up-from-demo", width="stretch"):
+            set_auth_mode("sign-up")
+
+
+def render_sign_in_auth_card(auth_enabled: bool) -> None:
+    """로그인 카드를 렌더링한다."""
+
+    if not auth_enabled:
+        st.info("Supabase 인증 설정이 없어 실제 로그인은 잠시 비활성 상태입니다. 아래 데모 모드는 바로 사용할 수 있습니다.")
+    with st.form("sign-in-form", clear_on_submit=False):
+        st.markdown('<div class="auth-card-section-label">이메일</div>', unsafe_allow_html=True)
+        sign_in_email = st.text_input("이메일", key="sign-in-email", label_visibility="collapsed", placeholder="you@example.com")
+        st.markdown('<div class="auth-card-section-label">비밀번호</div>', unsafe_allow_html=True)
+        sign_in_password = st.text_input("비밀번호", type="password", key="sign-in-password", label_visibility="collapsed", placeholder="비밀번호 입력")
+        sign_in_submitted = st.form_submit_button("로그인", width="stretch", disabled=not auth_enabled)
+
+    render_auth_mode_links("sign-in")
+
+    if not sign_in_submitted:
+        return
+
+    try:
+        app_auth.sign_in(email=sign_in_email, password=sign_in_password)
+    except Exception as exc:  # noqa: BLE001
+        message = str(exc)
+        if "Email not confirmed" in message:
+            st.session_state[PENDING_CONFIRMATION_EMAIL_KEY] = str(sign_in_email or "").strip()
+            set_auth_feedback("warning", "이 이메일은 아직 확인되지 않았습니다. 위의 버튼으로 확인 메일을 다시 보내고, 가장 최근 메일의 링크를 열어 주세요.")
+            st.rerun()
+        st.error(message)
+    else:
+        st.session_state[PENDING_CONFIRMATION_EMAIL_KEY] = ""
+        st.success("로그인되었습니다.")
+        st.rerun()
+
+
+def render_sign_up_auth_card(auth_enabled: bool) -> None:
+    """회원가입 카드를 렌더링한다."""
+
+    st.markdown('<div class="auth-card-mode">새 계정 만들기</div>', unsafe_allow_html=True)
+    st.markdown('<p class="auth-card-helper">확인 메일을 거쳐 개인 작업공간을 만들고, 이후에는 같은 계정으로 계속 이어서 사용합니다.</p>', unsafe_allow_html=True)
+    if not auth_enabled:
+        st.info("Supabase 인증 설정이 없어 실제 계정 만들기는 잠시 비활성 상태입니다. 설정 전에는 데모 모드만 사용할 수 있습니다.")
+
+    with st.form("sign-up-form", clear_on_submit=False):
+        sign_up_email = st.text_input("이메일", key="sign-up-email", placeholder="you@example.com")
+        sign_up_password = st.text_input("비밀번호", type="password", key="sign-up-password", placeholder="비밀번호 입력")
+        confirm_password = st.text_input("비밀번호 확인", type="password", key="sign-up-password-confirm", placeholder="비밀번호 다시 입력")
+        sign_up_submitted = st.form_submit_button("계정 만들기", width="stretch", disabled=not auth_enabled)
+
+    render_auth_mode_links("sign-up")
+
+    if not sign_up_submitted:
+        return
+
+    if sign_up_password != confirm_password:
+        st.error("비밀번호가 서로 다릅니다.")
+        return
+
+    try:
+        response = app_auth.sign_up(email=sign_up_email, password=sign_up_password)
+    except Exception as exc:  # noqa: BLE001
+        st.error(str(exc))
+        return
+
+    if getattr(response, "session", None):
+        st.session_state[PENDING_CONFIRMATION_EMAIL_KEY] = ""
+        st.success("계정을 만들고 바로 로그인했습니다.")
+        st.rerun()
+
+    st.session_state[PENDING_CONFIRMATION_EMAIL_KEY] = str(sign_up_email or "").strip()
+    set_auth_feedback(
+        "info",
+        "계정을 만들었습니다. 확인 메일을 열어 주세요. 예전 링크가 안 되면 위의 버튼으로 새 메일을 다시 보내면 됩니다.",
+    )
+    st.rerun()
+
+
+def render_demo_auth_card() -> None:
+    """데모 모드 카드를 렌더링한다."""
+
+    st.markdown('<div class="auth-card-mode">데모 모드</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<p class="auth-card-helper">로그인 없이 바로 샘플 작업공간으로 들어가 약 5년치 투자 흐름과 자산 배분 화면을 확인할 수 있습니다.</p>',
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        """
+        <div class="auth-demo-mini-list">
+            <div class="auth-demo-mini-item">
+                <div class="auth-demo-mini-item__title">5년 투자 이력</div>
+                <div class="auth-demo-mini-item__desc">입금, 매수, 매도, 계좌 이체, 스냅샷이 모두 준비된 상태로 시작합니다.</div>
+            </div>
+            <div class="auth-demo-mini-item">
+                <div class="auth-demo-mini-item__title">혼합 포트폴리오 예시</div>
+                <div class="auth-demo-mini-item__desc">반도체, 배당, 방산, 채권 등 손익이 섞인 예시 자산 구성을 바로 볼 수 있습니다.</div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    with st.container(key="auth-demo-primary-action"):
+        demo_submitted = st.button("데모 작업공간 시작하기", key="auth-demo-entry-compact", width="stretch")
+    if app_auth.has_demo_credentials():
+        st.markdown('<p class="auth-card-note">설정된 데모 계정이 우선 사용되며, 없으면 로컬 데모 작업공간으로 연결됩니다.</p>', unsafe_allow_html=True)
+    else:
+        st.markdown('<p class="auth-card-note">현재는 로컬 데모 작업공간으로 바로 연결됩니다.</p>', unsafe_allow_html=True)
+
+    render_auth_mode_links("demo")
+
+    if demo_submitted:
+        start_demo_workspace_session()
 
 
 def render_demo_access_entry() -> None:
@@ -1314,32 +1705,7 @@ def render_demo_access_entry() -> None:
 
     if not demo_submitted:
         return
-
-    demo_identity: dict[str, str] | None = None
-    try:
-        with st.spinner("데모 계정으로 접속하고 테스트 데이터를 준비하는 중입니다..."):
-            demo_identity = app_auth.sign_in_demo_user()
-            initialize_database()
-            result = seed_demo_workspace()
-    except Exception as exc:  # noqa: BLE001
-        if demo_identity:
-            set_auth_feedback("error", f"데모 계정 로그인 후 테스트 데이터 준비에 실패했습니다: {exc}")
-            st.rerun()
-        st.error(f"데모 접속에 실패했습니다: {exc}")
-        return
-
-    st.session_state[PENDING_CONFIRMATION_EMAIL_KEY] = ""
-    st.session_state["selected_account_id"] = int(result["selected_account_id"])
-    st.session_state["active_page"] = PAGES[0]
-    mark_rollup_dirty()
-    demo_mode = str(demo_identity.get("mode") or "").strip()
-    result_message = str(result.get("message") or "데모 데이터를 준비했습니다.").strip()
-    if demo_mode == "supabase":
-        demo_email = str(demo_identity.get("email") or "데모 계정").strip()
-        set_auth_feedback("success", f"`{demo_email}` 계정으로 접속했습니다. {result_message}")
-    else:
-        set_auth_feedback("success", f"로컬 데모 작업공간으로 접속했습니다. {result_message}")
-    st.rerun()
+    start_demo_workspace_session()
 
 
 def clear_query_params() -> None:
@@ -1679,6 +2045,28 @@ def dashboard_live_refresh_interval(account_id: int) -> str | None:
     if str(status.get("connection_state") or "").strip().lower() == "connected":
         return "10s"
     return None
+
+
+def dashboard_allocation_status(
+    account_id: int,
+    holdings: list[dict[str, Any]],
+    *,
+    has_allocation_data: bool,
+) -> tuple[str, str]:
+    """자산 배분 헤더에 표시할 실시간 상태 문구와 톤을 계산한다."""
+
+    if not has_allocation_data:
+        return ("데이터 대기", "idle")
+    if not holdings:
+        return ("실시간 대상 없음", "idle")
+
+    worker_status = get_realtime_worker_status(account_id) or {}
+    connection_state = str(worker_status.get("connection_state") or "").strip().lower()
+    if connection_state == "connected":
+        if str(latest_realtime_quote_time(account_id) or "").strip():
+            return ("실시간 연동 중", "live")
+        return ("실시간 연결 중", "live")
+    return ("지연 데이터 표시 중", "stale")
 
 
 def interpolate_hex_color(start_hex: str, end_hex: str, ratio: float) -> str:
@@ -3011,12 +3399,12 @@ def show_holdings_table(frame: pd.DataFrame, *, height: int = 420) -> None:
 
 
 def auth_page(auth_enabled: bool = True) -> None:
-    render_auth_landing_header()
+    st.markdown('<div class="auth-page-shell"></div>', unsafe_allow_html=True)
     render_auth_feedback()
 
     pending_email = str(st.session_state.get(PENDING_CONFIRMATION_EMAIL_KEY) or "").strip()
     if pending_email:
-        with st.container(border=True):
+        with st.container(border=True, key="auth-pending-panel"):
             st.write(f"이메일 확인 대기: `{pending_email}`")
             st.caption("예전 확인 링크가 열리지 않았다면 여기서 새 메일을 다시 보내고, 가장 최근 메일의 링크를 열어 주세요.")
             if st.button("확인 메일 다시 보내기", key="resend-confirmation", width="stretch"):
@@ -3027,75 +3415,19 @@ def auth_page(auth_enabled: bool = True) -> None:
                 else:
                     st.success(f"{pending_email} 주소로 새 확인 메일을 보냈습니다.")
 
-    sign_in_tab, sign_up_tab, demo_tab = st.tabs(["로그인", "계정 만들기", "데모 체험"])
+    current_mode = str(st.session_state.get("auth_mode") or "sign-in").strip() or "sign-in"
+    left_col, center_col, right_col = st.columns((1.15, 1.05, 1.15), gap="large")
+    del left_col, right_col
 
-    with sign_in_tab:
-        with st.container(border=True, key="auth-panel-login"):
-            st.markdown('<div class="auth-panel-eyebrow">기존 사용자</div>', unsafe_allow_html=True)
-            st.markdown('<h3 class="auth-panel-title">로그인</h3>', unsafe_allow_html=True)
-            st.markdown(
-                '<p class="auth-panel-caption">사용자별로 분리된 포트폴리오를 그대로 이어서 확인합니다.</p>',
-                unsafe_allow_html=True,
-            )
-            if not auth_enabled:
-                st.info("Supabase 인증 설정이 없어 실제 로그인은 잠시 비활성 상태입니다. 데모 체험은 바로 사용할 수 있습니다.")
-            with st.form("sign-in-form", clear_on_submit=False):
-                sign_in_email = st.text_input("이메일", key="sign-in-email")
-                sign_in_password = st.text_input("비밀번호", type="password", key="sign-in-password")
-                sign_in_submitted = st.form_submit_button("로그인", width="stretch", disabled=not auth_enabled)
-        if sign_in_submitted:
-            try:
-                app_auth.sign_in(email=sign_in_email, password=sign_in_password)
-            except Exception as exc:  # noqa: BLE001
-                message = str(exc)
-                if "Email not confirmed" in message:
-                    st.session_state[PENDING_CONFIRMATION_EMAIL_KEY] = str(sign_in_email or "").strip()
-                    set_auth_feedback("warning", "이 이메일은 아직 확인되지 않았습니다. 위의 버튼으로 확인 메일을 다시 보내고, 가장 최근 메일의 링크를 열어 주세요.")
-                    st.rerun()
-                st.error(message)
+    with center_col:
+        with st.container(key="auth-card-shell"):
+            render_auth_landing_header()
+            if current_mode == "sign-up":
+                render_sign_up_auth_card(auth_enabled)
+            elif current_mode == "demo":
+                render_demo_auth_card()
             else:
-                st.session_state[PENDING_CONFIRMATION_EMAIL_KEY] = ""
-                st.success("로그인되었습니다.")
-                st.rerun()
-
-    with sign_up_tab:
-        with st.container(border=True, key="auth-panel-sign-up"):
-            st.markdown('<div class="auth-panel-eyebrow">처음 시작한다면</div>', unsafe_allow_html=True)
-            st.markdown('<h3 class="auth-panel-title">계정 만들기</h3>', unsafe_allow_html=True)
-            st.markdown(
-                '<p class="auth-panel-caption">확인 메일을 거쳐 개인 작업공간을 만들고, 이후에는 같은 계정으로 계속 이어서 사용합니다.</p>',
-                unsafe_allow_html=True,
-            )
-            if not auth_enabled:
-                st.info("Supabase 인증 설정이 없어 실제 계정 만들기는 잠시 비활성 상태입니다. 설정 전에는 데모 체험만 사용할 수 있습니다.")
-            with st.form("sign-up-form", clear_on_submit=False):
-                sign_up_email = st.text_input("이메일", key="sign-up-email")
-                sign_up_password = st.text_input("비밀번호", type="password", key="sign-up-password")
-                confirm_password = st.text_input("비밀번호 확인", type="password", key="sign-up-password-confirm")
-                sign_up_submitted = st.form_submit_button("계정 만들기", width="stretch", disabled=not auth_enabled)
-        if sign_up_submitted:
-            if sign_up_password != confirm_password:
-                st.error("비밀번호가 서로 다릅니다.")
-            else:
-                try:
-                    response = app_auth.sign_up(email=sign_up_email, password=sign_up_password)
-                except Exception as exc:  # noqa: BLE001
-                    st.error(str(exc))
-                else:
-                    if getattr(response, "session", None):
-                        st.session_state[PENDING_CONFIRMATION_EMAIL_KEY] = ""
-                        st.success("계정을 만들고 바로 로그인했습니다.")
-                        st.rerun()
-                    else:
-                        st.session_state[PENDING_CONFIRMATION_EMAIL_KEY] = str(sign_up_email or "").strip()
-                        set_auth_feedback(
-                            "info",
-                            "계정을 만들었습니다. 확인 메일을 열어 주세요. 예전 링크가 안 되면 위의 버튼으로 새 메일을 다시 보내면 됩니다.",
-                        )
-                        st.rerun()
-
-    with demo_tab:
-        render_demo_access_entry()
+                render_sign_in_auth_card(auth_enabled)
 
 
 def empty_state() -> None:
@@ -3290,11 +3622,16 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]], roll
             holdings,
             selected_symbol=selected_symbol or None,
         )
+        allocation_status_text, allocation_status_tone = dashboard_allocation_status(
+            account_id,
+            holdings,
+            has_allocation_data=treemap_options is not None,
+        )
         render_dashboard_section_header(
             "자산 배분",
             "자산군에서 보유 종목까지 한 번에 보고, 종목을 누르면 아래에서 개별 트렌드를 바로 확인합니다.",
-            status_text="데이터 로드됨" if treemap_options is not None else "데이터 대기",
-            status_tone="live" if treemap_options is not None else "idle",
+            status_text=allocation_status_text,
+            status_tone=allocation_status_tone,
             status_palette_colors=FEARGREED_TREEMAP_PALETTE if treemap_options is not None else None,
         )
         if treemap_options is None:
