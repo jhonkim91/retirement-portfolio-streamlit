@@ -604,6 +604,35 @@ class SQLiteRealtimeQuotePersistenceTests(unittest.TestCase):
                 self.assertEqual(str(ticks[0]["metadata_json"]), '{"source":"unit-test"}')
                 self.assertEqual(sqlite_module.latest_realtime_quote_time(account_id), "2026-05-10T09:15:00")
 
+    def test_record_trade_allows_buy_even_when_cash_balance_becomes_negative(self) -> None:
+        """수동 현금 조정 흐름을 위해 매수는 보유현금보다 커도 기록할 수 있다."""
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            database_path = Path(temp_dir) / "portfolio.db"
+            with patch.dict(os.environ, {"RETIREMENT_DB_PATH": str(database_path)}, clear=False):
+                sqlite_module = importlib.reload(sqlite_db)
+                sqlite_module.initialize_database()
+                account_id = sqlite_module.create_account("user-1::테스트 계좌", opening_cash=100000)
+
+                sqlite_module.record_trade(
+                    account_id,
+                    symbol="005930",
+                    product_name="삼성전자",
+                    trade_type="buy",
+                    asset_type="risk",
+                    quantity=2,
+                    price=70000,
+                    trade_date="2026-05-10",
+                    notes="현금 부족 허용 매수",
+                )
+
+                account = sqlite_module.get_account(account_id)
+                holdings = sqlite_module.list_holdings(account_id)
+
+                self.assertEqual(float(account["cash_balance"]), -40000.0)
+                self.assertEqual(len(holdings), 1)
+                self.assertEqual(float(holdings[0]["quantity"]), 2.0)
+
 
 if __name__ == "__main__":
     unittest.main()

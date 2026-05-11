@@ -721,8 +721,8 @@ def record_trade(
 
         current_cash = float(account_row["cash_balance"] or 0)
         next_cash = current_cash + cash_delta
-        if next_cash < -0.000001:
-            raise ValueError("현금이 부족합니다. 현금 입금 후 다시 시도해 주세요.")
+        if cleaned_type != "buy" and next_cash < -0.000001:
+            raise ValueError("현금 잔액 계산에 실패했습니다.")
 
         if cleaned_type == "buy":
             if holding_row:

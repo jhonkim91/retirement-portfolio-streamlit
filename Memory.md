@@ -21,6 +21,7 @@
 - [x] 현재 보유 종목 박스에 위험/안전/보유현금 비율 막대바 추가
 - [x] 현재 보유 종목 비율 막대에서 보유현금을 안전자산에 포함하도록 조정
 - [x] 기존 일별 이자 이력이 있는 계좌의 매수 전 현금 재동기화 복구
+- [x] 입금액과 무관하게 매수 상품 등록 허용
 - [ ] 다음 장중 자동 스케줄(`UTC 00:00`, `UTC 02:55`) 1회 추가 확인
 - [x] 배포 대시보드에서 자산 배분 상태 칩이 실제로 `실시간 연동 중`으로 보이는지 화면 검증
 
@@ -112,6 +113,7 @@ streamlit run app.py
 - 현재 보유 종목 비중 막대는 별도 `보유현금` 세그먼트를 없애고 `안전자산` 금액에 현금을 합산해, `안전자산(보유현금 포함)` 기준으로 보이도록 조정
 - `record_trade()` 직전에 기존 `daily_interest`/`interest` 이력이 남은 계좌만 이자 원장을 다시 맞추는 복구 훅을 추가해, 자동 적립 제거 이후 `보유현금 부족` 오탐이 날 수 있는 경로를 보정
 - 누적 원금 화면 문구도 `새 이자는 자동 적립하지 않지만 기존 일별 이자 이력은 현금 계산에 반영된다`는 현재 동작에 맞게 수정
+- 매수 등록은 보유현금 부족이어도 허용하고, 이후 `현금 조정`으로 실제 통장 잔액을 수동 최신화하는 현재 운영 방식에 맞게 `buy` 현금 부족 차단을 제거
 
 ## 최신 검증 결과
 - `python3 -m compileall app.py src scripts tests` 성공
@@ -210,6 +212,12 @@ streamlit run app.py
   - `./.venv/bin/python -m unittest discover -s tests -p "test_*.py"` 성공 (`92`건)
   - `_sync_legacy_interest_history_for_buy()` 테스트에서 기존 `interest`/`daily_interest` 이력이 있으면 `_replace_interest_history()`를 호출하는지 확인
   - 이자 이력이 없는 계좌는 매수 전 재동기화를 건너뛰는지 확인
+- 이번 턴 매수 현금 부족 차단 해제 검증:
+  - `python3 -m compileall src/db.py src/sqlite_db.py tests/test_db.py` 성공
+  - `python3 -m unittest tests.test_db` 성공 (`17`건)
+  - `./.venv/bin/python -m compileall app.py src scripts tests` 성공
+  - `./.venv/bin/python -m unittest discover -s tests -p "test_*.py"` 성공 (`93`건)
+  - SQLite 통합 테스트에서 `opening_cash=100000` 계좌가 `140000` 매수 후에도 저장되고 `cash_balance=-40000`으로 남는지 확인
 
 ## Git/GitHub 상태
 - 기본 브랜치: `main`
