@@ -11,9 +11,9 @@
 - [x] `gh` CLI 로컬 설치 및 Actions secrets 등록
 - [x] GitHub-hosted runner에서 `KIS Realtime Worker` 수동 실행 성공 검증
 - [x] `Memory.md` 장문 로그를 요약형 운영 메모로 정리
+- [x] GitHub Actions `Node 24` 전환 경고 제거
 - [ ] 다음 장중 자동 스케줄(`UTC 00:00`, `UTC 02:55`) 1회 추가 확인
 - [x] 배포 대시보드에서 자산 배분 상태 칩이 실제로 `실시간 연동 중`으로 보이는지 화면 검증
-- [ ] GitHub Actions Node 24 전환 전 액션 버전 점검
 
 ## 프로젝트 개요
 - 유형: `Python + Streamlit`
@@ -88,6 +88,8 @@ streamlit run app.py
 - `gh` CLI 설치, GitHub Actions secrets 주입, 수동 dispatch/실행 성공 검증 완료
 - 배포 대시보드가 장중에도 `지연 데이터 표시 중`으로 남는 케이스를 재현했고, 최근 quote 시각이 3분 이내면 live 톤으로 승격하는 fallback 및 10초 재확인 로직을 추가
 - 커밋 `2ede61d` 배포 후 세 번째 원격 확인에서 자산 배분 상태 칩이 `실시간 연동 중`으로 전환됨을 확인
+- `actions/checkout@v6`, `actions/setup-python@v6`, `permissions.contents=read`로 workflow를 올려 `Node.js 20 actions are deprecated` 경고 제거
+- `Daily Rollup` 과거 schedule 실패 원인은 `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` 시크릿 누락이었고, 현재는 수동 `dry-run` 성공으로 복구 상태 확인
 
 ## 최신 검증 결과
 - `python3 -m compileall app.py src scripts tests` 성공
@@ -106,6 +108,14 @@ streamlit run app.py
   - GitHub Actions run `25646982752` 장중 연결 상태에서 계좌 `24`의 `connection_state=connected`, `last_quote_at=2026-05-11T11:30:26` 확인
   - `artifacts/deploy-verify-dashboard-live-chip-postdeploy.txt`에서 `실시간 연동 중` 확인
   - `artifacts/deploy-verify-dashboard-live-chip-postdeploy.png` 스크린샷 저장
+- 이번 턴 Actions 추가 검증:
+  - `python3 -m compileall app.py src scripts tests` 성공
+  - `python3 -m unittest discover -s tests -p "test_*.py"` 성공 (`78`건)
+  - `Daily Rollup` 수동 `dry-run` run `25648283262` 성공, 로그에서 `actions/checkout@v6`, `actions/setup-python@v6` 확인
+  - `KIS Realtime Worker` 수동 1분 run `25648283181` 성공, 로그에서 `actions/checkout@v6`, `actions/setup-python@v6` 확인
+  - 두 run 모두 `Node.js 20 actions are deprecated` 경고 문구 미발견
+  - `gh workflow list`, `gh api repos/.../actions/workflows` 기준 `KIS Realtime Worker`, `Daily Rollup` 모두 `active`
+  - 다만 `gh run list --workflow "KIS Realtime Worker" --event schedule` 결과는 비어 있어 `schedule` 이벤트 실주행은 다음 자동 사이클에서 추가 확인 필요
 
 ## Git/GitHub 상태
 - 기본 브랜치: `main`
@@ -114,6 +124,7 @@ streamlit run app.py
   - `12748fd` `Add scheduled KIS realtime worker workflow`
   - `7ee4d45` `Fix GitHub worker shutdown handling`
   - `2ede61d` `Improve dashboard live status fallback`
+  - `c07e7d7` `Upgrade GitHub Actions to Node 24 runtimes`
 - 최근 기록 커밋:
   - `2654620` `Record realtime table activation verification`
   - `00aa563` `Record GitHub worker validation`
@@ -140,7 +151,5 @@ python scripts/verify_streamlit_deployment.py --page data --expect-backend supab
   - 스케줄 2: `UTC 02:55` (`KST 11:55`)
 
 ## 남은 작업
-1. 다음 장중 자동 스케줄이 `success`로 끝나는지 1회 더 확인
-2. 배포 대시보드에서 자산 배분 상태 칩이 `실시간 연동 중`으로 보이는지 화면 검증
-3. 필요 시 `verify_streamlit_deployment.py`에 자산 배분 상태 칩 텍스트 검증 추가
-4. GitHub Actions의 Node 24 전환 경고 대응 검토
+1. `KIS Realtime Worker`의 다음 자동 스케줄(`UTC 00:00` 또는 `UTC 02:55`)이 실제 `schedule` 이벤트로 생성되고 `success`로 끝나는지 확인
+2. 필요 시 `verify_streamlit_deployment.py`에 자산 배분 상태 칩 텍스트 검증 추가
