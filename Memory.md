@@ -218,10 +218,16 @@ streamlit run app.py
   - `./.venv/bin/python -m compileall app.py src scripts tests` 성공
   - `./.venv/bin/python -m unittest discover -s tests -p "test_*.py"` 성공 (`93`건)
   - SQLite 통합 테스트에서 `opening_cash=100000` 계좌가 `140000` 매수 후에도 저장되고 `cash_balance=-40000`으로 남는지 확인
+  - 배포 커밋 `d44a3b3` 푸시 후 `git push origin main` 기준 원격 반영
+  - `./.venv/bin/python scripts/verify_streamlit_deployment.py --page dashboard --expect-backend supabase` 성공
+  - 원격 검증 결과: `backend_storage=supabase`, `allocation_status="실시간 연동 중"`, 로그인/작업공간 노출 정상
+  - 원격 검증 산출물: `artifacts/deploy-verify-buy-cash-rule-d44a3b3.txt`, `artifacts/deploy-verify-buy-cash-rule-d44a3b3.png`
 
 ## Git/GitHub 상태
 - 기본 브랜치: `main`
 - 최근 기능 커밋:
+  - `d44a3b3` `Allow buys regardless of current cash`
+  - `b57ab5a` `Restore legacy interest cash sync before buys`
   - `cb871df` `Fold holdings cash into safe allocation`
   - `7337b17` `Improve holdings table visual cues`
   - `1d55a5d` `Polish holdings table quote timestamps`
