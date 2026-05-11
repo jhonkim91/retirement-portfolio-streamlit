@@ -244,9 +244,9 @@ streamlit run app.py
   - `./.venv/bin/python -m unittest discover -s tests -p "test_*.py"` 성공 (`97`건)
   - 로컬 `streamlit run app.py --server.port 8520 --server.headless true` 재현 후 서버 종료 시 더 이상 `StreamlitAPIException` traceback이 발생하지 않음을 확인
   - 최신 로컬 재현 산출물: `artifacts/trade-register-local-8520-fixed-2.txt`, `artifacts/trade-register-local-8520-fixed-2.png`
-  - 기능 커밋 `2cb8006`을 `origin/main`에 푸시 완료
+  - 기능 커밋 `2cb8006`, `dbef65a`를 `origin/main`에 푸시 완료
   - 원격 일반 배포 검증: `./.venv/bin/python scripts/verify_streamlit_deployment.py --page dashboard --expect-backend supabase` 성공
-  - 원격 거래 저장 재현은 `2026-05-11 09:39~09:41 UTC` 시점에도 여전히 예전 문구 `매수하기에 현금이 부족합니다.`를 반환해, Streamlit Cloud가 새 커밋을 아직 반영하지 않은 상태로 기록
+  - 원격 거래 저장 재현은 `2026-05-11 09:39~09:45 UTC` 시점에도 여전히 예전 문구 `매수하기에 현금이 부족합니다.`를 반환해, Streamlit Cloud가 새 커밋을 아직 반영하지 않은 상태로 기록
 - 이번 턴 `src.market reload` 제거 검증:
   - `python3 -m compileall app.py tests/test_app_dashboard.py` 성공
   - `python3 -m unittest tests.test_app_dashboard` 성공 (`29`건)
