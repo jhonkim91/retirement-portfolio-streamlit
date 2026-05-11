@@ -2680,6 +2680,77 @@ def show_holdings_table(frame: pd.DataFrame, *, height: int = 420) -> None:
     st.dataframe(styled, width="stretch", hide_index=True, height=height)
 
 
+def build_holdings_mix_bar_html(summary: dict[str, Any]) -> str:
+    """현재 보유 종목 박스 상단에 넣을 위험/안전/현금 비율 막대 HTML을 만든다."""
+
+    allocation = summary.get("allocation") or {}
+    segments = [
+        ("위험자산", float(allocation.get("risk") or 0), "#D8A94D"),
+        ("안전자산", float(allocation.get("safe") or 0), "#83A968"),
+        ("보유현금", float(allocation.get("cash") or summary.get("cash") or 0), "#5A8AA8"),
+    ]
+    total_value = sum(max(amount, 0.0) for _, amount, _ in segments)
+    if total_value <= 0:
+        return ""
+
+    bar_segments: list[str] = []
+    legend_segments: list[str] = []
+    for label, amount, color in segments:
+        percentage = (max(amount, 0.0) / total_value) * 100 if total_value else 0.0
+        bar_segments.append(
+            "".join(
+                [
+                    f'<div style="width:{percentage:.4f}%; background:{color}; min-width:0; height:100%;',
+                    ' display:flex; align-items:center; justify-content:center; overflow:hidden;">',
+                    (
+                        f'<span style="font-size:11px; font-weight:700; color:#15281F; white-space:nowrap;">{percentage:.0f}%</span>'
+                        if percentage >= 10
+                        else ""
+                    ),
+                    "</div>",
+                ]
+            )
+        )
+        legend_segments.append(
+            "".join(
+                [
+                    '<div style="display:flex; align-items:center; gap:8px;">',
+                    f'<span style="width:10px; height:10px; border-radius:999px; background:{color}; display:inline-block;"></span>',
+                    f'<span style="font-size:12px; color:{FEARGREED_MUTED_TEXT_COLOR};">{label}</span>',
+                    f'<span style="font-size:12px; font-weight:700; color:{CHART_TEXT_COLOR};">{percentage:.1f}%</span>',
+                    f'<span style="font-size:12px; color:{FEARGREED_MUTED_TEXT_COLOR};">{format_won(amount)}</span>',
+                    "</div>",
+                ]
+            )
+        )
+
+    return "".join(
+        [
+            '<div class="holdings-mix-bar-shell" style="margin:4px 0 14px;">',
+            '<div style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:8px;">',
+            f'<div style="font-size:12px; font-weight:700; color:{CHART_TEXT_COLOR};">자산 비중</div>',
+            f'<div style="font-size:11px; color:{FEARGREED_MUTED_TEXT_COLOR};">총 평가액 {format_won(total_value)}</div>',
+            "</div>",
+            f'<div style="display:flex; width:100%; height:18px; overflow:hidden; border-radius:999px; background:{FEARGREED_PANEL_ALT_COLOR}; border:1px solid {FEARGREED_BORDER_COLOR};">',
+            "".join(bar_segments),
+            "</div>",
+            '<div style="display:flex; flex-wrap:wrap; gap:10px 16px; margin-top:10px;">',
+            "".join(legend_segments),
+            "</div>",
+            "</div>",
+        ]
+    )
+
+
+def render_holdings_mix_bar(summary: dict[str, Any]) -> None:
+    """현재 보유 종목 박스 상단에 자산 비중 막대바를 렌더링한다."""
+
+    mix_bar_html = build_holdings_mix_bar_html(summary)
+    if not mix_bar_html:
+        return
+    st.markdown(mix_bar_html, unsafe_allow_html=True)
+
+
 def format_holdings_price_updated_at(value: Any) -> str:
     """보유 종목 현재가 갱신 시각을 초 단위까지 읽기 쉽게 포맷한다."""
 
@@ -2736,7 +2807,8 @@ def build_holdings_table_display(frame: pd.DataFrame) -> pd.DataFrame:
 def _holding_value_tone_style(value: Any) -> str:
     """손익/수익률 숫자 문자열을 색상 스타일로 변환한다."""
 
-    numeric = pd.to_numeric(value, errors="coerce")
+    normalized_value = str(value or "").replace(",", "").replace("%", "").strip()
+    numeric = pd.to_numeric(normalized_value, errors="coerce")
     if pd.isna(numeric):
         return ""
     if float(numeric) > 0:
@@ -3124,6 +3196,7 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]], roll
 
     with st.container(border=True, key="dashboard-panel-holdings-table"):
         render_dashboard_section_header("현재 보유 종목", "계좌 전체 포지션을 표로 읽고 현재 선택 종목과 함께 확인합니다.", compact=True)
+        render_holdings_mix_bar(summary)
         show_holdings_table(frame, height=DASHBOARD_HOLDINGS_TABLE_HEIGHT)
 
 

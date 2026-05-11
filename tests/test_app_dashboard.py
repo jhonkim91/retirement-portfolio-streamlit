@@ -107,6 +107,38 @@ class HoldingsTableDisplayTests(unittest.TestCase):
         self.assertIn(dashboard_app.FEARGREED_DOWN_COLOR, html)
         self.assertIn(dashboard_app.FEARGREED_MUTED_TEXT_COLOR, html)
 
+    def test_style_holdings_table_parses_comma_separated_profit_loss(self) -> None:
+        """손익 문자열에 천 단위 콤마가 있어도 부호에 맞는 색상을 적용한다."""
+
+        display = pd.DataFrame([{"손익": "12,000", "수익률(%)": "-3.25"}])
+
+        styled = dashboard_app.style_holdings_table(display)
+        html = styled.to_html()
+
+        self.assertIn(dashboard_app.FEARGREED_UP_COLOR, html)
+        self.assertIn(dashboard_app.FEARGREED_DOWN_COLOR, html)
+
+    def test_build_holdings_mix_bar_html_includes_risk_safe_and_cash_ratio(self) -> None:
+        """현재 보유 종목 박스 비중 막대는 위험/안전/현금 세 구간을 모두 포함한다."""
+
+        summary = {
+            "cash": 200000,
+            "allocation": {
+                "risk": 500000,
+                "safe": 300000,
+                "cash": 200000,
+            },
+        }
+
+        html = dashboard_app.build_holdings_mix_bar_html(summary)
+
+        self.assertIn("위험자산", html)
+        self.assertIn("안전자산", html)
+        self.assertIn("보유현금", html)
+        self.assertIn("50.0%", html)
+        self.assertIn("30.0%", html)
+        self.assertIn("20.0%", html)
+
 
 class DashboardSelectionPayloadTests(unittest.TestCase):
     """선택 종목 트렌드와 연결되는 selection payload 해석을 검증한다."""
