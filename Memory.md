@@ -718,3 +718,10 @@ python scripts/verify_streamlit_deployment.py --page data --expect-backend supab
 - `python -m compileall app.py` 성공
 - `python -m unittest tests.test_app_dashboard` 성공 (`44`건)
 - `python -m unittest discover -s tests -p "test_*.py"` 성공 (`128`건)
+
+### 배포 메모
+- 커밋: `1152639` (`Compress dashboard summary and trend controls`)
+- `origin/main` 푸시 완료
+- 원격 검증:
+  - `python scripts/verify_streamlit_deployment.py --page dashboard --expect-backend supabase --wait-ms 15000 --screenshot artifacts/dashboard-top-after-1152639.png --text-output artifacts/dashboard-top-after-1152639.txt` 성공
+  - 상단 카드 원격 스크린샷에서 라벨 줄바꿈 제거 확인
