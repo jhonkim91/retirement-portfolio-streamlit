@@ -740,3 +740,17 @@ python scripts/verify_streamlit_deployment.py --page data --expect-backend supab
 - `python -m compileall app.py` 성공
 - `python -m unittest tests.test_app_dashboard` 성공 (`44`건)
 - `python -m unittest discover -s tests -p "test_*.py"` 성공 (`128`건)
+
+## 2026-05-12 04:27 보유종목 수익률 패널 높이 확장
+
+### 변경 파일
+- `app.py`
+
+### 변경 내용
+- 대시보드 우측 `보유종목 수익률` 차트 전용 높이를 `430px`로 분리해, `선택 종목 트렌드` 패널 하단선과 더 가깝게 맞춤.
+- 거래 페이지 `실현손익` 차트는 기존 `DASHBOARD_HOLDINGS_CHART_HEIGHT`를 그대로 사용하도록 유지.
+
+### 검증 결과
+- `python -m compileall app.py` 성공
+- `python -m unittest tests.test_app_dashboard` 성공 (`44`건)
+- `python -m unittest discover -s tests -p "test_*.py"` 성공 (`128`건)

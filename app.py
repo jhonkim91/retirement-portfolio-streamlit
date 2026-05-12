@@ -393,6 +393,7 @@ DASHBOARD_SELECTED_TREND_PERIOD_OPTIONS = tuple(
 DASHBOARD_ALLOCATION_CHART_HEIGHT = 560
 DASHBOARD_HOLDINGS_CHART_HEIGHT = 360
 DASHBOARD_DETAIL_CHART_HEIGHT = 340
+DASHBOARD_HOLDINGS_COMPARE_CHART_HEIGHT = 430
 DASHBOARD_HOLDINGS_TABLE_HEIGHT = 380
 FEARGREED_BG_COLOR = str(DESIGN_TOKENS["chart_panel_alt_color"])
 FEARGREED_PANEL_COLOR = str(DESIGN_TOKENS["chart_panel_color"])
@@ -2577,7 +2578,7 @@ def holdings_bar_fallback_chart(frame: pd.DataFrame, *, selected_symbol: str | N
             opacity=alt.Opacity("selected_opacity:Q", legend=None),
         )
     )
-    return style_dashboard_altair_chart(bars + labels, height=DASHBOARD_HOLDINGS_CHART_HEIGHT)
+    return style_dashboard_altair_chart(bars + labels, height=DASHBOARD_HOLDINGS_COMPARE_CHART_HEIGHT)
 
 
 def realized_profit_bar_options(frame: pd.DataFrame) -> dict[str, Any] | None:
@@ -3943,7 +3944,7 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]], roll
                     bar_options = holdings_bar_options(overview_frame, selected_symbol=selected_symbol or None)
                     st_echarts(
                         options=bar_options,
-                        height=f"{DASHBOARD_HOLDINGS_CHART_HEIGHT}px",
+                        height=f"{DASHBOARD_HOLDINGS_COMPARE_CHART_HEIGHT}px",
                         key=f"holdings-profit-bar:{account_id}",
                     )
 
