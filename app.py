@@ -1352,16 +1352,14 @@ def render_dashboard_summary_card(label: str, value: str, *, tone: str = "", act
     field_class = "dashboard-summary-card__field"
     if actionable:
         field_class += " dashboard-summary-card__field--actionable"
-    action_html = ""
-    if action:
-        action_html = (
-            '<div class="dashboard-summary-card__header">'
-            f'<div class="dashboard-summary-card__label">{html.escape(label)}</div>'
-            f'<div class="dashboard-summary-card__action">{html.escape(action)}</div>'
-            "</div>"
-        )
-    else:
-        action_html = f'<div class="dashboard-summary-card__label">{html.escape(label)}</div>'
+    action_caption = html.escape(action) if action else ""
+    action_modifier = "" if action else " dashboard-summary-card__action--ghost"
+    action_html = (
+        '<div class="dashboard-summary-card__header">'
+        f'<div class="dashboard-summary-card__label">{html.escape(label)}</div>'
+        f'<div class="dashboard-summary-card__action{action_modifier}">{action_caption}</div>'
+        "</div>"
+    )
     st.markdown(
         (
             f'<div class="{field_class}">'
@@ -3836,7 +3834,7 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]], roll
                 if not selected_symbol:
                     st.info("자산 배분 트리맵에서 종목 타일을 누르면 여기에서 해당 종목 트렌드가 표시됩니다.")
                 elif selected_symbol == "CASH":
-                    with st.container(border=True, key="dashboard-trend-controls"):
+                    with st.container(key="dashboard-trend-controls"):
                         _, action_col = st.columns((1, 0.36), gap="medium", vertical_alignment="bottom")
                         with action_col:
                             if st.button("선택 해제", key=f"clear-selected-holding:{account_id}", width="stretch"):
@@ -3845,7 +3843,7 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]], roll
                     st.info("예수금은 시장 가격 추이가 없어서 개별 트렌드 차트를 표시하지 않습니다.")
                 else:
                     selected_holding_name = dashboard_selected_holding_name(holdings, selected_symbol)
-                    with st.container(border=True, key="dashboard-trend-controls"):
+                    with st.container(key="dashboard-trend-controls"):
                         period_label_col, period_col, measure_label_col, measure_col, action_col = st.columns(
                             (0.14, 1.82, 0.14, 1.02, 0.58),
                             gap="small",
@@ -4191,7 +4189,12 @@ def trade_entry_page(account: dict[str, Any], holdings: list[dict[str, Any]], ac
             position_frame[column] = position_frame[column].map(lambda value: f"{float(value or 0):,.0f}")
         position_frame["실현수익률(%)"] = position_frame["실현수익률(%)"].map(lambda value: f"{float(value or 0):+.2f}")
         st.subheader("실현 손익 요약")
-        st.dataframe(position_frame, width="stretch", hide_index=True, height=280)
+        st.dataframe(
+            position_frame.style.map(_holding_value_tone_style, subset=["실현손익", "실현수익률(%)"]),
+            width="stretch",
+            hide_index=True,
+            height=280,
+        )
 
     if visible_logs:
         account_name_map = {int(item["id"]): account_label(item) for item in accounts}

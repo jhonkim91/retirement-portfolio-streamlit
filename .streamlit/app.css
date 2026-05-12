@@ -967,6 +967,11 @@ h6 {
     line-height: 1.1;
 }
 
+.dashboard-summary-card__action--ghost {
+    visibility: hidden;
+    pointer-events: none;
+}
+
 .dashboard-summary-card__field {
     display: flex;
     flex-direction: column;
@@ -1205,13 +1210,9 @@ h6 {
     gap: 0.08rem;
 }
 
-.st-key-dashboard-trend-controls [data-testid="stVerticalBlockBorderWrapper"] {
-    min-height: auto;
-}
-
-.st-key-dashboard-trend-controls [data-testid="stVerticalBlockBorderWrapper"] > div {
-    padding-top: 0.5rem;
-    padding-bottom: 0.5rem;
+.st-key-dashboard-trend-controls [data-testid="stHorizontalBlock"] {
+    align-items: center;
+    gap: 0.32rem;
 }
 
 .st-key-dashboard-trend-controls [data-testid="stButton"] > button {
@@ -1229,11 +1230,13 @@ h6 {
 
 .st-key-dashboard-trend-controls [data-testid="stSegmentedControl"] {
     padding-top: 0;
+    min-width: 0;
 }
 
 .st-key-dashboard-trend-controls [data-testid="stSegmentedControl"] [role="radiogroup"] {
     flex-wrap: nowrap;
     gap: 0.05rem;
+    width: 100%;
 }
 
 .st-key-dashboard-trend-controls [data-testid="stSegmentedControl"] label {

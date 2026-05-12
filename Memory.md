@@ -685,3 +685,20 @@ python scripts/verify_streamlit_deployment.py --page data --expect-backend supab
 - 원격 검증 결과:
   - dashboard: `logged_in=true`, `workspace_visible=true`, `backend_storage=Supabase`, `allocation_status="실시간 연동 중"`
   - trades: `logged_in=true`, `workspace_visible=true`, `backend_storage=Supabase`
+
+## 2026-05-12 03:56 대시보드 카드 헤더 정렬 및 실현손익 요약 컬러 보강
+
+### 변경 파일
+- `app.py`
+- `.streamlit/app.css`
+
+### 변경 내용
+- 요약 카드 본문을 항상 동일한 `header(label + ghost action slot)` 구조로 렌더링해 상단 카드들의 시각적 정렬 기준을 통일.
+- 선택 종목 트렌드 컨트롤은 바깥 `border=True` 래퍼를 제거하고, 내부 행 정렬/segmented control/button 간격을 더 줄여 박스 높이를 낮춤.
+- `실현 손익 요약` 표에 `실현손익`, `실현수익률(%)` 컬러 스타일을 추가해 양수/음수 톤이 보이도록 변경.
+
+### 검증 결과
+- `python -m compileall app.py` 성공
+- `python -m unittest tests.test_app_dashboard` 성공 (`44`건)
+- `python -m compileall app.py src scripts tests` 성공
+- `python -m unittest discover -s tests -p "test_*.py"` 성공 (`128`건)
