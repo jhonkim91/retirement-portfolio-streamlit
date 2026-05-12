@@ -651,3 +651,12 @@ python scripts/verify_streamlit_deployment.py --page data --expect-backend supab
 - `python -m unittest tests.test_app_dashboard.TradeFormResetTests tests.test_app_dashboard.HoldingsBarLabelTests tests.test_app_dashboard.RealizedProfitBarTests` 성공 (`14`건)
 - `python -m compileall app.py src scripts tests` 성공
 - `python -m unittest discover -s tests -p "test_*.py"` 성공 (`128`건)
+- `python scripts/verify_streamlit_deployment.py --page dashboard --expect-backend supabase --wait-ms 15000` 성공
+- `python scripts/verify_streamlit_deployment.py --page trades --expect-backend supabase --wait-ms 15000` 성공
+
+### 배포 메모
+- 커밋: `5de102e` (`Adjust dashboard and trade layouts`)
+- `origin/main` 푸시 완료
+- 원격 검증 결과:
+  - dashboard: `logged_in=true`, `workspace_visible=true`, `backend_storage=Supabase`, `allocation_status="지연 데이터 표시 중"`
+  - trades: `logged_in=true`, `workspace_visible=true`, `backend_storage=Supabase`
