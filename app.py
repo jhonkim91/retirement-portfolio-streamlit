@@ -3847,7 +3847,7 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]], roll
                     selected_holding_name = dashboard_selected_holding_name(holdings, selected_symbol)
                     with st.container(border=True, key="dashboard-trend-controls"):
                         period_label_col, period_col, measure_label_col, measure_col, action_col = st.columns(
-                            (0.22, 1.08, 0.22, 1.0, 0.56),
+                            (0.14, 1.82, 0.14, 1.02, 0.58),
                             gap="small",
                             vertical_alignment="center",
                         )
@@ -3982,6 +3982,7 @@ def trade_entry_page(account: dict[str, Any], holdings: list[dict[str, Any]], ac
 
     st.title("거래")
     st.caption("매수/매도와 현금 흐름을 한 화면에서 이어서 기록합니다. 보유현금은 거래와 연동하지 않고 직접 수정한 값만 유지합니다.")
+    echarts_available = st_echarts is not None
     feedback_message = consume_session_message(st.session_state, TRADE_PAGE_SUCCESS_MESSAGE_KEY)
     if feedback_message:
         st.success(feedback_message)

@@ -660,3 +660,19 @@ python scripts/verify_streamlit_deployment.py --page data --expect-backend supab
 - 원격 검증 결과:
   - dashboard: `logged_in=true`, `workspace_visible=true`, `backend_storage=Supabase`, `allocation_status="지연 데이터 표시 중"`
   - trades: `logged_in=true`, `workspace_visible=true`, `backend_storage=Supabase`
+
+## 2026-05-12 03:48 거래 실현손익 오류 및 선택 종목 트렌드 컨트롤 재조정
+
+### 변경 파일
+- `app.py`
+- `.streamlit/app.css`
+
+### 변경 내용
+- `trade_entry_page()`에서 `echarts_available` 지역 변수를 먼저 계산하도록 보강해, 실현손익 차트 렌더 분기에서 발생하던 `NameError`를 제거.
+- 상단 5개 카드 높이 정렬이 실제 Streamlit DOM에도 적용되도록 `dashboard-summary-strip` 하위 `stVerticalBlockBorderWrapper` 기준 최소 높이/스트레치 셀렉터를 강화.
+- 선택 종목 트렌드 컨트롤은 기간 영역 폭을 더 넓히고, 라벨/버튼/segmented control 높이와 padding을 추가로 줄여 `1개월·3개월·6개월·1년`이 같은 행에 유지되도록 재조정.
+
+### 검증 결과
+- `python -m compileall app.py src scripts tests` 성공
+- `python -m unittest tests.test_app_dashboard` 성공 (`44`건)
+- `python -m unittest discover -s tests -p "test_*.py"` 성공 (`128`건)
