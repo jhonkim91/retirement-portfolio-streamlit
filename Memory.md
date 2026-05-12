@@ -1095,3 +1095,9 @@ python scripts/verify_streamlit_deployment.py --page data --expect-backend supab
 ### 남은 주의 사항
 - Naver chart fallback은 외부 비공식 JSON endpoint이므로 응답 형식 변경 가능성이 있다.
 - 원격 배포 전에는 Streamlit Cloud에서 자산배분 tooltip과 선택 종목 차트를 한 번 더 확인하는 것이 좋다.
+
+### 커밋 및 배포
+- `a3d9285` `Fix KRX intraday chart fallback` 커밋 후 `origin/main`에 푸시.
+- Streamlit Cloud 원격 대시보드 검증 성공:
+  - `python scripts/verify_streamlit_deployment.py --page dashboard --expect-backend supabase --wait-ms 20000`
+  - `logged_in=true`, `workspace_visible=true`, `backend_storage_code=supabase`, `ok=true`.
