@@ -387,6 +387,9 @@ PERIOD_LABELS = {
     "1y": "1년",
 }
 SELECTED_TREND_PERIOD_OPTIONS = ("today", "1mo", "3mo", "6mo", "1y")
+DASHBOARD_SELECTED_TREND_PERIOD_OPTIONS = tuple(
+    period for period in SELECTED_TREND_PERIOD_OPTIONS if period != "today"
+)
 DASHBOARD_ALLOCATION_CHART_HEIGHT = 560
 DASHBOARD_HOLDINGS_CHART_HEIGHT = 360
 DASHBOARD_DETAIL_CHART_HEIGHT = 340
@@ -2579,6 +2582,201 @@ def holdings_bar_fallback_chart(frame: pd.DataFrame, *, selected_symbol: str | N
     return style_dashboard_altair_chart(bars + labels, height=DASHBOARD_HOLDINGS_CHART_HEIGHT)
 
 
+def realized_profit_bar_options(frame: pd.DataFrame) -> dict[str, Any] | None:
+    """실현 손익 요약을 대시보드 보유 종목 수익률과 같은 톤의 막대 옵션으로 만든다."""
+
+    if frame.empty:
+        return None
+
+    chart_frame = frame.copy().sort_values(["profit_loss", "sell_amount"], ascending=[False, False]).reset_index(drop=True)
+    chart_frame["display_name"] = chart_frame["product_name"].astype(str).apply(
+        lambda value: value if len(value) <= 14 else f"{value[:13]}…"
+    )
+    data: list[dict[str, Any]] = []
+    values: list[float] = []
+    for row in chart_frame.to_dict(orient="records"):
+        profit_loss = float(row.get("profit_loss") or 0)
+        profit_rate = float(row.get("profit_rate") or 0)
+        values.append(profit_loss)
+        data.append(
+            {
+                "value": round(profit_loss, 2),
+                "product_name": str(row.get("product_name") or "종목"),
+                "display_name": str(row.get("display_name") or row.get("product_name") or "종목"),
+                "sell_amount": round(float(row.get("sell_amount") or 0), 2),
+                "profit_rate": round(profit_rate, 2),
+                "itemStyle": {
+                    "color": FEARGREED_UP_COLOR if profit_loss >= 0 else FEARGREED_DOWN_COLOR,
+                    "borderRadius": [10, 10, 0, 0] if profit_loss >= 0 else [0, 0, 10, 10],
+                    "opacity": 0.94,
+                },
+                "label": {
+                    "show": True,
+                    "position": "top" if profit_loss >= 0 else "bottom",
+                    "distance": 8,
+                    "formatter": format_won(profit_loss),
+                    "color": FEARGREED_MID_TEXT_COLOR,
+                    "fontWeight": 700,
+                },
+            }
+        )
+
+    if not data:
+        return None
+
+    minimum = min(values)
+    maximum = max(values)
+    tooltip_formatter = None
+    if JsCode is not None:
+        tooltip_formatter = JsCode(
+            """
+            function(params) {
+                var realizedAmount = Math.round(Number(params.data.value || 0)).toLocaleString('ko-KR');
+                var soldAmount = Math.round(Number(params.data.sell_amount || 0)).toLocaleString('ko-KR');
+                var profitRate = Number(params.data.profit_rate || 0).toFixed(2);
+                return [
+                    '<strong>' + params.data.product_name + '</strong>',
+                    '실현손익: ₩' + realizedAmount,
+                    '매도금액: ₩' + soldAmount,
+                    '실현수익률: ' + profitRate + '%'
+                ].join('<br/>');
+            }
+            """
+        )
+
+    y_axis_label_config: dict[str, Any] = {
+        "color": FEARGREED_MUTED_TEXT_COLOR,
+    }
+    if JsCode is not None:
+        y_axis_label_config["formatter"] = JsCode(
+            """
+            function(value) {
+                return '₩' + Math.round(Number(value || 0)).toLocaleString('ko-KR');
+            }
+            """
+        )
+    else:
+        y_axis_label_config["formatter"] = "₩{value}"
+
+    y_axis_config: dict[str, Any] = {
+        "type": "value",
+        "name": "실현손익",
+        "nameTextStyle": {"color": FEARGREED_MID_TEXT_COLOR, "fontWeight": 700},
+        "axisLabel": y_axis_label_config,
+        "axisLine": {"show": False},
+        "splitLine": {"lineStyle": {"color": FEARGREED_BORDER_COLOR}},
+    }
+    if minimum >= 0:
+        y_axis_config["min"] = 0.0
+    elif maximum <= 0:
+        y_axis_config["max"] = 0.0
+
+    return {
+        "backgroundColor": "transparent",
+        "animationDuration": 260,
+        "animationDurationUpdate": 320,
+        "grid": {"top": 44, "right": 14, "bottom": 82, "left": 74},
+        "tooltip": {
+            "trigger": "item",
+            "backgroundColor": CHART_TOOLTIP_BG_COLOR,
+            "borderWidth": 0,
+            "textStyle": {"color": CHART_TOOLTIP_TEXT_COLOR, "fontSize": 12},
+            **({"formatter": tooltip_formatter} if tooltip_formatter is not None else {}),
+        },
+        "xAxis": {
+            "type": "category",
+            "data": [item["display_name"] for item in data],
+            "axisLabel": {
+                "interval": 0,
+                "rotate": 32,
+                "color": FEARGREED_MUTED_TEXT_COLOR,
+                "fontSize": 11,
+                "margin": 14,
+            },
+            "axisLine": {"lineStyle": {"color": FEARGREED_BORDER_COLOR}},
+            "axisTick": {"show": False},
+        },
+        "yAxis": y_axis_config,
+        "series": [
+            {
+                "name": "실현손익",
+                "type": "bar",
+                "barWidth": "52%",
+                "data": data,
+                "emphasis": {
+                    "focus": "self",
+                    "itemStyle": {
+                        "shadowBlur": 22,
+                        "shadowColor": "rgba(15, 23, 42, 0.16)",
+                    },
+                },
+            }
+        ],
+    }
+
+
+def realized_profit_bar_fallback_chart(frame: pd.DataFrame) -> alt.Chart | None:
+    """실현 손익 요약을 Altair 막대차트로 대체한다."""
+
+    if frame.empty:
+        return None
+    chart_frame = frame.copy().sort_values(["profit_loss", "sell_amount"], ascending=[False, False]).reset_index(drop=True)
+    chart_frame["tone"] = chart_frame["profit_loss"].apply(lambda value: "수익" if float(value or 0) >= 0 else "손실")
+    chart_frame["display_name"] = chart_frame["product_name"].astype(str).apply(
+        lambda value: value if len(value) <= 14 else f"{value[:13]}…"
+    )
+    chart_frame["profit_loss_label"] = chart_frame["profit_loss"].apply(format_won)
+    display_order = chart_frame["display_name"].tolist()
+    bars = (
+        alt.Chart(chart_frame)
+        .mark_bar(cornerRadiusEnd=8, size=52)
+        .encode(
+            x=alt.X(
+                "display_name:N",
+                sort=display_order,
+                title="종목",
+                axis=alt.Axis(
+                    labelAngle=-32,
+                    labelLimit=118,
+                    labelPadding=10,
+                    titlePadding=14,
+                    labelColor=FEARGREED_MUTED_TEXT_COLOR,
+                    titleColor=FEARGREED_MID_TEXT_COLOR,
+                ),
+            ),
+            y=alt.Y(
+                "profit_loss:Q",
+                title="실현손익",
+                axis=alt.Axis(
+                    format=",.0f",
+                    grid=True,
+                    gridColor=FEARGREED_BORDER_COLOR,
+                    tickCount=6,
+                    labelColor=FEARGREED_MUTED_TEXT_COLOR,
+                    titleColor=FEARGREED_MID_TEXT_COLOR,
+                ),
+            ),
+            color=alt.Color("tone:N", legend=None, scale=alt.Scale(domain=["수익", "손실"], range=[FEARGREED_UP_COLOR, FEARGREED_DOWN_COLOR])),
+            tooltip=[
+                alt.Tooltip("product_name:N", title="종목"),
+                alt.Tooltip("profit_loss:Q", title="실현손익", format=",.0f"),
+                alt.Tooltip("sell_amount:Q", title="매도금액", format=",.0f"),
+                alt.Tooltip("profit_rate:Q", title="실현수익률 (%)", format=".2f"),
+            ],
+        )
+    )
+    labels = (
+        alt.Chart(chart_frame)
+        .mark_text(dy=-8, fontSize=11, fontWeight="bold", color=CHART_TEXT_COLOR)
+        .encode(
+            x=alt.X("display_name:N", sort=display_order),
+            y=alt.Y("profit_loss:Q"),
+            text=alt.Text("profit_loss_label:N"),
+        )
+    )
+    return style_dashboard_altair_chart(bars + labels, height=DASHBOARD_HOLDINGS_CHART_HEIGHT)
+
+
 def build_selected_holding_intraday_trend_frame(holding: dict[str, Any]) -> pd.DataFrame:
     """선택 종목 1건의 intraday 타임라인을 차트용 프레임으로 변환한다."""
 
@@ -3560,7 +3758,7 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]], roll
         st.session_state[selection_key] = ""
         selected_symbol = ""
     period = str(st.session_state.get(trend_period_key, "6mo") or "6mo")
-    if period not in SELECTED_TREND_PERIOD_OPTIONS:
+    if period not in DASHBOARD_SELECTED_TREND_PERIOD_OPTIONS:
         period = "6mo"
         st.session_state[trend_period_key] = period
     if str(st.session_state.get(trend_measure_key) or "").strip() not in DETAIL_MEASURE_LABELS:
@@ -3649,7 +3847,7 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]], roll
                     selected_holding_name = dashboard_selected_holding_name(holdings, selected_symbol)
                     with st.container(border=True, key="dashboard-trend-controls"):
                         period_label_col, period_col, measure_label_col, measure_col, action_col = st.columns(
-                            (0.28, 1.22, 0.36, 1.06, 0.7),
+                            (0.22, 1.08, 0.22, 1.0, 0.56),
                             gap="small",
                             vertical_alignment="center",
                         )
@@ -3658,7 +3856,7 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]], roll
                         with period_col:
                             period = st.segmented_control(
                                 "기간",
-                                options=list(SELECTED_TREND_PERIOD_OPTIONS),
+                                options=list(DASHBOARD_SELECTED_TREND_PERIOD_OPTIONS),
                                 format_func=label_period,
                                 default=period,
                                 key=trend_period_key,
@@ -3787,158 +3985,172 @@ def trade_entry_page(account: dict[str, Any], holdings: list[dict[str, Any]], ac
     feedback_message = consume_session_message(st.session_state, TRADE_PAGE_SUCCESS_MESSAGE_KEY)
     if feedback_message:
         st.success(feedback_message)
-    with st.container(border=True):
-        st.subheader("상품 등록")
-        st.caption("매입가, 수량/좌수, 매입일을 입력하면 현황과 매매일지에 반영합니다.")
-        holding_options = {holding["product_name"]: holding for holding in holdings}
-        trade_type = st.radio(
-            "거래 유형",
-            ["buy", "sell"],
-            format_func=label_trade_type,
-            key=TRADE_TYPE_KEY,
-            horizontal=True,
-            label_visibility="collapsed",
-        )
+    trade_col, cash_flow_col = st.columns((1.45, 1.0), gap="large", vertical_alignment="top")
 
-        if holding_options and trade_type == "sell":
-            selected_holding_name = st.selectbox(
-                "보유 상품",
-                options=list(holding_options),
-                key=f"sell-holding:{account['id']}",
-            )
-            prefill_trade_from_holding(
-                holding_options[selected_holding_name],
-                marker=f"sell:{account['id']}:{selected_holding_name}",
-            )
-        else:
-            st.session_state[TRADE_PREFILL_MARKER_KEY] = "buy"
-
-        if st_keyup is not None:
-            search_query = st_keyup(
-                "상품명 또는 코드",
-                value=str(st.session_state.get(TRADE_SEARCH_QUERY_KEY) or ""),
-                key=TRADE_SEARCH_QUERY_KEY,
-                debounce=150,
-                placeholder="예: K55207BU0715, 0177N0, 파인인덱스",
-            )
-        else:
-            search_query = st.text_input(
-                "상품명 또는 코드",
-                key=TRADE_SEARCH_QUERY_KEY,
-                placeholder="예: K55207BU0715, 0177N0, 파인인덱스",
+    with trade_col:
+        with st.container(border=True):
+            st.subheader("상품 등록")
+            st.caption("매입가, 수량/좌수, 매입일을 입력하면 현황과 매매일지에 반영합니다.")
+            holding_options = {holding["product_name"]: holding for holding in holdings}
+            trade_type = st.radio(
+                "거래 유형",
+                ["buy", "sell"],
+                format_func=label_trade_type,
+                key=TRADE_TYPE_KEY,
+                horizontal=True,
+                label_visibility="collapsed",
             )
 
-        cleaned_search_query = str(search_query or "").strip()
-        if cleaned_search_query and cleaned_search_query != str(st.session_state.get(TRADE_PRODUCT_NAME_KEY) or "").strip():
-            st.session_state[TRADE_PRODUCT_NAME_KEY] = cleaned_search_query
-        if len(cleaned_search_query) >= 2:
-            suggestions = search_products(cleaned_search_query, limit=8)
-            with st.container(border=True, height=260, key="trade-search-suggestions"):
-                if suggestions:
-                    for product in suggestions:
-                        if st.button(
-                            product_search_option_label(product),
-                            key=f"product-suggestion:{account['id']}:{product['code']}",
-                            width="stretch",
-                        ):
-                            apply_search_product(product)
-                            st.rerun()
+            if holding_options and trade_type == "sell":
+                selected_holding_name = st.selectbox(
+                    "보유 상품",
+                    options=list(holding_options),
+                    key=f"sell-holding:{account['id']}",
+                )
+                prefill_trade_from_holding(
+                    holding_options[selected_holding_name],
+                    marker=f"sell:{account['id']}:{selected_holding_name}",
+                )
+            else:
+                st.session_state[TRADE_PREFILL_MARKER_KEY] = "buy"
+
+            if st_keyup is not None:
+                search_query = st_keyup(
+                    "상품명 또는 코드",
+                    value=str(st.session_state.get(TRADE_SEARCH_QUERY_KEY) or ""),
+                    key=TRADE_SEARCH_QUERY_KEY,
+                    debounce=150,
+                    placeholder="예: K55207BU0715, 0177N0, 파인인덱스",
+                )
+            else:
+                search_query = st.text_input(
+                    "상품명 또는 코드",
+                    key=TRADE_SEARCH_QUERY_KEY,
+                    placeholder="예: K55207BU0715, 0177N0, 파인인덱스",
+                )
+
+            cleaned_search_query = str(search_query or "").strip()
+            if cleaned_search_query and cleaned_search_query != str(st.session_state.get(TRADE_PRODUCT_NAME_KEY) or "").strip():
+                st.session_state[TRADE_PRODUCT_NAME_KEY] = cleaned_search_query
+            if len(cleaned_search_query) >= 2:
+                suggestions = search_products(cleaned_search_query, limit=8)
+                with st.container(border=True, height=260, key="trade-search-suggestions"):
+                    if suggestions:
+                        for product in suggestions:
+                            if st.button(
+                                product_search_option_label(product),
+                                key=f"product-suggestion:{account['id']}:{product['code']}",
+                                width="stretch",
+                            ):
+                                apply_search_product(product)
+                                st.rerun()
+                    else:
+                        st.caption("검색 결과가 없습니다.")
+
+            symbol = st.text_input(
+                "상품 코드",
+                key=TRADE_SYMBOL_KEY,
+                help="예: 0177N0, 005930, AAPL, K55207BU0715",
+            )
+            st.caption("ETF는 공개 코드, 펀드는 표준코드로 등록하면 자동 가격 조회를 시도합니다.")
+
+            trade_value_col, quantity_col = st.columns(2, gap="medium")
+            with trade_value_col:
+                price = st.number_input(trade_price_label(trade_type), min_value=0.0, step=100.0, key=TRADE_PRICE_KEY)
+            with quantity_col:
+                quantity = st.number_input("수량/좌수", min_value=0.0, step=1.0, key=TRADE_QUANTITY_KEY)
+
+            unit_col, trade_date_col = st.columns(2, gap="medium")
+            with unit_col:
+                st.selectbox("단위", ["주"], index=0, key=f"trade-unit:{account['id']}")
+            with trade_date_col:
+                trade_date = st.date_input(trade_date_label(trade_type), key=TRADE_DATE_KEY)
+
+            asset_col, notes_col = st.columns(2, gap="medium")
+            with asset_col:
+                asset_type = st.selectbox(
+                    "자산 구분",
+                    ["risk", "safe"],
+                    format_func=label_asset_type,
+                    key=TRADE_ASSET_TYPE_KEY,
+                )
+            with notes_col:
+                notes = st.text_input("메모", key=TRADE_NOTES_KEY, placeholder="선택 입력")
+
+            submitted = st.button(
+                trade_submit_button_label(trade_type),
+                width="stretch",
+                key=f"trade-save:{account['id']}",
+                type="primary",
+            )
+            if submitted:
+                resolved_product_name = str(
+                    st.session_state.get(TRADE_PRODUCT_NAME_KEY)
+                    or search_query
+                    or symbol
+                    or ""
+                ).strip()
+                try:
+                    record_trade(
+                        int(account["id"]),
+                        symbol=symbol,
+                        product_name=resolved_product_name,
+                        trade_type=trade_type,
+                        asset_type=asset_type,
+                        quantity=quantity,
+                        price=price,
+                        trade_date=trade_date.isoformat(),
+                        notes=notes,
+                    )
+                except ValueError as exc:
+                    st.error(str(exc))
                 else:
-                    st.caption("검색 결과가 없습니다.")
+                    mark_rollup_dirty()
+                    st.session_state[TRADE_FORM_RESET_PENDING_KEY] = True
+                    st.session_state[TRADE_PAGE_SUCCESS_MESSAGE_KEY] = "거래를 저장했습니다."
+                    st.rerun()
 
-        symbol = st.text_input(
-            "상품 코드",
-            key=TRADE_SYMBOL_KEY,
-            help="예: 0177N0, 005930, AAPL, K55207BU0715",
-        )
-        st.caption("ETF는 공개 코드, 펀드는 표준코드로 등록하면 자동 가격 조회를 시도합니다.")
-
-        trade_value_col, quantity_col = st.columns(2, gap="medium")
-        with trade_value_col:
-            price = st.number_input(trade_price_label(trade_type), min_value=0.0, step=100.0, key=TRADE_PRICE_KEY)
-        with quantity_col:
-            quantity = st.number_input("수량/좌수", min_value=0.0, step=1.0, key=TRADE_QUANTITY_KEY)
-
-        unit_col, trade_date_col = st.columns(2, gap="medium")
-        with unit_col:
-            st.selectbox("단위", ["주"], index=0, key=f"trade-unit:{account['id']}")
-        with trade_date_col:
-            trade_date = st.date_input(trade_date_label(trade_type), key=TRADE_DATE_KEY)
-
-        asset_col, notes_col = st.columns(2, gap="medium")
-        with asset_col:
-            asset_type = st.selectbox(
-                "자산 구분",
-                ["risk", "safe"],
-                format_func=label_asset_type,
-                key=TRADE_ASSET_TYPE_KEY,
+    with cash_flow_col:
+        with st.container(border=True):
+            flow_type = st.radio(
+                "현금 흐름 구분",
+                ["personal_deposit", "employer_deposit", "withdraw"],
+                format_func=label_cash_flow_type,
+                key=CASH_FLOW_TYPE_KEY,
+                horizontal=True,
+                label_visibility="collapsed",
             )
-        with notes_col:
-            notes = st.text_input("메모", key=TRADE_NOTES_KEY, placeholder="선택 입력")
-
-        submitted = st.button(trade_submit_button_label(trade_type), width="stretch", key=f"trade-save:{account['id']}", type="primary")
-        if submitted:
-            resolved_product_name = str(
-                st.session_state.get(TRADE_PRODUCT_NAME_KEY)
-                or search_query
-                or symbol
-                or ""
-            ).strip()
-            try:
-                record_trade(
-                    int(account["id"]),
-                    symbol=symbol,
-                    product_name=resolved_product_name,
-                    trade_type=trade_type,
-                    asset_type=asset_type,
-                    quantity=quantity,
-                    price=price,
-                    trade_date=trade_date.isoformat(),
-                    notes=notes,
+            st.subheader(cash_flow_panel_title(flow_type))
+            st.caption(cash_flow_panel_caption(flow_type))
+            date_col, amount_col, action_col = st.columns((1.15, 2.6, 0.95), gap="small")
+            with date_col:
+                trade_date = st.date_input("처리일", key=CASH_FLOW_DATE_KEY, label_visibility="collapsed")
+            with amount_col:
+                amount = st.number_input("금액", min_value=0, step=100000, key=CASH_FLOW_AMOUNT_KEY, label_visibility="collapsed")
+            with action_col:
+                submitted = st.button(
+                    cash_flow_submit_label(flow_type),
+                    width="stretch",
+                    key=f"cash-flow-save:{account['id']}",
+                    type="primary",
                 )
-            except ValueError as exc:
-                st.error(str(exc))
-            else:
-                mark_rollup_dirty()
-                st.session_state[TRADE_FORM_RESET_PENDING_KEY] = True
-                st.session_state[TRADE_PAGE_SUCCESS_MESSAGE_KEY] = "거래를 저장했습니다."
-                st.rerun()
-
-    with st.container(border=True):
-        flow_type = st.radio(
-            "현금 흐름 구분",
-            ["personal_deposit", "employer_deposit", "withdraw"],
-            format_func=label_cash_flow_type,
-            key=CASH_FLOW_TYPE_KEY,
-            horizontal=True,
-            label_visibility="collapsed",
-        )
-        st.subheader(cash_flow_panel_title(flow_type))
-        st.caption(cash_flow_panel_caption(flow_type))
-        date_col, amount_col, action_col = st.columns((1.15, 2.6, 0.95), gap="small")
-        with date_col:
-            trade_date = st.date_input("처리일", key=CASH_FLOW_DATE_KEY, label_visibility="collapsed")
-        with amount_col:
-            amount = st.number_input("금액", min_value=0, step=100000, key=CASH_FLOW_AMOUNT_KEY, label_visibility="collapsed")
-        with action_col:
-            submitted = st.button(cash_flow_submit_label(flow_type), width="stretch", key=f"cash-flow-save:{account['id']}", type="primary")
-        notes = st.text_area("메모", height=90, key=CASH_FLOW_NOTES_KEY, placeholder="메모 선택 입력", label_visibility="collapsed")
-        if submitted:
-            try:
-                record_cash_flow(
-                    int(account["id"]),
-                    flow_type=flow_type,
-                    amount=amount,
-                    trade_date=trade_date.isoformat(),
-                    notes=notes,
-                )
-            except ValueError as exc:
-                st.error(str(exc))
-            else:
-                mark_rollup_dirty()
-                st.session_state[CASH_FLOW_FORM_RESET_PENDING_KEY] = True
-                st.session_state[TRADE_PAGE_SUCCESS_MESSAGE_KEY] = "현금 흐름을 기록했습니다."
-                st.rerun()
+            notes = st.text_area("메모", height=90, key=CASH_FLOW_NOTES_KEY, placeholder="메모 선택 입력", label_visibility="collapsed")
+            if submitted:
+                try:
+                    record_cash_flow(
+                        int(account["id"]),
+                        flow_type=flow_type,
+                        amount=amount,
+                        trade_date=trade_date.isoformat(),
+                        notes=notes,
+                    )
+                except ValueError as exc:
+                    st.error(str(exc))
+                else:
+                    mark_rollup_dirty()
+                    st.session_state[CASH_FLOW_FORM_RESET_PENDING_KEY] = True
+                    st.session_state[TRADE_PAGE_SUCCESS_MESSAGE_KEY] = "현금 흐름을 기록했습니다."
+                    st.rerun()
 
     logs = list_trade_logs(int(account["id"]))
     visible_logs = [row for row in logs if is_visible_trade_log(row)]
@@ -3953,22 +4165,22 @@ def trade_entry_page(account: dict[str, Any], holdings: list[dict[str, Any]], ac
     realized_positions = realized.get("positions") or []
     if realized_positions:
         chart_frame = pd.DataFrame(realized_positions).sort_values("profit_loss", ascending=False).head(10).copy()
-        chart_frame["tone"] = chart_frame["profit_loss"].apply(lambda value: "수익" if float(value or 0) >= 0 else "손실")
-        chart = (
-            alt.Chart(chart_frame)
-            .mark_bar(cornerRadiusTopLeft=6, cornerRadiusTopRight=6)
-            .encode(
-                x=alt.X("product_name:N", sort="-y", title="실현 종목"),
-                y=alt.Y("profit_loss:Q", title="실현 손익"),
-                color=alt.Color("tone:N", scale=alt.Scale(domain=["수익", "손실"], range=[FEARGREED_UP_COLOR, FEARGREED_DOWN_COLOR])),
-                tooltip=[
-                    alt.Tooltip("product_name:N", title="종목"),
-                    alt.Tooltip("profit_loss:Q", title="손익", format=",.0f"),
-                    alt.Tooltip("profit_rate:Q", title="수익률 (%)", format=".2f"),
-                ],
-            )
-        )
-        st.altair_chart(chart, width="stretch")
+        if echarts_available:
+            realized_options = realized_profit_bar_options(chart_frame)
+            if realized_options is None:
+                st.info("실현손익 차트를 만들 데이터가 아직 없습니다.")
+            else:
+                st_echarts(
+                    options=realized_options,
+                    height=f"{DASHBOARD_HOLDINGS_CHART_HEIGHT}px",
+                    key=f"realized-profit-bar:{account['id']}",
+                )
+        else:
+            realized_chart = realized_profit_bar_fallback_chart(chart_frame)
+            if realized_chart is None:
+                st.info("현재 환경에서는 실현손익 차트를 표시할 수 없습니다.")
+            else:
+                st.altair_chart(realized_chart, width="stretch")
 
         position_frame = pd.DataFrame(realized_positions)
         position_frame = position_frame[["product_name", "symbol", "asset_type", "buy_amount", "sell_amount", "profit_loss", "profit_rate", "sell_date"]].copy()

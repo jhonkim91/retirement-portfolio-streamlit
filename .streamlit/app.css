@@ -988,6 +988,10 @@ h6 {
     border-radius: 0.85rem;
 }
 
+.st-key-dashboard-summary-strip [data-testid="column"] > div {
+    height: 100%;
+}
+
 .st-key-dashboard-card-principal,
 .st-key-dashboard-card-cash,
 .st-key-dashboard-card-total-value,
@@ -996,6 +1000,24 @@ h6 {
 .st-key-dashboard-panel-holdings,
 .st-key-dashboard-panel-holdings-table {
     background: #ffffff;
+    height: 100%;
+}
+
+.st-key-dashboard-card-principal [data-testid="stVerticalBlockBorderWrapper"],
+.st-key-dashboard-card-cash [data-testid="stVerticalBlockBorderWrapper"],
+.st-key-dashboard-card-total-value [data-testid="stVerticalBlockBorderWrapper"],
+.st-key-dashboard-card-profit [data-testid="stVerticalBlockBorderWrapper"],
+.st-key-dashboard-card-profit-rate [data-testid="stVerticalBlockBorderWrapper"] {
+    min-height: 120px;
+    height: 100%;
+}
+
+.st-key-dashboard-card-principal [data-testid="stVerticalBlock"],
+.st-key-dashboard-card-cash [data-testid="stVerticalBlock"],
+.st-key-dashboard-card-total-value [data-testid="stVerticalBlock"],
+.st-key-dashboard-card-profit [data-testid="stVerticalBlock"],
+.st-key-dashboard-card-profit-rate [data-testid="stVerticalBlock"] {
+    min-height: 100%;
 }
 
 .st-key-dashboard-panel-holdings-table [data-testid="stDataFrame"],
@@ -1154,25 +1176,30 @@ h6 {
 }
 
 .dashboard-inline-control-label {
-    min-height: 2.75rem;
+    min-height: 2.45rem;
     display: flex;
     align-items: center;
     justify-content: flex-start;
     color: var(--mid-text);
-    font-size: 0.84rem;
+    font-size: 0.78rem;
     font-weight: 700;
     white-space: nowrap;
 }
 
+.st-key-dashboard-trend-controls [data-testid="stVerticalBlock"] {
+    gap: 0.2rem;
+}
+
 .st-key-dashboard-trend-controls [data-testid="stButton"] > button {
-    min-height: 2.75rem;
+    min-height: 2.45rem;
     white-space: nowrap;
     font-weight: 700;
-    border-radius: 0.85rem;
+    border-radius: 0.72rem;
     border: 1px solid var(--border-emphasis);
     background: #ffffff;
     color: var(--brand-deep);
     box-shadow: none;
+    font-size: 0.8rem;
 }
 
 .st-key-dashboard-trend-controls [data-testid="stSegmentedControl"] {
@@ -1184,8 +1211,13 @@ h6 {
     gap: 0.1rem;
 }
 
+.st-key-dashboard-trend-controls [data-testid="stSegmentedControl"] label {
+    min-height: 2.45rem;
+}
+
 .st-key-dashboard-trend-controls [data-testid="stSegmentedControl"] label p {
     white-space: nowrap;
+    font-size: 0.78rem;
 }
 
 .st-key-dashboard-trend-controls [data-testid="stButton"] > button:hover,

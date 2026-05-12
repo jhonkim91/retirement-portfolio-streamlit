@@ -164,6 +164,16 @@ class TradeFormResetTests(unittest.TestCase):
         self.assertIn("퇴직금 원금", dashboard_app.cash_flow_panel_caption("employer_deposit"))
         self.assertEqual(dashboard_app.cash_flow_submit_label("withdraw"), "출금 기록")
 
+    def test_dashboard_selected_trend_period_options_exclude_today(self) -> None:
+        """대시보드 선택 종목 트렌드 기간에서는 당일 옵션을 숨긴다."""
+
+        self.assertIn("today", dashboard_app.SELECTED_TREND_PERIOD_OPTIONS)
+        self.assertNotIn("today", dashboard_app.DASHBOARD_SELECTED_TREND_PERIOD_OPTIONS)
+        self.assertEqual(
+            dashboard_app.DASHBOARD_SELECTED_TREND_PERIOD_OPTIONS,
+            ("1mo", "3mo", "6mo", "1y"),
+        )
+
     def test_format_trade_log_cell_formats_numeric_values(self) -> None:
         """거래 기록 표 숫자 컬럼은 천 단위 구분으로 노출한다."""
 
@@ -482,6 +492,41 @@ class HoldingsBarLabelTests(unittest.TestCase):
         assert options is not None
         self.assertNotIn("min", options["yAxis"])
         self.assertNotIn("max", options["yAxis"])
+
+
+class RealizedProfitBarTests(unittest.TestCase):
+    """실현손익 막대차트 옵션을 검증한다."""
+
+    def test_realized_profit_bar_options_match_dashboard_holdings_style(self) -> None:
+        """실현손익 차트도 양수/음수에 따라 같은 라운드/라벨 규칙을 사용한다."""
+
+        frame = pd.DataFrame(
+            [
+                {
+                    "product_name": "미국 ETF",
+                    "profit_loss": 325000,
+                    "sell_amount": 1825000,
+                    "profit_rate": 18.45,
+                },
+                {
+                    "product_name": "채권 ETF",
+                    "profit_loss": -85000,
+                    "sell_amount": 1315000,
+                    "profit_rate": -4.22,
+                },
+            ]
+        )
+
+        options = dashboard_app.realized_profit_bar_options(frame)
+
+        self.assertIsNotNone(options)
+        assert options is not None
+        series_data = options["series"][0]["data"]
+        self.assertEqual(series_data[0]["label"]["formatter"], "₩325,000")
+        self.assertEqual(series_data[1]["label"]["formatter"], "₩-85,000")
+        self.assertEqual(series_data[0]["itemStyle"]["borderRadius"], [10, 10, 0, 0])
+        self.assertEqual(series_data[1]["itemStyle"]["borderRadius"], [0, 0, 10, 10])
+        self.assertEqual(options["yAxis"]["name"], "실현손익")
 
 
 class AllocationTreemapVisualMapTests(unittest.TestCase):

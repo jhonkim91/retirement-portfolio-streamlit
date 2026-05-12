@@ -631,3 +631,23 @@ python scripts/verify_streamlit_deployment.py --page data --expect-backend supab
 - `python -m compileall app.py tests/test_app_dashboard.py` 성공
 - `python -m unittest tests.test_app_dashboard.HoldingsTableDisplayTests tests.test_app_dashboard.ThemeStylesheetTests` 성공 (`8`건)
 - `python -m unittest discover -s tests -p "test_*.py"` 성공 (`126`건)
+
+## 2026-05-12 02:20 거래/대시보드 레이아웃 및 실현손익 차트 정리
+
+### 변경 파일
+- `app.py`
+- `.streamlit/app.css`
+- `tests/test_app_dashboard.py`
+
+### 변경 내용
+- 상단 요약 카드 5개에 동일한 최소 높이 기준을 적용해 `입금 원금`, `원금 대비 평가손익`, `원금 대비 수익률` 카드 하단 라인을 `보유 현금`, `현재 평가액`과 맞춤.
+- 선택 종목 트렌드 기간 옵션에서 대시보드 전용 `당일`을 제거하고, `기간`/`지표`/`선택 해제` 컨트롤 폭과 높이를 줄여 한 줄 배치가 더 타이트하게 보이도록 정리.
+- 거래 페이지에서 `상품 등록`과 `현금입금/출금` 패널을 2열로 병렬 배치.
+- `실현손익` 차트를 대시보드 `보유 종목 수익률`과 같은 막대 톤으로 맞춘 ECharts/Altair helper로 교체.
+- 대시보드 기간 옵션 제외와 실현손익 막대 라벨/모서리 회귀 테스트를 추가.
+
+### 검증 결과
+- `python -m compileall app.py tests/test_app_dashboard.py` 성공
+- `python -m unittest tests.test_app_dashboard.TradeFormResetTests tests.test_app_dashboard.HoldingsBarLabelTests tests.test_app_dashboard.RealizedProfitBarTests` 성공 (`14`건)
+- `python -m compileall app.py src scripts tests` 성공
+- `python -m unittest discover -s tests -p "test_*.py"` 성공 (`128`건)
