@@ -8,9 +8,11 @@ import pandas as pd
 import src.market as market
 from src.market import (
     clean_code,
+    fetch_intraday_price_snapshot,
     fetch_latest_price,
     fetch_price_history,
     is_krx_code,
+    is_krx_symbol,
     normalize_symbol,
     resolve_kis_sector_label,
     search_products,
@@ -26,6 +28,9 @@ class MarketCodeNormalizationTests(unittest.TestCase):
     def test_is_krx_code_accepts_alphanumeric_etf_code(self) -> None:
         self.assertTrue(is_krx_code("0113D0"))
 
+    def test_is_krx_symbol_accepts_exchange_suffix(self) -> None:
+        self.assertTrue(is_krx_symbol("0113D0.KS"))
+
     def test_normalize_symbol_appends_ks_for_alphanumeric_etf_code(self) -> None:
         self.assertEqual(normalize_symbol("0113D0"), "0113D0.KS")
 
@@ -40,6 +45,7 @@ class MarketProviderSelectionTests(unittest.TestCase):
     """KIS 우선/fallback provider 선택을 검증한다."""
 
     def tearDown(self) -> None:
+        getattr(fetch_intraday_price_snapshot, "clear", lambda: None)()
         getattr(fetch_latest_price, "clear", lambda: None)()
         getattr(fetch_price_history, "clear", lambda: None)()
 
@@ -61,12 +67,14 @@ class MarketProviderSelectionTests(unittest.TestCase):
         yahoo_mock.assert_not_called()
 
     @patch("src.market._fetch_latest_price_from_yfinance")
+    @patch("src.market._fetch_latest_price_from_naver", side_effect=ValueError("Naver unavailable"))
     @patch("src.market._fetch_latest_price_from_kis", side_effect=ValueError("KIS unavailable"))
     @patch("src.market.is_kis_enabled", return_value=True)
     def test_fetch_latest_price_falls_back_to_yfinance_when_kis_fails(
         self,
         _is_kis_enabled_mock,
         _kis_mock,
+        _naver_mock,
         yahoo_mock,
     ) -> None:
         yahoo_mock.return_value = {"symbol": "005930.KS", "price": 70100.0, "as_of": "2026-05-10", "source": "Yahoo"}
@@ -75,6 +83,26 @@ class MarketProviderSelectionTests(unittest.TestCase):
 
         self.assertEqual(result["source"], "Yahoo")
         yahoo_mock.assert_called_once()
+
+    @patch("src.market._fetch_latest_price_from_yfinance")
+    @patch("src.market._fetch_latest_price_from_naver")
+    @patch("src.market._fetch_latest_price_from_kis")
+    @patch("src.market.is_kis_enabled", return_value=True)
+    def test_fetch_latest_price_uses_naver_for_alphanumeric_krx_symbol(
+        self,
+        _is_kis_enabled_mock,
+        kis_mock,
+        naver_mock,
+        yahoo_mock,
+    ) -> None:
+        naver_mock.return_value = {"symbol": "0162Z0.KS", "price": 13375.0, "as_of": "2026-05-12", "source": "Naver"}
+
+        result = fetch_latest_price("0162Z0")
+
+        self.assertEqual(result["source"], "Naver")
+        kis_mock.assert_not_called()
+        naver_mock.assert_called_once()
+        yahoo_mock.assert_not_called()
 
     @patch("src.market._fetch_latest_price_from_yfinance")
     @patch("src.market._fetch_latest_price_from_kis")
@@ -94,12 +122,14 @@ class MarketProviderSelectionTests(unittest.TestCase):
         yahoo_mock.assert_called_once()
 
     @patch("src.market._fetch_price_history_from_yfinance")
+    @patch("src.market._fetch_price_history_from_naver", return_value=pd.DataFrame(columns=["date", "close", "symbol"]))
     @patch("src.market._fetch_price_history_from_kis")
     @patch("src.market.is_kis_enabled", return_value=True)
     def test_fetch_price_history_uses_kis_only_for_supported_domestic_periods(
         self,
         _is_kis_enabled_mock,
         kis_mock,
+        naver_mock,
         yahoo_mock,
     ) -> None:
         kis_mock.return_value = pd.DataFrame([{"date": pd.Timestamp("2026-05-01").date(), "close": 70000.0, "symbol": "005930.KS"}])
@@ -109,7 +139,60 @@ class MarketProviderSelectionTests(unittest.TestCase):
         fetch_price_history("005930", period="6mo")
 
         kis_mock.assert_called_once()
+        naver_mock.assert_called_once()
         self.assertEqual(yahoo_mock.call_count, 1)
+
+    @patch("src.market._fetch_price_history_from_yfinance")
+    @patch("src.market._fetch_price_history_from_naver")
+    @patch("src.market._fetch_price_history_from_kis")
+    @patch("src.market.is_kis_enabled", return_value=True)
+    def test_fetch_price_history_uses_naver_for_alphanumeric_krx_symbol(
+        self,
+        _is_kis_enabled_mock,
+        kis_mock,
+        naver_mock,
+        yahoo_mock,
+    ) -> None:
+        naver_frame = pd.DataFrame(
+            [
+                {"date": pd.Timestamp("2026-05-11").date(), "close": 13430.0, "symbol": "0162Z0.KS"},
+                {"date": pd.Timestamp("2026-05-12").date(), "close": 13375.0, "symbol": "0162Z0.KS"},
+            ]
+        )
+        naver_mock.return_value = naver_frame
+
+        result = fetch_price_history("0162Z0", period="6mo")
+
+        self.assertEqual(result["symbol"].tolist(), ["0162Z0.KS", "0162Z0.KS"])
+        kis_mock.assert_not_called()
+        naver_mock.assert_called_once()
+        yahoo_mock.assert_not_called()
+
+    @patch("src.market._fetch_intraday_price_snapshot_from_yfinance")
+    @patch("src.market._fetch_intraday_price_snapshot_from_naver")
+    @patch("src.market._fetch_intraday_price_snapshot_from_kis")
+    @patch("src.market.is_kis_enabled", return_value=True)
+    def test_fetch_intraday_price_snapshot_uses_naver_for_alphanumeric_krx_symbol(
+        self,
+        _is_kis_enabled_mock,
+        kis_mock,
+        naver_mock,
+        yahoo_mock,
+    ) -> None:
+        naver_mock.return_value = {
+            "symbol": "0162Z0.KS",
+            "series": [13370.0, 13375.0],
+            "timeline": [{"datetime": "2026-05-12T15:58:00", "close": 13375.0}],
+            "current_price": 13375.0,
+            "source": "Naver",
+        }
+
+        result = fetch_intraday_price_snapshot("0162Z0")
+
+        self.assertEqual(result["source"], "Naver")
+        kis_mock.assert_not_called()
+        naver_mock.assert_called_once()
+        yahoo_mock.assert_not_called()
 
 
 class MarketSectorResolutionTests(unittest.TestCase):

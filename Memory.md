@@ -1010,3 +1010,88 @@ python scripts/verify_streamlit_deployment.py --page data --expect-backend supab
 - [ ] DB/시세 TTL 캐시가 화면별로 충분히 적용됐는지 Supabase 호출 빈도와 체감 응답 시간을 기준으로 추가 측정.
 - [ ] 모바일 화면에서 대시보드 트리맵/보유 종목 표/거래 입력 폼의 가독성을 실제 viewport로 확인하고 필요한 CSS만 보강.
 - [ ] 운영 검증 스크립트의 거래/데이터 요약 추출값을 새 화면 구조에 맞게 더 정확히 정리.
+
+## 2026-05-12 review_report.md 기준 반영 상태 체크
+
+### 완료된 항목
+- [x] 1. `app.py` 단일 파일 분리 + `st.navigation` 전환
+  - `app.py`는 66줄 호환/지연 로더로 축소됨.
+  - 실제 화면 구현은 `src/ui/app_core.py`, `pages/dashboard.py`, `pages/trades.py`, `pages/data.py`로 분리됨.
+  - 원격 검증에서 대시보드/거래/데이터 페이지 전환 성공.
+- [x] 2. DB/시세 호출 TTL 캐시 적용
+  - `src/db.py`에 계좌/보유종목/거래기록/스냅샷 조회 캐시가 `@st.cache_data(ttl=...)`로 구현됨.
+  - `src/market.py`의 `fetch_latest_price()`는 `ttl=900`, 관련 시장 데이터 조회는 TTL 캐시 적용됨.
+- [x] 3. `altair==5.0.1` 고정 해제
+  - 운영 배포 호환성을 우선해 `requirements.txt`를 `altair>=5.3,<5.4`로 조정.
+  - `altair>=5.4`는 Streamlit Cloud Python 3.14에서 import `TypeError`가 재현되어 제외함.
+- [x] 4. KIS WebSocket worker 재연결 로직
+  - `scripts/run_kis_quote_worker.py`에 `--reconnect-delay`, `on_close`, `run_forever()` 이후 재연결 루프가 구현됨.
+  - `python scripts/run_kis_quote_worker.py --backend sqlite --preflight-only` 성공 확인.
+- [x] 5. Supabase hotfix 상세 절차 관리자 전용화
+  - `render_operation_error()`는 기본적으로 상세 절차를 숨기고 `PORTFOLIO_SHOW_HOTFIX_GUIDE=true`일 때만 표시함.
+- [x] 6. 전역 차트 색상 상수 네임스페이스화
+  - `ChartColors` dataclass와 `CHART_COLORS`가 추가됨.
+  - 기존 테스트/호환성을 위해 기존 `FEARGREED_*`, `TREEMAP_*`, `CHART_*` alias는 유지됨.
+- [x] 7. `TRADE_LOG_TABLE_COLUMN_WEIGHTS` dict 기반 파생
+  - `TRADE_LOG_TABLE_COLUMN_WEIGHT_BY_LABEL`에서 헤더 순서에 맞춰 weight list를 생성함.
+- [x] 8. `st_keyup` / `st_echarts` 선택적 fallback 정리
+  - 런타임 지연 로드 실패 시 조용히 `None` 처리하지 않고 설치 안내가 포함된 `RuntimeError`를 발생시킴.
+  - `requirements.txt`에 `streamlit-keyup`, `streamlit-echarts`가 명시됨.
+- [x] 9. 다크모드 CSS 변수 추가
+  - `.streamlit/app.css`에 `@media (prefers-color-scheme: dark)` 토큰 전환이 추가됨.
+- [x] 11. `page_icon` 업그레이드
+  - `st.set_page_config(page_icon="💼")` 적용됨.
+
+### 부분 완료 또는 추가 확인 필요
+- [ ] 10. 모바일 레이아웃 개선
+  - `.streamlit/app.css`에 `max-width: 860px`, `max-width: 560px` 반응형 보강은 적용됨.
+  - 아직 모바일 viewport 기준 Playwright 스크린샷으로 대시보드 트리맵/보유 종목 표/거래 입력 폼의 실제 가독성까지 확정하지 못함.
+- [ ] 12. 로딩 스피너 / 스켈레톤 UI
+  - 데모 접속, 현재가 갱신, 선택 종목 추이 로드, orphan holdings 정리에는 `st.spinner`/`st.status`가 적용됨.
+  - 스냅샷 저장과 일부 데이터 export/운영 작업까지 모든 장시간 작업에 일관 적용됐는지는 추가 점검 필요.
+
+### 후속 작업 체크리스트
+- [ ] 모바일 viewport 원격/로컬 스크린샷 검증 후 필요한 CSS만 보강.
+- [ ] 스냅샷 저장, CSV export, 운영 정리 작업의 로딩 상태 표시 누락 여부 점검.
+- [ ] KIS WebSocket worker 재연결은 코드 구현 상태이므로, 장중 운영 로그로 실제 재연결/상태 복구를 확인.
+- [ ] `scripts/verify_streamlit_deployment.py`의 거래/데이터 요약 추출값을 새 화면 구조에 맞게 정밀화.
+
+## 2026-05-12 자산배분 일부 종목 일일차트 미표시 패치
+
+### 변경 파일
+- `src/market.py`
+- `tests/test_market.py`
+- `Memory.md`
+
+### 원인
+- 자산배분 tooltip/선택 종목 당일 차트는 `fetch_intraday_price_snapshot()`의 분봉/당일 시세를 사용한다.
+- `0162Z0`, `0113D0`처럼 숫자 6자리만으로 구성되지 않은 KRX 알파뉴메릭 ETF/ETN 코드는 KIS REST 분봉 대상에서 제외된다.
+- 이 코드들은 yfinance에서도 빈 응답이 나올 수 있어 일부 종목의 당일 차트가 `당일 데이터 없음`으로 표시될 수 있었다.
+
+### 변경 내용
+- `src/market.py`에 Naver `siseJson.naver` 기반 국내 차트 fallback을 추가.
+  - 최신가: Naver 일봉 마지막 종가
+  - 당일 차트: Naver minute 데이터
+  - 기간별 일봉: Naver day 데이터
+- `is_krx_symbol()`을 추가해 `.KS/.KQ` suffix 포함 심볼도 KRX fallback 대상으로 판별.
+- 기존 provider 순서:
+  - KIS 가능 종목은 KIS 우선
+  - KRX 종목은 Naver fallback
+  - 그래도 비면 yfinance fallback
+- `tests/test_market.py`에 알파뉴메릭 KRX 코드의 Naver 최신가/분봉/일봉 fallback 테스트 추가.
+
+### 검증 결과
+- `python -m compileall app.py src scripts tests pages` 성공.
+- `python -m unittest tests.test_market tests.test_app_dashboard.SelectedHoldingTrendFrameTests tests.test_app_dashboard.AllocationTreemapVisualMapTests` 성공.
+- `python -m unittest discover -s tests -p "test_*.py"` 성공 (`133`건).
+- `python scripts/run_kis_quote_worker.py --backend sqlite --preflight-only` 성공 (`accounts=8`, `holdings=34`).
+- 직접 조회 확인:
+  - `0162Z0`: Naver 분봉 `400`개, 일봉 `20`개, 최신가 `13,375`.
+  - `0113D0`: Naver 분봉 `296`개, 일봉 `20`개, 최신가 `12,405`.
+- `allocation_treemap_options()` 직접 확인:
+  - `0162Z0`, `0113D0` leaf tooltip에 `<svg>` 당일 sparkline 생성 확인.
+  - 기준시각 각각 `2026-05-12 15:58:00`, `2026-05-12 15:46:00` 표시 확인.
+
+### 남은 주의 사항
+- Naver chart fallback은 외부 비공식 JSON endpoint이므로 응답 형식 변경 가능성이 있다.
+- 원격 배포 전에는 Streamlit Cloud에서 자산배분 tooltip과 선택 종목 차트를 한 번 더 확인하는 것이 좋다.
