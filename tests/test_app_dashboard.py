@@ -63,6 +63,14 @@ class ThemeStylesheetTests(unittest.TestCase):
         self.assertIn(".holdings-table-shell", stylesheet)
         self.assertIn(".st-key-dashboard-panel-allocation", stylesheet)
         self.assertIn(".st-key-dashboard-panel-holdings-table", stylesheet)
+        self.assertIn("--dashboard-summary-card-height: 120px;", stylesheet)
+        self.assertIn("--dashboard-secondary-panel-min-height: 560px;", stylesheet)
+        self.assertIn(".st-key-dashboard-card-principal,\n.st-key-dashboard-card-cash", stylesheet)
+        self.assertIn(".st-key-dashboard-panel-selected-trend,\n.st-key-dashboard-panel-holdings {\n    min-height", stylesheet)
+        self.assertIn(".st-key-dashboard-summary-strip .dashboard-summary-card__value", stylesheet)
+        self.assertIn(".st-key-dashboard-card-principal .dashboard-summary-card__action--ghost", stylesheet)
+        self.assertIn('.st-key-dashboard-secondary-grid [data-testid="stHorizontalBlock"]', stylesheet)
+        self.assertIn('.st-key-dashboard-panel-selected-trend [data-testid="stVerticalBlockBorderWrapper"]', stylesheet)
         self.assertIn(".st-key-trade-log-inline-editor-shell", stylesheet)
         self.assertNotIn("${theme_primary_color}", stylesheet)
 
@@ -74,6 +82,14 @@ class ThemeStylesheetTests(unittest.TestCase):
         self.assertNotIn("cdn.jsdelivr.net", stylesheet)
         self.assertNotIn("Pretendard", stylesheet)
         self.assertIn('font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI"', stylesheet)
+
+    def test_dashboard_secondary_panel_chart_heights_match(self) -> None:
+        """선택 종목 트렌드와 보유 종목 수익률 차트 높이는 같은 값을 사용한다."""
+
+        self.assertEqual(
+            dashboard_app.DASHBOARD_DETAIL_CHART_HEIGHT,
+            dashboard_app.DASHBOARD_HOLDINGS_COMPARE_CHART_HEIGHT,
+        )
 
 
 class TradeFormResetTests(unittest.TestCase):

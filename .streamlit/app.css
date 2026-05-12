@@ -42,6 +42,8 @@
     --panel-padding: 1rem 1rem 1.05rem;
     --section-gap: 1rem;
     --chart-gap: 0.85rem;
+    --dashboard-summary-card-height: 120px;
+    --dashboard-secondary-panel-min-height: 560px;
 }
 
 /* 기본 토대 */
@@ -998,16 +1000,43 @@ h6 {
     border-radius: 0.85rem;
 }
 
+.st-key-dashboard-summary-strip .dashboard-summary-card__label {
+    white-space: normal;
+    line-height: 1.22;
+    word-break: keep-all;
+    overflow-wrap: normal;
+}
+
+.st-key-dashboard-summary-strip .dashboard-summary-card__value {
+    font-size: 1.12rem;
+    line-height: 1.16;
+    letter-spacing: 0;
+}
+
+.st-key-dashboard-card-principal .dashboard-summary-card__action--ghost,
+.st-key-dashboard-card-profit .dashboard-summary-card__action--ghost,
+.st-key-dashboard-card-profit-rate .dashboard-summary-card__action--ghost {
+    min-width: 0;
+    width: 0;
+    padding: 0;
+    border: 0;
+}
+
 .st-key-dashboard-summary-strip [data-testid="column"] > div {
     height: 100%;
 }
 
-.st-key-dashboard-summary-strip [data-testid="stHorizontalBlock"] {
+.st-key-dashboard-summary-strip [data-testid="stHorizontalBlock"],
+.st-key-dashboard-secondary-grid [data-testid="stHorizontalBlock"] {
     align-items: stretch;
 }
 
+.st-key-dashboard-secondary-grid [data-testid="column"] > div {
+    height: 100%;
+}
+
 .st-key-dashboard-summary-strip [data-testid="stVerticalBlockBorderWrapper"] {
-    min-height: 120px;
+    min-height: var(--dashboard-summary-card-height);
     height: 100%;
 }
 
@@ -1021,10 +1050,19 @@ h6 {
 .st-key-dashboard-card-total-value,
 .st-key-dashboard-card-profit,
 .st-key-dashboard-card-profit-rate,
+.st-key-dashboard-panel-selected-trend,
 .st-key-dashboard-panel-holdings,
 .st-key-dashboard-panel-holdings-table {
     background: #ffffff;
     height: 100%;
+}
+
+.st-key-dashboard-card-principal,
+.st-key-dashboard-card-cash,
+.st-key-dashboard-card-total-value,
+.st-key-dashboard-card-profit,
+.st-key-dashboard-card-profit-rate {
+    min-height: var(--dashboard-summary-card-height);
 }
 
 .st-key-dashboard-card-principal [data-testid="stVerticalBlockBorderWrapper"],
@@ -1032,7 +1070,7 @@ h6 {
 .st-key-dashboard-card-total-value [data-testid="stVerticalBlockBorderWrapper"],
 .st-key-dashboard-card-profit [data-testid="stVerticalBlockBorderWrapper"],
 .st-key-dashboard-card-profit-rate [data-testid="stVerticalBlockBorderWrapper"] {
-    min-height: 120px;
+    min-height: var(--dashboard-summary-card-height);
     height: 100%;
     display: flex;
 }
@@ -1042,6 +1080,25 @@ h6 {
 .st-key-dashboard-card-total-value [data-testid="stVerticalBlock"],
 .st-key-dashboard-card-profit [data-testid="stVerticalBlock"],
 .st-key-dashboard-card-profit-rate [data-testid="stVerticalBlock"] {
+    min-height: 100%;
+}
+
+.st-key-dashboard-panel-selected-trend,
+.st-key-dashboard-panel-holdings {
+    min-height: var(--dashboard-secondary-panel-min-height);
+}
+
+.st-key-dashboard-panel-selected-trend [data-testid="stVerticalBlockBorderWrapper"],
+.st-key-dashboard-panel-holdings [data-testid="stVerticalBlockBorderWrapper"] {
+    min-height: var(--dashboard-secondary-panel-min-height);
+    height: 100%;
+    display: flex;
+}
+
+.st-key-dashboard-panel-selected-trend [data-testid="stVerticalBlockBorderWrapper"] > div,
+.st-key-dashboard-panel-selected-trend [data-testid="stVerticalBlockBorderWrapper"] > div > [data-testid="stVerticalBlock"],
+.st-key-dashboard-panel-holdings [data-testid="stVerticalBlockBorderWrapper"] > div,
+.st-key-dashboard-panel-holdings [data-testid="stVerticalBlockBorderWrapper"] > div > [data-testid="stVerticalBlock"] {
     min-height: 100%;
 }
 
