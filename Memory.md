@@ -702,3 +702,19 @@ python scripts/verify_streamlit_deployment.py --page data --expect-backend supab
 - `python -m unittest tests.test_app_dashboard` 성공 (`44`건)
 - `python -m compileall app.py src scripts tests` 성공
 - `python -m unittest discover -s tests -p "test_*.py"` 성공 (`128`건)
+
+## 2026-05-12 04:06 대시보드 상단 카드/선택 종목 트렌드 추가 압축
+
+### 변경 파일
+- `app.py`
+- `.streamlit/app.css`
+
+### 변경 내용
+- 선택 종목 트렌드 컨트롤을 `기간 / 지표 / 선택 해제` 3블록만 남기도록 단순화해, 라벨 칸 때문에 생기던 세로 높이와 줄바꿈을 제거.
+- 상단 요약 카드 라벨은 `nowrap`과 더 작은 글자 크기로 조정하고, ghost action slot에 고정 최소 폭을 줘 카드별 헤더 줄수 차이를 줄임.
+- 선택 종목 트렌드 segmented control / 버튼 높이, padding, gap을 한 단계 더 줄여 한 줄형 밀도를 높임.
+
+### 검증 결과
+- `python -m compileall app.py` 성공
+- `python -m unittest tests.test_app_dashboard` 성공 (`44`건)
+- `python -m unittest discover -s tests -p "test_*.py"` 성공 (`128`건)

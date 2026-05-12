@@ -3844,13 +3844,11 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]], roll
                 else:
                     selected_holding_name = dashboard_selected_holding_name(holdings, selected_symbol)
                     with st.container(key="dashboard-trend-controls"):
-                        period_label_col, period_col, measure_label_col, measure_col, action_col = st.columns(
-                            (0.14, 1.82, 0.14, 1.02, 0.58),
+                        period_col, measure_col, action_col = st.columns(
+                            (1.72, 0.92, 0.52),
                             gap="small",
                             vertical_alignment="center",
                         )
-                        with period_label_col:
-                            st.markdown('<div class="dashboard-inline-control-label">기간</div>', unsafe_allow_html=True)
                         with period_col:
                             period = st.segmented_control(
                                 "기간",
@@ -3860,8 +3858,6 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]], roll
                                 key=trend_period_key,
                                 label_visibility="collapsed",
                             )
-                        with measure_label_col:
-                            st.markdown('<div class="dashboard-inline-control-label">지표</div>', unsafe_allow_html=True)
                         with measure_col:
                             selected_trend_measure = st.segmented_control(
                                 "표시 지표",
