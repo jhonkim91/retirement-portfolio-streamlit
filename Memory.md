@@ -971,3 +971,42 @@ python scripts/verify_streamlit_deployment.py --page data --expect-backend supab
 ### 남은 주의 사항
 - 브라우저 데모 검증으로 `data/portfolio.db`와 KIS 캐시 시간이 갱신됐을 수 있으므로 커밋 전 제외 여부를 재확인해야 한다.
 - 현재 변경은 로컬 검증까지 완료됐지만, 원격 반영은 아직 하지 않았다.
+
+## 2026-05-15 커밋/배포 및 Streamlit Cloud 복구
+
+### 변경 파일
+- `requirements.txt`
+- `docs/PLAN.md`
+- `scripts/verify_streamlit_deployment.py`
+- `Memory.md`
+
+### 커밋 및 배포
+- `33e754f` `Refactor Streamlit navigation and startup` 커밋 후 `origin/main`에 푸시.
+- 첫 원격 검증에서 Streamlit Cloud Python 3.14 런타임의 `altair` import `TypeError`가 재현됨.
+- `32fe43a` `Fix Streamlit Cloud Altair runtime` 커밋으로 `altair>=5.3,<5.4` 제한 후 `origin/main`에 푸시.
+- 배포 방식: Streamlit Cloud가 `origin/main` 푸시를 감지해 재배포.
+
+### 검증 결과
+- `python -m pip install --dry-run -r requirements.txt` 성공, `altair-5.3.0` 선택 확인.
+- 임시 target 설치로 `altair 5.3.0` wheel에 `closed=True` 타입 정의가 없음을 확인.
+- `python -m compileall app.py src scripts tests pages` 성공.
+- `python -m unittest discover -s tests -p "test_*.py"` 성공 (`129`건).
+- `python scripts/run_kis_quote_worker.py --backend sqlite --preflight-only` 성공 (`accounts=8`, `holdings=34`).
+- 원격 Streamlit 배포 검증 성공:
+  - 대시보드: 로그인 성공, `Supabase`, `자산 배분`, `선택 종목 트렌드` 확인.
+  - 거래: 로그인 성공, `Supabase`, `상품 등록`, `거래 기록` 확인.
+  - 데이터: 로그인 성공, `Supabase`, `운영 상태`, `데이터 저장소`, `현재 배포본은 Supabase를 사용 중입니다.` 확인.
+
+### 검증 스크립트 보강
+- `st.navigation` 전환 후 사이드바 페이지 링크가 기존 `label`이 아닌 `a[data-testid="stSidebarNavLink"]`로 렌더링되어, `scripts/verify_streamlit_deployment.py`가 새 내비게이션 링크를 찾도록 보강.
+- 페이지 핵심 마커를 찾지 못한 경우에도 성공으로 끝날 수 있던 경로를 실패 처리하도록 변경.
+
+### 커밋 제외 항목
+- `data/portfolio.db`: 로컬/브라우저 검증 중 갱신된 개인 SQLite DB라 제외.
+- `artifacts/`, `.playtools*/`, `.playwright-browsers/`, `.local/`, `.vscode/`, `data/kis_cache/`, 임시 스크립트와 로그 파일은 커밋 제외.
+
+### 다음 단계
+- [ ] KIS WebSocket worker 장시간 실행 중 재연결/상태 복구 로직을 실제 운영 로그 기준으로 점검.
+- [ ] DB/시세 TTL 캐시가 화면별로 충분히 적용됐는지 Supabase 호출 빈도와 체감 응답 시간을 기준으로 추가 측정.
+- [ ] 모바일 화면에서 대시보드 트리맵/보유 종목 표/거래 입력 폼의 가독성을 실제 viewport로 확인하고 필요한 CSS만 보강.
+- [ ] 운영 검증 스크립트의 거래/데이터 요약 추출값을 새 화면 구조에 맞게 더 정확히 정리.

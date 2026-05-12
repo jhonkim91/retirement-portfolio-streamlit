@@ -386,11 +386,24 @@ def choose_page_label(frame: Frame, page_name: str) -> Locator:
     """사이드바 페이지 레이블을 찾는다."""
 
     target_text = PAGE_LABELS[page_name]
+
+    nav_links = frame.locator('a[data-testid="stSidebarNavLink"]')
+    for index in range(nav_links.count()):
+        link = nav_links.nth(index)
+        try:
+            if not link.is_visible():
+                continue
+            link_lines = extract_lines(link.inner_text(timeout=1_500))
+            if target_text in link_lines:
+                return link
+        except Exception:
+            continue
+
     labels = frame.locator("label")
     for index in range(labels.count()):
         label = labels.nth(index)
         try:
-            if label.inner_text(timeout=1_500).strip() == target_text:
+            if label.is_visible() and label.inner_text(timeout=1_500).strip() == target_text:
                 return label
         except Exception:
             continue
@@ -474,7 +487,8 @@ def wait_for_target_page(page: Page, page_name: str, timeout_ms: int) -> tuple[F
         if has_target_page_content(last_text, page_name):
             return last_frame, last_text
         page.wait_for_timeout(1_000)
-    return last_frame, last_text
+    markers = ", ".join(PAGE_READY_MARKERS.get(page_name, ()))
+    raise RuntimeError(f"{page_name} 페이지 핵심 마커를 찾지 못했습니다: {markers}. 마지막 화면: {last_text[:600]}")
 
 
 def extract_onboarding_error(lines: list[str]) -> str:
