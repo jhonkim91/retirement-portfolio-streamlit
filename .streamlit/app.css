@@ -1209,6 +1209,16 @@ h6 {
     gap: 0.24rem;
 }
 
+.st-key-dashboard-trend-controls [data-baseweb="select"] > div {
+    min-height: 2rem;
+    border-radius: 0.58rem;
+}
+
+.st-key-dashboard-trend-controls [data-baseweb="select"] span,
+.st-key-dashboard-trend-controls [data-baseweb="select"] div {
+    font-size: 0.74rem;
+}
+
 .st-key-dashboard-trend-controls [data-testid="stButton"] > button {
     min-height: 2rem;
     white-space: nowrap;
@@ -1220,27 +1230,6 @@ h6 {
     box-shadow: none;
     font-size: 0.74rem;
     padding: 0.12rem 0.45rem;
-}
-
-.st-key-dashboard-trend-controls [data-testid="stSegmentedControl"] {
-    padding-top: 0;
-    min-width: 0;
-}
-
-.st-key-dashboard-trend-controls [data-testid="stSegmentedControl"] [role="radiogroup"] {
-    flex-wrap: nowrap;
-    gap: 0.05rem;
-    width: 100%;
-}
-
-.st-key-dashboard-trend-controls [data-testid="stSegmentedControl"] label {
-    min-height: 2rem;
-    padding-inline: 0.18rem !important;
-}
-
-.st-key-dashboard-trend-controls [data-testid="stSegmentedControl"] label p {
-    white-space: nowrap;
-    font-size: 0.7rem;
 }
 
 .st-key-dashboard-trend-controls [data-testid="stButton"] > button:hover,
@@ -1413,7 +1402,7 @@ h6 {
         font-size: 1rem;
     }
 
-    .st-key-dashboard-trend-controls [data-testid="stSegmentedControl"] label p,
+    .st-key-dashboard-trend-controls [data-baseweb="select"] span,
     .st-key-dashboard-trend-controls [data-testid="stButton"] > button {
         font-size: 0.72rem;
     }

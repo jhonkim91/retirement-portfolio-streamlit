@@ -3845,26 +3845,28 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]], roll
                     selected_holding_name = dashboard_selected_holding_name(holdings, selected_symbol)
                     with st.container(key="dashboard-trend-controls"):
                         period_col, measure_col, action_col = st.columns(
-                            (1.72, 0.92, 0.52),
+                            (0.98, 0.82, 0.46),
                             gap="small",
                             vertical_alignment="center",
                         )
                         with period_col:
-                            period = st.segmented_control(
+                            period = st.selectbox(
                                 "기간",
                                 options=list(DASHBOARD_SELECTED_TREND_PERIOD_OPTIONS),
                                 format_func=label_period,
-                                default=period,
                                 key=trend_period_key,
+                                index=list(DASHBOARD_SELECTED_TREND_PERIOD_OPTIONS).index(period),
                                 label_visibility="collapsed",
                             )
                         with measure_col:
-                            selected_trend_measure = st.segmented_control(
+                            selected_trend_measure = st.selectbox(
                                 "표시 지표",
                                 options=["market_value", "profit_rate", "close"],
                                 format_func=label_detail_measure,
-                                default=DEFAULT_SELECTED_TREND_MEASURE,
                                 key=trend_measure_key,
+                                index=["market_value", "profit_rate", "close"].index(
+                                    str(st.session_state.get(trend_measure_key) or DEFAULT_SELECTED_TREND_MEASURE)
+                                ),
                                 label_visibility="collapsed",
                             )
                         with action_col:

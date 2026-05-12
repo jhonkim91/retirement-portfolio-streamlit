@@ -723,5 +723,20 @@ python scripts/verify_streamlit_deployment.py --page data --expect-backend supab
 - 커밋: `1152639` (`Compress dashboard summary and trend controls`)
 - `origin/main` 푸시 완료
 - 원격 검증:
-  - `python scripts/verify_streamlit_deployment.py --page dashboard --expect-backend supabase --wait-ms 15000 --screenshot artifacts/dashboard-top-after-1152639.png --text-output artifacts/dashboard-top-after-1152639.txt` 성공
-  - 상단 카드 원격 스크린샷에서 라벨 줄바꿈 제거 확인
+- `python scripts/verify_streamlit_deployment.py --page dashboard --expect-backend supabase --wait-ms 15000 --screenshot artifacts/dashboard-top-after-1152639.png --text-output artifacts/dashboard-top-after-1152639.txt` 성공
+- 상단 카드 원격 스크린샷에서 라벨 줄바꿈 제거 확인
+
+## 2026-05-12 04:23 선택 종목 트렌드 컨트롤 한 줄 고정 전환
+
+### 변경 파일
+- `app.py`
+- `.streamlit/app.css`
+
+### 변경 내용
+- 선택 종목 트렌드의 `기간`, `지표` 컨트롤을 segmented control에서 compact `selectbox`로 바꿔 좁은 폭에서도 한 줄이 유지되도록 변경.
+- 해당 컨트롤 전용 `selectbox` 높이/폰트/라운드값을 조정해 기존 박스 계열 톤은 유지하면서 세로 높이를 줄임.
+
+### 검증 결과
+- `python -m compileall app.py` 성공
+- `python -m unittest tests.test_app_dashboard` 성공 (`44`건)
+- `python -m unittest discover -s tests -p "test_*.py"` 성공 (`128`건)
