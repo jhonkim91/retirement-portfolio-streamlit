@@ -13,6 +13,8 @@
 - 로컬 Streamlit 검증: `PORTFOLIO_BACKEND=sqlite RETIREMENT_DB_PATH=/tmp/retirement-portfolio-ui-impl-check.db streamlit run app.py --server.port 8546 --server.address 127.0.0.1 --server.headless true` 실행 후 `scripts/verify_streamlit_deployment.py`로 dashboard/trades 각각 backend `SQLite`, `ok=true` 확인.
 - `agent-browser` 설치 검증: `sudo npm install -g agent-browser` 후 `/usr/local/bin/agent-browser`, `agent-browser 0.27.0`, `agent-browser doctor` 기준 8 pass, 0 fail, headless launch 성공.
 - `agent-browser` UI 검증: 로컬 데모 작업공간에서 dashboard 1440px, trades 820px/390px 스크린샷 확인. 거래 페이지에서 `실현손익 요약`, `CSV`, `실현수익률`, `1 / 3 페이지` 노출과 820px/390px `documentElement.scrollWidth == clientWidth` 확인.
+- `ui 개선/report2.md` 기반 UI 개선 원격 배포 검증: 커밋 `9571ea9` `Improve dashboard and trade summaries`를 `origin/main`에 push한 뒤 `python scripts/verify_streamlit_deployment.py --page dashboard --expect-backend supabase --wait-ms 15000 --debug-dir artifacts/deploy-verify-dashboard-9571ea9` 성공, backend `Supabase`, `ok=true`.
+- `ui 개선/report2.md` 기반 UI 개선 원격 배포 검증: `python scripts/verify_streamlit_deployment.py --page trades --expect-backend supabase --wait-ms 15000 --debug-dir artifacts/deploy-verify-trades-9571ea9` 성공, backend `Supabase`, `ok=true`.
 - diff whitespace 검사: `git diff --check -- src/analytics.py src/ui/app_core.py .streamlit/app.css tests/test_analytics.py tests/test_app_dashboard.py Memory.md docs/VALIDATION.md docs/CHANGELOG.md` 성공.
 - 거래 UI/UX 단계별+화면 목업 보정 패치: `python -m compileall app.py src scripts tests pages` 성공.
 - 거래 UI/UX 단계별+화면 목업 보정 패치: `python -m unittest discover -s tests -p "test_*.py"` 성공, 173 tests.

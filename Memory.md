@@ -99,7 +99,7 @@ python scripts/verify_streamlit_deployment.py --page data --expect-backend supab
 - 계좌 `23`은 tick 이력이 없어 `last_quote_at=null` 유지.
 - `setup_supabase.sql` 정책 재실행 안정화는 로컬 문법/테스트/배포 데이터 페이지 검증까지 완료.
 - 원격 SQL Editor에서 정책 블록 직접 재실행 검증은 아직 남아 있음.
-- `ui 개선/report2.md` 기반 대시보드 KPI/실현손익/거래 기록 개선은 로컬 SQLite 기준 구현/검증 완료 상태이며 아직 커밋/원격 배포는 하지 않았다.
+- `ui 개선/report2.md` 기반 대시보드 KPI/실현손익/거래 기록 개선은 커밋 `9571ea9`로 `origin/main`에 push했고 Streamlit Cloud dashboard/trades 운영 검증이 성공했다.
 
 ## 핵심 설계 결정 요약
 - Supabase를 기본 저장소로 사용하고, 로컬/개발 fallback은 SQLite로 유지한다.
@@ -126,6 +126,7 @@ python scripts/verify_streamlit_deployment.py --page data --expect-backend supab
 - 로컬 SQLite Streamlit 검증: `scripts/verify_streamlit_deployment.py`로 dashboard/trades 각각 backend `SQLite`, `ok=true` 확인.
 - `agent-browser` CLI 설치 검증: `agent-browser 0.27.0`, `agent-browser doctor` 기준 8 pass, 0 fail, headless launch 성공.
 - `agent-browser` UI 검증: `http://127.0.0.1:8546` 데모 대시보드 1440px, 거래 페이지 820px/390px에서 핵심 문구 노출과 `scrollWidth == clientWidth` 확인.
+- `ui 개선/report2.md` 기반 UI 개선 배포 검증: 커밋 `9571ea9` push 후 운영 앱 dashboard/trades에서 backend `Supabase`, `ok=true` 확인.
 - 최신 diff 검사: `git diff --check -- src/analytics.py src/ui/app_core.py .streamlit/app.css tests/test_analytics.py tests/test_app_dashboard.py Memory.md docs/VALIDATION.md docs/CHANGELOG.md` 성공.
 
 ## 문서 분리 결과
@@ -156,6 +157,7 @@ python scripts/verify_streamlit_deployment.py --page data --expect-backend supab
 - 배포 커밋: `5ad9936` `Improve dashboard KPI responsive cards` (`origin/main` push 완료)
 - 배포 커밋: `3e023e0` `Improve trade entry and cash flow UX` (`origin/main` push 완료, Streamlit Cloud trades 수동 재배포 운영 검증 성공)
 - 커밋 시 이번 요청 관련 파일만 선별하고 `data/portfolio.db`, `.local/`, `artifacts/`, `.playtools*/`, `.playwright-browsers/`, `.vscode/`, `data/kis_cache/` 등은 제외한다.
+- 이번 UI 개선 배포 코드 커밋은 `9571ea9` `Improve dashboard and trade summaries`다.
 
 ## 운영 runbook 요약
 - realtime schema hotfix: `docs/supabase-realtime-schema-hotfix.sql`
