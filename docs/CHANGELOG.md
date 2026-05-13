@@ -13,6 +13,7 @@
   - 모바일 카드 wrapper를 inline `display:none`으로 기본 숨김 처리하고, `640px` 이하에서만 CSS `display:grid !important`로 표시.
   - PC 화면에서 기존 보유 종목 테이블 아래에 모바일 카드 텍스트가 노출되는 문제를 수정.
   - 대상 테스트, 전체 테스트, 로컬 Streamlit 1280px/390px 브라우저 검증 완료.
+  - 커밋 `199c853` `Hide mobile holdings cards on desktop`를 `origin/main`에 push하고 Streamlit Cloud 운영 dashboard 검증 완료.
 - 검증 완료 패치 묶음 배포.
   - 커밋 `d4e9813` `Improve realtime workflows and mobile holdings`를 `origin/main`에 push.
   - Streamlit Cloud 운영 dashboard 검증 성공: backend `Supabase`, `allocation_status=지연 데이터 표시 중`, `ok=true`.
