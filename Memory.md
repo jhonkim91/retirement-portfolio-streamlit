@@ -32,6 +32,7 @@
 - [x] 거래 페이지 계좌 간 이체 기능 삭제
 - [x] 보유현금 수정 로그 비노출 및 거래 흐름 분리
 - [x] Streamlit 초기 렌더/새로고침 안정화 패치 적용
+- [x] `setup_supabase.sql` RLS 정책 재실행 안정화 및 문법 검증
 - [ ] 다음 장중 자동 스케줄(`UTC 00:00`, `UTC 02:55`) 1회 추가 확인
 - [x] 배포 대시보드에서 자산 배분 상태 칩이 실제로 `실시간 연동 중`으로 보이는지 화면 검증
 
@@ -1101,3 +1102,38 @@ python scripts/verify_streamlit_deployment.py --page data --expect-backend supab
 - Streamlit Cloud 원격 대시보드 검증 성공:
   - `python scripts/verify_streamlit_deployment.py --page dashboard --expect-backend supabase --wait-ms 20000`
   - `logged_in=true`, `workspace_visible=true`, `backend_storage_code=supabase`, `ok=true`.
+
+## 2026-05-13 `setup_supabase.sql` 정책 재실행 안정화
+
+### 변경 파일
+- `setup_supabase.sql`
+- `tests/test_setup_supabase_sql.py`
+- `Memory.md`
+
+### 원인
+- SQL Editor에서 정책 블록만 부분 재실행할 경우 `holdings_update_own`, `daily_interest_update_own`가 이미 존재하면 `duplicate policy` 오류로 중단될 수 있었다.
+- 기존 파일은 정책 섹션 시작부에 일괄 `DROP POLICY IF EXISTS`가 있었지만, 개별 블록만 다시 실행하는 흐름까지는 충분히 방어하지 못했다.
+- `daily_interest_update_own` 부근 괄호 불일치 의심이 있어 실제 PostgreSQL 파서 기준 문법 확인이 필요했다.
+
+### 변경 내용
+- `setup_supabase.sql` RLS 정책 섹션 상단에 정책 점검용 `pg_policies` 조회 쿼리 주석 추가.
+- `CREATE POLICY holdings_update_own` 직전에 `DROP POLICY IF EXISTS holdings_update_own ON public.holdings;` 추가.
+- `CREATE POLICY daily_interest_update_own` 직전에 `DROP POLICY IF EXISTS daily_interest_update_own ON public.daily_interest;` 추가.
+- `tests/test_setup_supabase_sql.py`에 정책명 중복, 문제 정책의 로컬 `DROP POLICY IF EXISTS`, UPDATE 정책 블록 괄호 균형을 확인하는 회귀 테스트 4건 추가.
+- SQL 문법 검증용 로컬 패키지 `pglast`를 프로젝트 `.venv`에 설치.
+
+### 검증 결과
+- `./.venv/bin/python -m pip install pglast` 성공.
+- `./.venv/bin/python` + `pglast.parse_sql()`로 `setup_supabase.sql` 전체 파싱 성공 (`parse_ok`).
+- 괄호 개수 점검 결과 `open_paren=258`, `close_paren=258`로 불균형 없음 확인.
+- `python3 -m compileall tests/test_setup_supabase_sql.py` 성공.
+- `python3 -m unittest tests.test_setup_supabase_sql` 성공 (`4`건).
+- `python3 -m compileall app.py src scripts tests` 성공.
+- `python3 -m unittest discover -s tests -p "test_*.py"` 성공 (`137`건).
+- `python3 scripts/verify_streamlit_deployment.py --page data --expect-backend supabase --wait-ms 12000` 성공.
+  - 결과: `logged_in=true`, `workspace_visible=true`, `backend_storage_code=supabase`, `hotfix_required=false`, `ok=true`
+- `git diff -- setup_supabase.sql` 기준 정책 섹션 보강만 반영됨 확인.
+
+### 남은 작업
+- 현재 세션에는 원격 SQL 실행 도구가 없어 `pg_policies` 직접 조회/재적용은 아직 못 했다.
+- Supabase SQL Editor에서 전체 스크립트 또는 문제 정책 블록 재실행으로 운영 환경 확인이 필요하다.

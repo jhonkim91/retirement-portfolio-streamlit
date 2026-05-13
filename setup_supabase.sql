@@ -179,6 +179,12 @@ ALTER TABLE public.daily_account_snapshot ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.realtime_price_ticks ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.realtime_worker_status ENABLE ROW LEVEL SECURITY;
 
+-- SQL Editor에서 정책 일부만 재실행할 때 현재 정책 상태를 먼저 확인한다.
+-- SELECT policyname, tablename
+-- FROM pg_policies
+-- WHERE schemaname = 'public'
+-- ORDER BY tablename, policyname;
+
 DROP POLICY IF EXISTS accounts_select_own ON public.accounts;
 DROP POLICY IF EXISTS accounts_insert_own ON public.accounts;
 DROP POLICY IF EXISTS accounts_update_own ON public.accounts;
@@ -256,6 +262,9 @@ WITH CHECK (
           AND accounts.owner_user_id = (select auth.uid())
     )
 );
+
+-- SQL Editor에서 이 블록만 다시 실행해도 duplicate policy 오류가 나지 않도록 한 번 더 정리한다.
+DROP POLICY IF EXISTS holdings_update_own ON public.holdings;
 
 CREATE POLICY holdings_update_own
 ON public.holdings
@@ -396,6 +405,9 @@ WITH CHECK (
           AND accounts.owner_user_id = (select auth.uid())
     )
 );
+
+-- SQL Editor에서 이 블록만 다시 실행해도 duplicate policy 오류가 나지 않도록 한 번 더 정리한다.
+DROP POLICY IF EXISTS daily_interest_update_own ON public.daily_interest;
 
 CREATE POLICY daily_interest_update_own
 ON public.daily_interest
