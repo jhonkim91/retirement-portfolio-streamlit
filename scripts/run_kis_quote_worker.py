@@ -360,14 +360,16 @@ class SupabaseAdminClient(QuoteStorage):
         last_quote_at: str | None = None,
         metadata_json: dict[str, Any] | None = None,
     ) -> None:
+        normalized_last_quote_at = str(last_quote_at or "").strip() or None
         payload = {
             "worker_name": str(worker_name or "").strip() or "kis-quote-worker",
             "connection_state": str(connection_state or "").strip() or "unknown",
             "last_seen_at": str(last_seen_at or "").strip() or None,
-            "last_quote_at": str(last_quote_at or "").strip() or None,
             "updated_at": now_iso(),
             "metadata_json": dict(metadata_json or {}),
         }
+        if normalized_last_quote_at is not None:
+            payload["last_quote_at"] = normalized_last_quote_at
         existing = self.request("GET", "realtime_worker_status", filters={"account_id": f"eq.{account_id}"}) or []
         if existing:
             self.request("PATCH", "realtime_worker_status", data=payload, filters={"account_id": f"eq.{account_id}"})

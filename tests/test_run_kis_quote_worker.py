@@ -187,5 +187,42 @@ class QuoteWorkerShutdownTests(unittest.TestCase):
         self.assertEqual(status_updates[-1]["account_ids"], [24])
 
 
+class QuoteWorkerStatusPersistenceTests(unittest.TestCase):
+    """worker 상태 갱신 시 마지막 quote 시각 보존을 검증한다."""
+
+    def test_supabase_status_update_preserves_last_quote_at_when_omitted(self) -> None:
+        """재연결 상태 갱신에서 새 quote 시각이 없으면 기존 last_quote_at을 지우지 않는다."""
+
+        client = quote_worker.SupabaseAdminClient("https://example.supabase.co", "service-role")
+        calls: list[dict[str, object]] = []
+
+        def fake_request(method: str, table: str, *, data=None, filters=None):
+            calls.append(
+                {
+                    "method": method,
+                    "table": table,
+                    "data": dict(data or {}),
+                    "filters": dict(filters or {}),
+                }
+            )
+            if method == "GET":
+                return [{"account_id": 24, "last_quote_at": "2026-05-12T15:59:50"}]
+            return None
+
+        client.request = fake_request  # type: ignore[method-assign]
+
+        client.update_account_status(
+            24,
+            worker_name="kis-quote-worker",
+            connection_state="disconnected",
+            last_seen_at="2026-05-12T16:00:10",
+            metadata_json={"reason": "ping/pong timed out"},
+        )
+
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(calls[1]["method"], "PATCH")
+        self.assertNotIn("last_quote_at", calls[1]["data"])
+
+
 if __name__ == "__main__":
     unittest.main()

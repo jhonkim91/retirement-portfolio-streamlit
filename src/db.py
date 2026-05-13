@@ -1865,10 +1865,12 @@ def _supabase_upsert_realtime_worker_status(
         "worker_name": str(worker_name or "").strip() or "kis-quote-worker",
         "connection_state": str(connection_state or "").strip() or "unknown",
         "last_seen_at": str(last_seen_at or "").strip() or None,
-        "last_quote_at": str(last_quote_at or "").strip() or None,
         "updated_at": now_iso(),
         "metadata_json": _metadata_payload(metadata_json),
     }
+    normalized_last_quote_at = str(last_quote_at or "").strip() or None
+    if normalized_last_quote_at is not None:
+        payload["last_quote_at"] = normalized_last_quote_at
     existing = _supabase_request("GET", "realtime_worker_status", filters={"account_id": f"eq.{account_id}"}) or []
     if existing:
         _supabase_request(
@@ -1879,6 +1881,8 @@ def _supabase_upsert_realtime_worker_status(
             prefer_return="minimal",
         )
         return
+    if normalized_last_quote_at is None:
+        payload.pop("last_quote_at", None)
     _supabase_request(
         "POST",
         "realtime_worker_status",

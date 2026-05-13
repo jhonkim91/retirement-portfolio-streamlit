@@ -33,8 +33,10 @@
 - [x] 보유현금 수정 로그 비노출 및 거래 흐름 분리
 - [x] Streamlit 초기 렌더/새로고침 안정화 패치 적용
 - [x] `setup_supabase.sql` RLS 정책 재실행 안정화 및 문법 검증
-- [ ] 다음 장중 자동 스케줄(`UTC 00:00`, `UTC 02:55`) 1회 추가 확인
+- [x] 다음 장중 자동 스케줄(`UTC 00:00`, `UTC 02:55`) 1회 추가 확인
 - [x] 배포 대시보드에서 자산 배분 상태 칩이 실제로 `실시간 연동 중`으로 보이는지 화면 검증
+- [x] Streamlit Cloud 대시보드 초기 로딩/흰 화면 재현 2회 원격 점검
+- [x] realtime worker 상태 갱신 시 `last_quote_at` 보존 패치 및 운영 상태 복구
 
 ## 프로젝트 개요
 - 유형: `Python + Streamlit`
@@ -72,7 +74,7 @@ streamlit run app.py
 - 실제 값은 로컬 `.streamlit/secrets.toml` 및 GitHub Actions secrets에만 둠
 
 ## 현재 운영 상태
-- 기준 시각: `2026-05-11`
+- 기준 시각: `2026-05-13`
 - 배포 앱은 `Supabase`를 사용 중
 - 운영 Supabase realtime 테이블 노출 상태:
   - `accounts`: `200`
@@ -155,6 +157,15 @@ streamlit run app.py
 - `st.rerun()` 호출부를 점검하고, 인증 콜백 URL 처리와 잘못된 계좌 선택 복구처럼 자동 반복 가능성이 있는 경로에 세션 상태 가드를 추가해 같은 조건에서 자동 rerun이 1회만 발생하도록 제한함
 - 남은 작업: 실제 Streamlit Cloud 운영 세션에서 흰 화면/초기 로딩 지연 재현 여부를 일정 시간 관찰하고, 필요하면 브라우저 콘솔/네트워크 타이밍까지 추가 수집
 
+### 2026-05-13
+- GitHub Actions `KIS Realtime Worker` schedule 로그와 운영 Supabase 상태를 대조한 결과, `realtime_price_ticks` 최신 시각은 남아 있는데 `realtime_worker_status.last_quote_at`가 `null`로 덮어써지는 문제를 확인함
+- 원인은 worker 상태 갱신 경로가 `error`/`disconnected`/`stopped` 전이에서 `last_quote_at=None`을 그대로 PATCH/UPSERT 해 기존 quote 시각을 지우는 동작이었음
+- `scripts/run_kis_quote_worker.py`, `src/db.py`, `src/sqlite_db.py`에서 새 quote 시각이 없을 때는 기존 `last_quote_at`를 유지하도록 수정함
+- `tests/test_run_kis_quote_worker.py`, `tests/test_db.py`에 Supabase/SQLite 모두 `last_quote_at` 보존 회귀 테스트를 추가함
+- 운영 Supabase의 `realtime_worker_status`에서 계좌 `24`, `25`, `26`의 `last_quote_at`를 최신 tick 시각(`2026-05-12T15:59:50`, `2026-05-12T15:59:58`, `2026-05-12T15:48:44`)으로 1회 복구함
+- 수정된 로컬 코드로 `SupabaseAdminClient.update_account_status()`를 실제 운영 계좌 `24`에 다시 호출해도 `last_quote_at=2026-05-12T15:59:50`가 유지됨을 확인함
+- 원격 `데이터` 페이지 검증에서 `KIS WebSocket worker=stopped`, `last_seen_at=2026-05-13T00:43:36`, `마지막 quote 반영=2026-05-12T15:59:50 / 2026-05-12T15:59:50` 노출을 확인함
+
 ## 최신 검증 결과
 - `python3 -m compileall app.py src scripts tests` 성공
 - `python3 -m unittest discover -s tests -p "test_*.py"` 성공
@@ -180,6 +191,26 @@ streamlit run app.py
   - 두 run 모두 `Node.js 20 actions are deprecated` 경고 문구 미발견
   - `gh workflow list`, `gh api repos/.../actions/workflows` 기준 `KIS Realtime Worker`, `Daily Rollup` 모두 `active`
   - 다만 `gh run list --workflow "KIS Realtime Worker" --event schedule` 결과는 비어 있어 `schedule` 이벤트 실주행은 다음 자동 사이클에서 추가 확인 필요
+- 이번 턴 GitHub Actions 자동 스케줄 확인:
+  - GitHub REST API `actions/workflows/kis-realtime-worker.yml/runs?event=schedule` 기준 최근 `schedule` run `25709934302`, `25716327035`, `25654005320` 모두 `success`
+  - GitHub job 로그 기준 `run 25709934302`는 `SCHEDULE_VALUE="0 0 * * 1-5"`와 `WORKER_SEGMENT=morning` 확인
+  - GitHub job 로그 기준 `run 25716327035`는 `SCHEDULE_VALUE="55 2 * * 1-5"`와 `WORKER_SEGMENT=afternoon` 확인
+  - GitHub REST API `actions/workflows/daily-rollup.yml/runs?event=schedule` 기준 최근 `schedule` run `25750582150`, `25686240371`도 `success`
+- 이번 턴 Streamlit Cloud 초기 로딩 추가 점검:
+  - `./.venv/bin/python scripts/verify_streamlit_deployment.py --page dashboard --expect-backend supabase --debug-dir artifacts/deploy-verify-dashboard-20260513-run1 --storage-state artifacts/streamlit-storage-state.json --wait-ms 12000` 실행 후 로그인, 작업공간, 대시보드 렌더 정상 확인
+  - 동일 세션 상태 재사용 run2 결과 `ok=true`, `backend_storage=supabase`, `allocation_status="지연 데이터 표시 중"`, `rate_limited=false` 확인
+  - 대시보드 2회 점검 모두 흰 화면/로그인 실패 재현 없음
+  - 산출물: `artifacts/deploy-verify-dashboard-20260513-run1/*`, `artifacts/deploy-verify-dashboard-20260513-run2/*`, `artifacts/deploy-verify-dashboard-20260513-run2-summary.json`
+- 이번 턴 realtime worker 상태 보존/복구 검증:
+  - `python3 -m compileall app.py src scripts tests` 성공
+  - `python3 -m unittest discover -s tests -p "test_*.py"` 성공 (`140`건)
+  - `python3 -m unittest tests.test_run_kis_quote_worker tests.test_db` 성공 (`40`건)
+  - 운영 Supabase `realtime_worker_status` 조회에서 계좌 `24`, `25`, `26`의 `last_quote_at=null` 확인, 같은 시점 `realtime_price_ticks` 최신 row는 각각 존재함을 확인
+  - 운영 Supabase `realtime_worker_status.last_quote_at`를 최신 tick 기준으로 1회 복구했고, 복구 대상은 계좌 `24`, `25`, `26`
+  - 수정된 `scripts/run_kis_quote_worker.py`의 `SupabaseAdminClient.update_account_status()`를 운영 계좌 `24`에 `last_quote_at` 없이 호출한 뒤에도 `last_quote_at=2026-05-12T15:59:50` 유지 확인
+  - `./.venv/bin/python scripts/verify_streamlit_deployment.py --page data --expect-backend supabase --debug-dir artifacts/deploy-verify-data-worker-status-20260513 --storage-state artifacts/streamlit-storage-state.json --wait-ms 12000` 성공
+  - 원격 데이터 페이지 텍스트에서 `KIS WebSocket worker=stopped`, `마지막 quote 반영=2026-05-12T15:59:50 / 2026-05-12T15:59:50` 확인
+  - 산출물: `artifacts/deploy-verify-data-worker-status-20260513/*`, `artifacts/deploy-verify-data-worker-status-20260513-summary.json`
 - 이번 턴 배포 검증 스크립트 추가 검증:
   - `python3 -m unittest tests.test_verify_streamlit_deployment` 성공 (`7`건)
   - `python3 -m unittest discover -s tests -p "test_*.py"` 재실행 성공 (`81`건)
@@ -393,8 +424,9 @@ python scripts/verify_streamlit_deployment.py --page data --expect-backend supab
   - 스케줄 2: `UTC 02:55` (`KST 11:55`)
 
 ## 남은 작업
-1. `KIS Realtime Worker`의 다음 자동 스케줄(`UTC 00:00` 또는 `UTC 02:55`)이 실제 `schedule` 이벤트로 생성되고 `success`로 끝나는지 확인
-2. `2026-05-11 03:30 UTC` 기준 자동 `schedule` run이 없으므로, 다음 확인 시각은 `2026-05-12 00:00 UTC` 이후가 우선
+1. 수정된 코드가 반영된 다음 `KIS Realtime Worker` 자동 또는 수동 1회 실행에서 `error/disconnected/stopped` 전이 후에도 `realtime_worker_status.last_quote_at`가 유지되는지 GitHub Actions 로그와 운영 DB로 추가 확인
+2. 모바일 viewport 기준 대시보드 트리맵/보유 종목 표/거래 입력 폼 가독성을 점검하고 필요한 CSS만 보강
+3. 필요하면 Streamlit Cloud 초기 로딩을 다른 시간대에도 추가 관찰하고 콘솔/네트워크 타이밍을 수집
 
 ## 2026-05-11 현금/데이터 정합성 읽기 전용 점검
 - [x] 저장소 구조, 핵심 문서, `Memory.md`, 현금/거래/스냅샷 관련 코드 경로 확인

@@ -552,6 +552,7 @@ def upsert_realtime_worker_status(
     """계좌별 실시간 worker 상태를 저장하거나 갱신한다."""
 
     timestamp = now_iso()
+    normalized_last_quote_at = str(last_quote_at or "").strip() or None
     with connect() as connection:
         _require_account(connection, account_id)
         connection.execute(
@@ -565,7 +566,7 @@ def upsert_realtime_worker_status(
                 worker_name = excluded.worker_name,
                 connection_state = excluded.connection_state,
                 last_seen_at = excluded.last_seen_at,
-                last_quote_at = excluded.last_quote_at,
+                last_quote_at = COALESCE(excluded.last_quote_at, realtime_worker_status.last_quote_at),
                 updated_at = excluded.updated_at,
                 metadata_json = excluded.metadata_json
             """,
@@ -574,7 +575,7 @@ def upsert_realtime_worker_status(
                 str(worker_name or "").strip() or "kis-quote-worker",
                 str(connection_state or "").strip() or "unknown",
                 str(last_seen_at or "").strip() or None,
-                str(last_quote_at or "").strip() or None,
+                normalized_last_quote_at,
                 timestamp,
                 _metadata_json(metadata_json),
             ),
@@ -1192,5 +1193,4 @@ def delete_trade_log(*args: Any, **kwargs: Any) -> None:
             )
 
         connection.commit()
-
 

@@ -249,6 +249,76 @@ class DataCacheTests(unittest.TestCase):
         self.assertEqual(list_accounts_mock.call_count, 3)
 
 
+class RealtimeWorkerStatusPersistenceTests(unittest.TestCase):
+    """실시간 worker 상태의 마지막 quote 시각 보존을 검증한다."""
+
+    @patch("src.db._require_user_id", return_value="user-123")
+    @patch("src.db._supabase_request")
+    def test_supabase_upsert_realtime_worker_status_preserves_last_quote_at_when_omitted(
+        self,
+        request_mock,
+        _require_user_id_mock,
+    ) -> None:
+        """Supabase PATCH 상태 갱신은 새 quote 시각이 없으면 기존 값을 유지한다."""
+
+        request_mock.side_effect = [
+            [{"account_id": 24, "last_quote_at": "2026-05-12T15:59:50"}],
+            None,
+        ]
+
+        db_module._supabase_upsert_realtime_worker_status(
+            account_id=24,
+            worker_name="kis-quote-worker",
+            connection_state="disconnected",
+            last_seen_at="2026-05-12T16:00:10",
+            metadata_json={"reason": "ping/pong timed out"},
+        )
+
+        patch_call = request_mock.call_args_list[1]
+        self.assertEqual(patch_call.args[:2], ("PATCH", "realtime_worker_status"))
+        self.assertNotIn("last_quote_at", patch_call.kwargs["data"])
+
+    def test_sqlite_upsert_realtime_worker_status_preserves_last_quote_at_when_omitted(self) -> None:
+        """SQLite 상태 갱신은 last_quote_at 인자가 없을 때 기존 값을 유지한다."""
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            database_path = Path(temp_dir) / "worker-status.db"
+            with patch.object(sqlite_db, "DB_PATH", database_path):
+                sqlite_db.initialize_database()
+                with sqlite_db.connect() as connection:
+                    timestamp = sqlite_db.now_iso()
+                    connection.execute(
+                        """
+                        INSERT INTO accounts (name, account_type, cash_balance, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, ?)
+                        """,
+                        ("테스트 계좌", "retirement", 0.0, timestamp, timestamp),
+                    )
+                    connection.commit()
+
+                sqlite_db.upsert_realtime_worker_status(
+                    account_id=1,
+                    worker_name="kis-quote-worker",
+                    connection_state="connected",
+                    last_seen_at="2026-05-12T15:59:55",
+                    last_quote_at="2026-05-12T15:59:50",
+                    metadata_json={"backend": "sqlite"},
+                )
+                sqlite_db.upsert_realtime_worker_status(
+                    account_id=1,
+                    worker_name="kis-quote-worker",
+                    connection_state="disconnected",
+                    last_seen_at="2026-05-12T16:00:10",
+                    metadata_json={"reason": "ping/pong timed out"},
+                )
+
+                status = sqlite_db.get_realtime_worker_status(1)
+
+        self.assertIsNotNone(status)
+        self.assertEqual(status["connection_state"], "disconnected")
+        self.assertEqual(status["last_quote_at"], "2026-05-12T15:59:50")
+
+
 class DemoWorkspaceSeedTests(unittest.TestCase):
     """데모 워크스페이스 재시드 동작을 검증한다."""
 
