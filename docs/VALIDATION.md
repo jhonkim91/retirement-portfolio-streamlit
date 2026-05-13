@@ -7,6 +7,7 @@
 - 최신 검증 결과는 각 작업 완료 시 대표 명령만 갱신한다.
 
 ## 최신 대표 검증 결과
+- DESIGN-04 KPI 반응형 배포 검증: `git push origin main`으로 커밋 `5ad9936` 배포 트리거 후 `python scripts/verify_streamlit_deployment.py --page dashboard --expect-backend supabase --wait-ms 15000` 성공.
 - DESIGN-04 KPI 반응형 grid 패치: `python -m compileall src/ui/app_core.py tests/test_app_dashboard.py` 성공.
 - DESIGN-04 KPI 반응형 grid 패치: `python -m unittest tests.test_app_dashboard.ThemeStylesheetTests` 성공, 6 tests.
 - DESIGN-04 KPI 반응형 grid 패치: `python -m compileall app.py src scripts tests pages` 성공.
@@ -67,6 +68,10 @@
 - Streamlit Cloud 대시보드/거래/데이터 페이지 원격 검증 성공 기록 있음.
 
 ## 2026-05-13 검증 요약
+- DESIGN-04 KPI 반응형 배포 검증.
+  - 커밋 `5ad9936` `Improve dashboard KPI responsive cards`를 `origin/main`에 push해 Streamlit Cloud 자동 배포를 트리거.
+  - 운영 앱 `https://retirement-portfolio-app-nh2vq9ferqnpehsslbykbe.streamlit.app/` 대시보드 검증 성공.
+  - 검증 결과: 로그인 성공, workspace 표시, backend `Supabase`, allocation status `실시간 반영 중`, `ok=true`.
 - DESIGN-04 KPI 카드 반응형 grid 보강 검증.
   - `.dashboard-metric-strip` breakpoint를 `1180px=3열`, `820px=2열`, `560px=1열` 기준으로 추가.
   - `820px` 이하 섹션 헤더 상태 영역 세로 정렬과 `560px` 이하 카드 min-height/padding/value font 보정을 스타일시트 테스트로 확인.

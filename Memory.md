@@ -142,10 +142,12 @@ python scripts/verify_streamlit_deployment.py --page data --expect-backend supab
   - DESIGN-04 KPI 반응형 브라우저 검증: 로컬 Streamlit `http://127.0.0.1:8534` 데모 대시보드 1180/820/560px에서 `.dashboard-summary-card=5`, `bodyOverflows=false`, 560px `minHeight=0px`, header `column/flex-start` 확인
   - 최신 전체 검증: `python -m compileall app.py src scripts tests pages` 성공
   - 최신 전체 검증: `python -m unittest discover -s tests -p "test_*.py"` 성공, 155 tests
+  - DESIGN-04 KPI 반응형 배포 검증: 커밋 `5ad9936` push 후 `python scripts/verify_streamlit_deployment.py --page dashboard --expect-backend supabase --wait-ms 15000` 성공
 - 대표 배포 검증 기록:
+  - `2026-05-13` DESIGN-04 KPI 반응형 배포 검증 성공: 운영 앱 dashboard, backend `Supabase`, allocation status `실시간 반영 중`, `ok=true`
   - `python3 scripts/verify_streamlit_deployment.py --page data --expect-backend supabase --wait-ms 12000` 성공
   - Streamlit Cloud 대시보드/거래/데이터 페이지 검증 성공 기록 존재
-- 이번 BUG-03/DESIGN-01/DESIGN-02/DESIGN-03/DESIGN-04/DESIGN-05/DESIGN-07/실시간 상태 fragment/tick retention/CSS token/KPI card/KPI responsive 패치는 로컬 코드/단위 테스트로 검증했으며 운영 배포 검증은 수행하지 않았다.
+- 이번 BUG-03/DESIGN-01/DESIGN-02/DESIGN-03/DESIGN-04/DESIGN-05/DESIGN-07/실시간 상태 fragment/tick retention/CSS token/KPI card/KPI responsive 패치는 로컬 코드/단위 테스트로 검증했고, DESIGN-04 KPI responsive 변경은 운영 dashboard 검증까지 완료했다.
 
 ## 문서 분리 결과
 - 날짜별 상세 로그:
@@ -175,6 +177,7 @@ python scripts/verify_streamlit_deployment.py --page data --expect-backend supab
 - 이번 CSS radius/shadow token 작업 변경 파일은 `.streamlit/app.css`, `tests/test_app_dashboard.py`, `docs/VALIDATION.md`, `docs/CHANGELOG.md`, `Memory.md`다.
 - 이번 DESIGN-02 KPI card 작업 변경 파일은 `.streamlit/app.css`, `src/ui/app_core.py`, `tests/test_app_dashboard.py`, `docs/VALIDATION.md`, `docs/CHANGELOG.md`, `Memory.md`다.
 - 이번 DESIGN-04 KPI responsive 작업 변경 파일은 `.streamlit/app.css`, `tests/test_app_dashboard.py`, `docs/VALIDATION.md`, `docs/CHANGELOG.md`, `Memory.md`다.
+- 배포 커밋: `5ad9936` `Improve dashboard KPI responsive cards` (`origin/main` push 완료)
 - 커밋 시 이번 요청 관련 파일만 선별하고 `data/portfolio.db`, `.local/`, `artifacts/`, `.playtools*/`, `.playwright-browsers/`, `.vscode/`, `data/kis_cache/` 등은 제외한다.
 
 ## 운영 runbook 요약
