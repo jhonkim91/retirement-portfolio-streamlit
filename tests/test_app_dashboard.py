@@ -70,7 +70,12 @@ class ThemeStylesheetTests(unittest.TestCase):
         self.assertIn(".st-key-dashboard-summary-strip .dashboard-summary-card__value", stylesheet)
         self.assertIn(".st-key-dashboard-card-principal .dashboard-summary-card__action--ghost", stylesheet)
         self.assertIn('.st-key-dashboard-secondary-grid [data-testid="stHorizontalBlock"]', stylesheet)
+        self.assertIn('.st-key-dashboard-summary-strip [data-testid="stHorizontalBlock"] > div {\n    display: flex;', stylesheet)
+        self.assertIn('.st-key-dashboard-summary-strip [data-testid="stHorizontalBlock"] > div > div {\n    flex: 1 1 auto;', stylesheet)
+        self.assertNotIn('.st-key-dashboard-card-principal [data-testid="stVerticalBlockBorderWrapper"]', stylesheet)
         self.assertIn('.st-key-dashboard-panel-selected-trend [data-testid="stVerticalBlockBorderWrapper"]', stylesheet)
+        self.assertIn('.st-key-dashboard-trend-controls [data-testid="column"] {\n    min-width: 0 !important;', stylesheet)
+        self.assertIn('.st-key-dashboard-trend-controls [data-baseweb="select"] > div {\n    min-width: 0;', stylesheet)
         self.assertIn(".st-key-trade-log-inline-editor-shell", stylesheet)
         self.assertNotIn("${theme_primary_color}", stylesheet)
 
@@ -189,6 +194,11 @@ class TradeFormResetTests(unittest.TestCase):
             dashboard_app.DASHBOARD_SELECTED_TREND_PERIOD_OPTIONS,
             ("1mo", "3mo", "6mo", "1y"),
         )
+        self.assertEqual(
+            [dashboard_app.label_dashboard_period(value) for value in dashboard_app.DASHBOARD_SELECTED_TREND_PERIOD_OPTIONS],
+            ["1M", "3M", "6M", "1Y"],
+        )
+        self.assertEqual(dashboard_app.label_period("1mo"), "1개월")
 
     def test_format_trade_log_cell_formats_numeric_values(self) -> None:
         """거래 기록 표 숫자 컬럼은 천 단위 구분으로 노출한다."""
@@ -204,6 +214,33 @@ class TradeFormResetTests(unittest.TestCase):
         self.assertEqual(dashboard_app.format_trade_log_cell(log, "price", {}), "10,400")
         self.assertEqual(dashboard_app.format_trade_log_cell(log, "total_amount", {}), "130,000")
         self.assertEqual(dashboard_app.format_trade_log_cell(log, "cash_delta", {}), "-130,000")
+
+    def test_trade_type_badge_styles_include_cash_flow_types(self) -> None:
+        """입금/회사납입/출금 거래유형도 거래 기록 표에서 배지로 표시한다."""
+
+        expected_styles = {
+            "personal_deposit": {"background": "#EFF6FF", "border": "#BFDBFE", "color": "#1D4ED8", "label": "개인 입금"},
+            "employer_deposit": {"background": "#F0FDF4", "border": "#BBF7D0", "color": "#15803D", "label": "회사 납입금"},
+            "withdraw": {"background": "#FFF7ED", "border": "#FED7AA", "color": "#C2410C", "label": "일반 출금"},
+        }
+
+        for trade_type, expected in expected_styles.items():
+            with self.subTest(trade_type=trade_type):
+                self.assertEqual(
+                    dashboard_app.TRADE_TYPE_BADGE_STYLES[trade_type],
+                    {
+                        "background": expected["background"],
+                        "border": expected["border"],
+                        "color": expected["color"],
+                    },
+                )
+
+                badge_html = dashboard_app.format_trade_log_cell({"trade_type": trade_type}, "trade_type", {})
+                self.assertIn("<span", badge_html)
+                self.assertIn(f"background:{expected['background']}", badge_html)
+                self.assertIn(f"border:1px solid {expected['border']}", badge_html)
+                self.assertIn(f"color:{expected['color']}", badge_html)
+                self.assertIn(str(expected["label"]), badge_html)
 
     def test_product_search_option_label_builds_two_line_summary(self) -> None:
         """자동완성 후보 라벨은 이름과 부가 정보를 두 줄로 묶는다."""
@@ -323,6 +360,60 @@ class HoldingsTableDisplayTests(unittest.TestCase):
         self.assertIn("holdings-table__value--positive", html)
         self.assertIn("holdings-table__value--negative", html)
         self.assertIn("max-height:380px", html)
+
+    def test_build_data_export_table_html_reuses_theme_for_holdings(self) -> None:
+        """데이터 페이지 보유 종목 미리보기는 대시보드 테이블 테마를 재사용한다."""
+
+        holdings = [
+            {
+                "product_name": "삼성전자",
+                "symbol": "005930",
+                "asset_type": "risk",
+                "quantity": 10,
+                "avg_cost": 70000,
+                "current_price": 71200,
+                "price_updated_at": "2026-05-11T09:15:27+09:00",
+            }
+        ]
+
+        html = dashboard_app.build_data_export_table_html(
+            "holdings",
+            pd.DataFrame(holdings),
+            current_holdings=holdings,
+            max_height=220,
+        )
+
+        self.assertIn("holdings-table-shell", html)
+        self.assertIn("holdings-table__value--positive", html)
+        self.assertIn("삼성전자", html)
+        self.assertIn("max-height:220px", html)
+
+    def test_build_data_export_table_html_reuses_theme_for_trade_logs(self) -> None:
+        """데이터 페이지 거래 기록 미리보기는 배지와 테이블 테마를 함께 사용한다."""
+
+        frame = pd.DataFrame(
+            [
+                {
+                    "trade_date": "2026-05-11",
+                    "product_name": "개인 입금",
+                    "symbol": "",
+                    "trade_type": "personal_deposit",
+                    "asset_type": "cash",
+                    "quantity": 0,
+                    "price": 0,
+                    "total_amount": 1000000,
+                    "notes": "월 납입",
+                }
+            ]
+        )
+
+        html = dashboard_app.build_data_export_table_html("trade_logs", frame, max_height=220)
+
+        self.assertIn("holdings-table-shell", html)
+        self.assertIn("개인 입금", html)
+        self.assertIn("background:#EFF6FF", html)
+        self.assertIn("holdings-table__cell--numeric", html)
+        self.assertIn("max-height:220px", html)
 
     def test_build_holdings_mix_bar_html_includes_cash_inside_safe_ratio(self) -> None:
         """현재 보유 종목 박스 비중 막대는 보유현금을 안전자산에 합산한다."""
@@ -627,6 +718,78 @@ class AllocationTreemapVisualMapTests(unittest.TestCase):
         self.assertIsNotNone(options)
         assert options is not None
         self.assertEqual(options["visualMap"]["outOfRange"]["colorAlpha"], 0.0)
+
+    def test_allocation_treemap_uses_zero_gap_and_fixed_upper_labels(self) -> None:
+        """트리맵 경계는 gap 없이 1px border와 고정 높이 upperLabel로 정렬한다."""
+
+        holdings = [
+            {
+                "product_name": "고수익 ETF",
+                "symbol": "HIGH",
+                "asset_type": "risk",
+                "quantity": 1,
+                "avg_cost": 100,
+                "current_price": 250,
+            },
+            {
+                "product_name": "안전자산",
+                "symbol": "LOW",
+                "asset_type": "safe",
+                "quantity": 1,
+                "avg_cost": 100,
+                "current_price": 90,
+            },
+        ]
+        summary = {
+            "allocation": {
+                "risk": 250,
+                "safe": 90,
+                "cash": 0,
+            },
+            "cash": 0,
+        }
+
+        original = dashboard_app.fetch_intraday_price_snapshot
+        dashboard_app.fetch_intraday_price_snapshot = lambda symbol, interval="5m": {}
+        try:
+            options = dashboard_app.allocation_treemap_options(summary, holdings)
+        finally:
+            dashboard_app.fetch_intraday_price_snapshot = original
+
+        self.assertIsNotNone(options)
+        assert options is not None
+        series = options["series"][0]
+
+        self.assertEqual(series["upperLabel"]["height"], dashboard_app.TREEMAP_UPPER_LABEL_HEIGHT)
+        self.assertEqual(series["upperLabel"]["fontSize"], dashboard_app.TREEMAP_UPPER_LABEL_FONT_SIZE)
+        self.assertEqual(series["itemStyle"]["gapWidth"], dashboard_app.TREEMAP_NODE_GAP_WIDTH)
+        self.assertEqual(series["itemStyle"]["borderWidth"], dashboard_app.TREEMAP_NODE_BORDER_WIDTH)
+
+        for level in series["levels"]:
+            item_style = level.get("itemStyle")
+            if item_style:
+                self.assertEqual(item_style["gapWidth"], dashboard_app.TREEMAP_NODE_GAP_WIDTH)
+                self.assertEqual(item_style["borderWidth"], dashboard_app.TREEMAP_NODE_BORDER_WIDTH)
+
+            upper_label = level.get("upperLabel")
+            if upper_label:
+                self.assertEqual(upper_label["height"], dashboard_app.TREEMAP_UPPER_LABEL_HEIGHT)
+                self.assertEqual(upper_label["fontSize"], dashboard_app.TREEMAP_UPPER_LABEL_FONT_SIZE)
+
+        def iter_nodes(nodes):
+            for node in nodes:
+                yield node
+                yield from iter_nodes(node.get("children") or [])
+
+        leaf_styles = [
+            node["itemStyle"]
+            for node in iter_nodes(series["data"])
+            if not node.get("children") and node.get("itemStyle")
+        ]
+        self.assertTrue(leaf_styles)
+        for item_style in leaf_styles:
+            self.assertEqual(item_style["gapWidth"], dashboard_app.TREEMAP_NODE_GAP_WIDTH)
+            self.assertEqual(item_style["borderWidth"], dashboard_app.TREEMAP_NODE_BORDER_WIDTH)
 
     def test_allocation_treemap_groups_holdings_by_sector_and_attaches_intraday_details(self) -> None:
         """트리맵은 자산군 아래 섹터를 만들고 hover용 intraday 정보를 leaf에 붙인다."""

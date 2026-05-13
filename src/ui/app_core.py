@@ -601,6 +601,21 @@ TRADE_TYPE_BADGE_STYLES = {
         "border": "#F3C1BD",
         "color": "#D94841",
     },
+    "personal_deposit": {
+        "background": "#EFF6FF",
+        "border": "#BFDBFE",
+        "color": "#1D4ED8",
+    },
+    "employer_deposit": {
+        "background": "#F0FDF4",
+        "border": "#BBF7D0",
+        "color": "#15803D",
+    },
+    "withdraw": {
+        "background": "#FFF7ED",
+        "border": "#FED7AA",
+        "color": "#C2410C",
+    },
 }
 ASSET_TYPE_LABELS = {
     "risk": "위험자산",
@@ -668,6 +683,12 @@ SELECTED_TREND_PERIOD_OPTIONS = ("today", "1mo", "3mo", "6mo", "1y")
 DASHBOARD_SELECTED_TREND_PERIOD_OPTIONS = tuple(
     period for period in SELECTED_TREND_PERIOD_OPTIONS if period != "today"
 )
+DASHBOARD_PERIOD_LABELS = {
+    "1mo": "1M",
+    "3mo": "3M",
+    "6mo": "6M",
+    "1y": "1Y",
+}
 DASHBOARD_ALLOCATION_CHART_HEIGHT = 560
 DASHBOARD_HOLDINGS_CHART_HEIGHT = 360
 DASHBOARD_HOLDINGS_COMPARE_CHART_HEIGHT = 430
@@ -769,6 +790,10 @@ TREEMAP_TITLE_TEXT_COLOR = CHART_COLORS.treemap_title_text
 TREEMAP_TITLE_BG_COLOR = CHART_COLORS.treemap_title_bg
 TREEMAP_TITLE_BORDER_COLOR = CHART_COLORS.treemap_title_border
 FEARGREED_TREEMAP_PALETTE = list(CHART_COLORS.feargreed_treemap_palette)
+TREEMAP_NODE_BORDER_WIDTH = 1
+TREEMAP_NODE_GAP_WIDTH = 0
+TREEMAP_UPPER_LABEL_HEIGHT = 20
+TREEMAP_UPPER_LABEL_FONT_SIZE = 11
 CHART_LINE_COLOR = CHART_COLORS.chart_line
 CHART_LINE_SOFT_COLOR = CHART_COLORS.chart_line_soft
 CHART_LINE_FAINT_COLOR = CHART_COLORS.chart_line_faint
@@ -850,7 +875,7 @@ def label_transaction_type(value: Any) -> str:
 
 
 def trade_type_badge_html(value: Any) -> str:
-    """거래유형을 매수/매도 컬러 배지 HTML로 반환한다."""
+    """거래유형을 컬러 배지 HTML로 반환한다."""
 
     normalized_type = normalize_trade_log_type(value)
     label = html.escape(label_transaction_type(normalized_type))
@@ -1212,6 +1237,12 @@ def label_detail_measure(value: Any) -> str:
 
 def label_period(value: Any) -> str:
     return PERIOD_LABELS.get(str(value), str(value))
+
+
+def label_dashboard_period(value: Any) -> str:
+    """대시보드 컨트롤에서 줄바꿈을 줄일 짧은 기간 라벨을 반환한다."""
+
+    return DASHBOARD_PERIOD_LABELS.get(str(value), label_period(value))
 
 
 def latest_date_text(rows: list[dict[str, Any]], field_name: str) -> str:
@@ -2422,8 +2453,8 @@ def _rollup_treemap_node_values(
         node["value"] = [round(revenue_value, 4), child_rate]
         node["itemStyle"] = {
             "borderColor": "#F8FAFC",
-            "borderWidth": 1,
-            "gapWidth": 1,
+            "borderWidth": TREEMAP_NODE_BORDER_WIDTH,
+            "gapWidth": TREEMAP_NODE_GAP_WIDTH,
         }
         _attach_leaf_market_details(node, snapshot_lookup)
         if profit_rate is None:
@@ -2720,16 +2751,17 @@ def allocation_treemap_options(
                 "upperLabel": {
                     "show": True,
                     "formatter": label_formatter,
-                    "height": 22,
+                    "height": TREEMAP_UPPER_LABEL_HEIGHT,
                     "color": "#F8FAFC",
                     "fontWeight": 700,
+                    "fontSize": TREEMAP_UPPER_LABEL_FONT_SIZE,
                     "overflow": "truncate",
                     "ellipsis": "…",
                 },
                 "itemStyle": {
                     "borderColor": TREEMAP_CANVAS_BORDER_COLOR,
-                    "borderWidth": 1,
-                    "gapWidth": 1,
+                    "borderWidth": TREEMAP_NODE_BORDER_WIDTH,
+                    "gapWidth": TREEMAP_NODE_GAP_WIDTH,
                     "borderRadius": 6,
                 },
                 "emphasis": {
@@ -2745,30 +2777,32 @@ def allocation_treemap_options(
                     {
                         "itemStyle": {
                             "borderColor": TREEMAP_CANVAS_BORDER_COLOR,
-                            "borderWidth": 1,
-                            "gapWidth": 1,
+                            "borderWidth": TREEMAP_NODE_BORDER_WIDTH,
+                            "gapWidth": TREEMAP_NODE_GAP_WIDTH,
                             "borderRadius": 6,
                         },
                         "upperLabel": {
                             "show": True,
-                            "height": 26,
+                            "height": TREEMAP_UPPER_LABEL_HEIGHT,
                             "color": FEARGREED_FULL_TEXT_COLOR,
                             "backgroundColor": FEARGREED_FLAT_COLOR,
-                            "padding": [5, 8],
+                            "fontSize": TREEMAP_UPPER_LABEL_FONT_SIZE,
+                            "padding": [3, 6],
                         },
                     },
                     {
                         "itemStyle": {
                             "borderColor": TREEMAP_CANVAS_BORDER_COLOR,
-                            "borderWidth": 1,
-                            "gapWidth": 1,
+                            "borderWidth": TREEMAP_NODE_BORDER_WIDTH,
+                            "gapWidth": TREEMAP_NODE_GAP_WIDTH,
                             "borderRadius": 6,
                         },
                         "upperLabel": {
                             "show": True,
-                            "height": 20,
+                            "height": TREEMAP_UPPER_LABEL_HEIGHT,
                             "color": FEARGREED_BRIGHT_TEXT_COLOR,
                             "backgroundColor": "rgba(42,46,57,0.88)",
+                            "fontSize": TREEMAP_UPPER_LABEL_FONT_SIZE,
                             "padding": [3, 6],
                         },
                     },
@@ -2777,8 +2811,8 @@ def allocation_treemap_options(
                         "colorMappingBy": "value",
                         "itemStyle": {
                             "borderColor": TREEMAP_CANVAS_BORDER_COLOR,
-                            "borderWidth": 1,
-                            "gapWidth": 1,
+                            "borderWidth": TREEMAP_NODE_BORDER_WIDTH,
+                            "gapWidth": TREEMAP_NODE_GAP_WIDTH,
                             "borderRadius": 4,
                         },
                     },
@@ -3931,17 +3965,25 @@ def _holding_value_tone_class(value: Any) -> str:
     return " holdings-table__value--neutral"
 
 
-def build_holdings_table_html(display: pd.DataFrame, *, max_height: int = 420) -> str:
-    """현재 보유 종목 표를 스크린샷 스타일에 맞는 HTML 테이블로 변환한다."""
+def build_theme_table_html(
+    display: pd.DataFrame,
+    *,
+    max_height: int = 420,
+    numeric_columns: set[str] | None = None,
+    tone_columns: set[str] | None = None,
+    html_columns: set[str] | None = None,
+) -> str:
+    """앱 공통 테이블 테마 클래스로 표시용 DataFrame을 HTML 테이블로 변환한다."""
 
     if display.empty:
         return ""
 
-    numeric_columns = {"수량", "평단가", "현재가", "원금", "평가금액", "손익", "수익률(%)", "가격갱신"}
-    tone_columns = {"손익", "수익률(%)"}
+    numeric_column_set = set(numeric_columns or set())
+    tone_column_set = set(tone_columns or set())
+    html_column_set = set(html_columns or set())
 
     header_html = "".join(
-        f'<th class="holdings-table__head{" holdings-table__head--numeric" if column in numeric_columns else ""}">{html.escape(str(column))}</th>'
+        f'<th class="holdings-table__head{" holdings-table__head--numeric" if column in numeric_column_set else ""}">{html.escape(str(column))}</th>'
         for column in display.columns
     )
 
@@ -3950,10 +3992,11 @@ def build_holdings_table_html(display: pd.DataFrame, *, max_height: int = 420) -
         cells: list[str] = []
         for column in display.columns:
             value = str(row.get(column) or "-")
-            tone_class = _holding_value_tone_class(value) if column in tone_columns else ""
-            align_class = " holdings-table__cell--numeric" if column in numeric_columns else ""
+            tone_class = _holding_value_tone_class(value) if column in tone_column_set else ""
+            align_class = " holdings-table__cell--numeric" if column in numeric_column_set else ""
+            cell_value = value if column in html_column_set else html.escape(value)
             cells.append(
-                f'<td class="holdings-table__cell{align_class}{tone_class}" title="{html.escape(value)}">{html.escape(value)}</td>'
+                f'<td class="holdings-table__cell{align_class}{tone_class}" title="{html.escape(value)}">{cell_value}</td>'
             )
         body_rows.append(f"<tr>{''.join(cells)}</tr>")
 
@@ -3967,6 +4010,66 @@ def build_holdings_table_html(display: pd.DataFrame, *, max_height: int = 420) -
             "</div>",
         ]
     )
+
+
+def build_holdings_table_html(display: pd.DataFrame, *, max_height: int = 420) -> str:
+    """현재 보유 종목 표를 스크린샷 스타일에 맞는 HTML 테이블로 변환한다."""
+
+    return build_theme_table_html(
+        display,
+        max_height=max_height,
+        numeric_columns={"수량", "평단가", "현재가", "원금", "평가금액", "손익", "수익률(%)", "가격갱신"},
+        tone_columns={"손익", "수익률(%)"},
+    )
+
+
+def build_trade_logs_table_display(frame: pd.DataFrame) -> pd.DataFrame:
+    """거래 기록 원본 프레임을 데이터 페이지 테마 테이블 표시용으로 변환한다."""
+
+    if frame.empty:
+        return pd.DataFrame()
+
+    rows: list[dict[str, str]] = []
+    for log in frame.to_dict(orient="records"):
+        rows.append(
+            {
+                "거래일": format_trade_log_cell(log, "trade_date", {}),
+                "종목명": format_trade_log_cell(log, "product_name", {}),
+                "코드": format_trade_log_cell(log, "symbol", {}),
+                "유형": format_trade_log_cell(log, "trade_type", {}),
+                "자산군": format_trade_log_cell(log, "asset_type", {}),
+                "수량": format_trade_log_cell(log, "quantity", {}),
+                "단가": format_trade_log_cell(log, "price", {}),
+                "총액": format_trade_log_cell(log, "total_amount", {}),
+                "메모": format_trade_log_cell(log, "notes", {}),
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def build_data_export_table_html(
+    table_name: str,
+    frame: pd.DataFrame,
+    *,
+    current_holdings: list[dict[str, Any]] | None = None,
+    max_height: int = 220,
+) -> str:
+    """데이터 페이지의 주요 원본 테이블을 앱 공통 HTML 테이블 테마로 변환한다."""
+
+    normalized_table_name = str(table_name or "").strip()
+    if normalized_table_name == "holdings":
+        source_frame = holdings_frame(current_holdings or []) if current_holdings is not None else frame
+        return build_holdings_table_html(build_holdings_table_display(source_frame), max_height=max_height)
+
+    if normalized_table_name == "trade_logs":
+        return build_theme_table_html(
+            build_trade_logs_table_display(frame),
+            max_height=max_height,
+            numeric_columns={"수량", "단가", "총액"},
+            html_columns={"유형"},
+        )
+
+    return ""
 
 
 def auth_page(auth_enabled: bool = True) -> None:
@@ -4256,7 +4359,7 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]], roll
                             period = st.selectbox(
                                 "기간",
                                 options=list(DASHBOARD_SELECTED_TREND_PERIOD_OPTIONS),
-                                format_func=label_period,
+                                format_func=label_dashboard_period,
                                 key=trend_period_key,
                                 index=list(DASHBOARD_SELECTED_TREND_PERIOD_OPTIONS).index(period),
                                 label_visibility="collapsed",
@@ -4851,7 +4954,16 @@ def data_page(account: dict[str, Any], rollup_state: dict[str, Any] | None = Non
             st.subheader(table_label)
             st.write(f"행 수: `{len(frame):,}`")
             if not frame.empty:
-                st.dataframe(frame, width="stretch", hide_index=True, height=220)
+                themed_table_html = build_data_export_table_html(
+                    table_name,
+                    frame,
+                    current_holdings=holdings if table_name == "holdings" else None,
+                    max_height=220,
+                )
+                if themed_table_html:
+                    st.markdown(themed_table_html, unsafe_allow_html=True)
+                else:
+                    st.dataframe(frame, width="stretch", hide_index=True, height=220)
             else:
                 st.info("데이터가 없습니다.")
             st.download_button(

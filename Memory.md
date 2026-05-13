@@ -1,70 +1,84 @@
 # Memory.md
 
+## 문서 목적
+- 이 파일은 현재 프로젝트 상태와 다음 작업에 필요한 최소 정보만 유지한다.
+- 날짜별 상세 작업 로그는 `docs/archive/memory-YYYY-MM-DD.md`로 분리했다.
+- 검증 상세 이력은 `docs/VALIDATION.md`에 모았다.
+- 완료된 변경 이력은 `docs/CHANGELOG.md`에 모았다.
+- 중요한 설계 결정은 `docs/DECISIONS.md`에 모았다.
+- 정리 기준일은 `2026-05-13`이다.
+- 원본의 `2026-05-15` 섹션은 현재 기준일보다 뒤라 날짜 오류 가능성으로 별도 표시했다.
+
 ## 작업 상태
-- [x] 프로젝트 구조 분석 및 초기화 파일 확인
-- [x] Streamlit 로그인 화면 재구성 및 데모 모드 추가
-- [x] 대시보드 자산 배분/선택 종목 트렌드 UI 정리
-- [x] Supabase 우선 저장소 및 배포 검증 자동화 정리
-- [x] KIS REST/WebSocket 기반 실시간 quote worker 추가
-- [x] 운영 Supabase realtime 테이블(`realtime_worker_status`, `realtime_price_ticks`) 생성 및 장중 적재 검증
-- [x] GitHub Actions 기반 장중 KIS worker 자동 실행 workflow 추가
-- [x] `gh` CLI 로컬 설치 및 Actions secrets 등록
-- [x] GitHub-hosted runner에서 `KIS Realtime Worker` 수동 실행 성공 검증
-- [x] `Memory.md` 장문 로그를 요약형 운영 메모로 정리
-- [x] GitHub Actions `Node 24` 전환 경고 제거
-- [x] 배포 검증 스크립트에 대시보드 자산 배분 상태 칩 파싱/기대값 검증 추가
-- [x] `config.toml` 기반 디자인 토큰 및 전역 CSS 외부 파일 구조 정리
-- [x] 보유 종목 수익률 음수 막대 모서리 방향 수정
-- [x] 선택 종목 트렌드에 `당일` intraday 구간 추가
-- [x] 선택 종목 `당일` 트렌드가 자산 배분 카드의 금일 시세와 같은 마지막 값을 사용하도록 보정
-- [x] 현재 보유 종목 표에 가격갱신 초 단위 표시 및 손익/수익률 컬러 스타일 적용
-- [x] 현재 보유 종목 박스에 위험/안전/보유현금 비율 막대바 추가
-- [x] 현재 보유 종목 비율 막대에서 보유현금을 안전자산에 포함하도록 조정
-- [x] 기존 일별 이자 이력이 있는 계좌의 매수 전 현금 재동기화 복구
-- [x] 입금액과 무관하게 매수 상품 등록 허용
-- [x] Supabase 음수 현금 helper 제약으로 막히던 거래 등록 재수정
-- [x] 거래 저장 후 `st.session_state` 직접 초기화 예외 제거
-- [x] 운영 배포용 `app.py` 초기 `importlib.reload(src.market)` 제거
-- [x] 배포 검증 스크립트에 세션 재사용/디버그 아티팩트 저장 옵션 추가
-- [x] `src/market.py` 검색 캐시 추가 및 정규화 질의 회귀 테스트 보강
-- [x] 사용자별 DB 조회 캐시 및 이자 조회 제거 반영
-- [x] 외부 CDN 폰트 import 제거 및 시스템 폰트 스택 전환
-- [x] 거래 페이지 계좌 간 이체 기능 삭제
-- [x] 보유현금 수정 로그 비노출 및 거래 흐름 분리
-- [x] Streamlit 초기 렌더/새로고침 안정화 패치 적용
-- [x] `setup_supabase.sql` RLS 정책 재실행 안정화 및 문법 검증
-- [x] 다음 장중 자동 스케줄(`UTC 00:00`, `UTC 02:55`) 1회 추가 확인
-- [x] 배포 대시보드에서 자산 배분 상태 칩이 실제로 `실시간 연동 중`으로 보이는지 화면 검증
-- [x] Streamlit Cloud 대시보드 초기 로딩/흰 화면 재현 2회 원격 점검
-- [x] realtime worker 상태 갱신 시 `last_quote_at` 보존 패치 및 운영 상태 복구
-- [x] 수정된 worker 코드가 GitHub Actions manual run에서도 `last_quote_at`를 유지하는지 실주행 검증
+- [x] 프로젝트 구조 분석 및 핵심 문서 확인
+- [x] `Memory.md` 장문 날짜별 로그 archive 분리
+- [x] 긴 검증 이력 `docs/VALIDATION.md` 분리
+- [x] 완료 변경 이력 `docs/CHANGELOG.md` 분리
+- [x] 핵심 설계 결정 `docs/DECISIONS.md` 분리
+- [x] Streamlit 로그인/데모/대시보드 기본 UI 정리
+- [x] `app.py` 지연 로더와 `src/ui/app_core.py` 중심 구조 반영
+- [x] `pages/dashboard.py`, `pages/trades.py`, `pages/data.py` 기반 `st.navigation` 전환 반영
+- [x] Supabase 우선 저장소와 SQLite fallback 유지
+- [x] KIS REST/WebSocket 기반 quote worker와 GitHub Actions workflow 반영
+- [x] 운영 Supabase realtime 테이블 생성 및 장중 적재 검증 기록
+- [x] 보유현금 수동 관리, 거래/현금 흐름 분리 정책 반영
+- [x] 자산 배분/선택 종목 트렌드/보유 종목 표 UI 정리
+- [x] `setup_supabase.sql` RLS 정책 재실행 안정화 반영
+- [x] realtime worker `last_quote_at` 보존 패치 및 운영 복구 기록
+- [x] BUG-03 거래기록 삭제 후 DB 조회 캐시 즉시 무효화
+- [x] DESIGN-01 상단 요약 카드 Flexbox 높이 정렬 보강
+- [x] DESIGN-02 선택 종목 트렌드 기간 라벨 단축 및 nowrap 보강
+- [x] DESIGN-03 자산 배분 트리맵 경계선/여백 정렬
+- [x] DESIGN-04 데이터 페이지 보유종목/거래기록 테이블 테마 통일
+- [x] DESIGN-05 현금흐름 거래유형 배지 스타일 보강
+- [ ] KIS WebSocket worker 장시간 실행 중 재연결/상태 복구를 장중 운영 로그 기준으로 추가 점검
+- [ ] 모바일 viewport에서 대시보드 트리맵/보유 종목 표/거래 입력 폼 가독성 확인
+- [ ] 스냅샷 저장, CSV export, 운영 정리 작업의 로딩 상태 표시 누락 여부 점검
+- [ ] `scripts/verify_streamlit_deployment.py`의 거래/데이터 요약 추출값 정밀화
+- [ ] Supabase SQL Editor에서 `setup_supabase.sql` 전체 또는 문제 정책 블록 재실행 확인
 
 ## 프로젝트 개요
 - 유형: `Python + Streamlit`
 - 진입점: `app.py`
+- 앱 코어: `src/ui/app_core.py`
+- 페이지: `pages/dashboard.py`, `pages/trades.py`, `pages/data.py`
 - 저장소: `Supabase` 우선, 필요 시 `SQLite`
-- 시세: `KIS REST/WebSocket` 우선, 일부 fallback `yfinance`
+- 로컬 SQLite DB: `data/portfolio.db`
+- 시세: `KIS REST/WebSocket` 우선, KRX/Naver fallback, 일부 `yfinance` fallback
 - 배포 앱: `https://retirement-portfolio-app-nh2vq9ferqnpehsslbykbe.streamlit.app/`
+- UI 설정: `.streamlit/config.toml`과 `.streamlit/app.css` 기준 유지
 
 ## 핵심 파일
-- 앱: `app.py`
-- DB 추상화: `src/db.py`
-- SQLite 구현: `src/sqlite_db.py`
-- 인증: `src/auth.py`
-- 분석/차트: `src/analytics.py`
-- 일별 롤업: `scripts/run_daily_rollup.py`
-- KIS worker: `scripts/run_kis_quote_worker.py`
-- 배포 검증: `scripts/verify_streamlit_deployment.py`
-- 자동 커밋/배포 검증: `scripts/verify_and_push_deploy.py`
-- Supabase realtime 핫픽스: `docs/supabase-realtime-schema-hotfix.sql`
-- realtime 운영 절차: `docs/supabase-realtime-worker-runbook.md`
-- 장중 worker workflow: `.github/workflows/kis-realtime-worker.yml`
-- 일별 롤업 workflow: `.github/workflows/daily-rollup.yml`
+- `app.py`: 얇은 Streamlit 엔트리포인트와 기존 공개 API 호환 지연 로더
+- `src/ui/app_core.py`: 앱 라우터, 페이지 공통 상태, UI helper의 중심 구현
+- `src/ui/charts.py`, `src/ui/forms.py`, `src/ui/layout.py`: 앱 코어 helper re-export 호환 모듈
+- `pages/dashboard.py`: 대시보드 페이지 진입점
+- `pages/trades.py`: 거래 페이지 진입점
+- `pages/data.py`: 데이터/운영 상태 페이지 진입점
+- `src/db.py`: Supabase 중심 DB 추상화 및 조회 캐시
+- `src/sqlite_db.py`: SQLite fallback 구현
+- `src/auth.py`: 인증 및 Supabase client 지연 초기화
+- `src/analytics.py`: 포트폴리오 계산 및 차트 데이터
+- `src/market.py`: KIS/Naver/yfinance 시세 조회와 캐시
+- `scripts/run_daily_rollup.py`: 일별 롤업 배치
+- `scripts/run_kis_quote_worker.py`: KIS realtime quote worker
+- `scripts/verify_streamlit_deployment.py`: Streamlit Cloud 운영 검증
+- `setup_supabase.sql`: Supabase schema/RLS 정책 기준 스크립트
+- `.github/workflows/kis-realtime-worker.yml`: 장중 worker 자동 실행
+- `.github/workflows/daily-rollup.yml`: 일별 롤업 자동 실행
 
-## 실행 방법
+## 실행 명령
 ```powershell
 python -m pip install -r requirements.txt
 streamlit run app.py
+```
+
+## 권장 검증 명령
+```powershell
+python -m compileall app.py src scripts tests pages
+python -m unittest discover -s tests -p "test_*.py"
+python scripts/run_kis_quote_worker.py --backend sqlite --preflight-only
+python scripts/verify_streamlit_deployment.py --page data --expect-backend supabase --wait-ms 12000
 ```
 
 ## 운영 시크릿 메모
@@ -72,362 +86,103 @@ streamlit run app.py
 - 관리자/배치용: `SUPABASE_SERVICE_ROLE_KEY`
 - KIS용: `KIS_APP_KEY`, `KIS_APP_SECRET`, `KIS_ENV`
 - 배포 검증용: `STREAMLIT_VERIFY_EMAIL`, `STREAMLIT_VERIFY_PASSWORD`
-- 실제 값은 로컬 `.streamlit/secrets.toml` 및 GitHub Actions secrets에만 둠
+- 실제 값은 `.streamlit/secrets.toml`, Streamlit Cloud secrets, GitHub Actions secrets, OS 환경 변수에만 둔다.
+- `SUPABASE_SERVICE_ROLE_KEY` 같은 관리자 키는 UI, 문서, 커밋에 노출하지 않는다.
 
 ## 현재 운영 상태
-- 기준 시각: `2026-05-13`
-- 배포 앱은 `Supabase`를 사용 중
-- 운영 Supabase realtime 테이블 노출 상태:
-  - `accounts`: `200`
-  - `realtime_worker_status`: `200`
-  - `realtime_price_ticks`: `200`
-- 장중 수동 검증 결과:
-  - `python3 scripts/run_kis_quote_worker.py --backend supabase --preflight-only` 통과
-  - 장중 수동 실행에서 `KIS WebSocket 연결 완료` 확인
-  - `realtime_price_ticks` 적재 및 `holdings.current_price` overwrite 확인
-- GitHub Actions 수동 검증 결과:
-  - 첫 run `25646136285`: 적재는 됐으나 종료 구간 `exit 137`
-  - 수정 후 run `25646510735`: `success`
-  - 완료 후 `worker_name=kis-quote-worker-github-actions`, `connection_state=stopped` 확인
+- 기준일: `2026-05-13`
+- 배포 앱은 `Supabase` backend를 사용 중인 것으로 최근 검증에 기록됨.
+- 운영 Supabase realtime 테이블 노출 상태는 최근 기록 기준 `accounts`, `realtime_worker_status`, `realtime_price_ticks` 모두 HTTP `200`.
+- GitHub Actions `KIS Realtime Worker` manual run `25771266167`은 job `success`로 기록됨.
+- run 중 `ping/pong timed out` 후 재연결이 발생했고, 종료 시 `exit 137`이 있었으나 workflow 결과는 성공으로 기록됨.
+- 계좌 `24`, `25`는 최신 tick과 같은 `last_quote_at=2026-05-13T09:54:33` 기록.
+- 계좌 `26`은 quote 미수신 상태에서도 기존 `last_quote_at=2026-05-12T15:48:44` 유지.
+- 계좌 `23`은 tick 이력이 없어 `last_quote_at=null` 유지.
+- `setup_supabase.sql` 정책 재실행 안정화는 로컬 문법/테스트/배포 데이터 페이지 검증까지 완료.
+- 원격 SQL Editor에서 정책 블록 직접 재실행 검증은 아직 남아 있음.
 
-## 최근 핵심 변경 요약
-
-### 2026-05-09
-- 로그인/데모/기본 UI, 카드 정렬, 브라우저 검증 기반 정리
-- 로컬 Playwright/브라우저 검증 경로 확보
-- README 비정상 텍스트와 예시 시크릿 정리
-
-### 2026-05-10
-- 대시보드 자산 배분, 보유 종목 수익률, 선택 종목 트렌드 대폭 정리
-- 자산 배분 트리맵을 `자산군 → 섹터 → 보유 종목` 구조로 확장
-- KIS 우선 섹터/시세 provider와 realtime quote worker 추가
-- Supabase realtime 스키마 핫픽스 SQL과 runbook 추가
-- 로그인 카드 레이아웃 개편 및 데모 모드 진입 UX 정리
-
-### 2026-05-11
-- `Memory.md`를 장문 실행 로그에서 요약형 운영 메모로 재정리(`1061`줄 -> `133`줄)
-- 자산 배분 상태 칩을 실제 worker 상태 기반(`실시간 연동 중`, `지연 데이터 표시 중` 등)으로 변경
-- 운영 Supabase realtime 테이블 생성 후 장중 적재 검증 완료
-- GitHub Actions 장중 worker 자동화 workflow 추가
-- `gh` CLI 설치, GitHub Actions secrets 주입, 수동 dispatch/실행 성공 검증 완료
-- 배포 대시보드가 장중에도 `지연 데이터 표시 중`으로 남는 케이스를 재현했고, 최근 quote 시각이 3분 이내면 live 톤으로 승격하는 fallback 및 10초 재확인 로직을 추가
-- 커밋 `2ede61d` 배포 후 세 번째 원격 확인에서 자산 배분 상태 칩이 `실시간 연동 중`으로 전환됨을 확인
-- `actions/checkout@v6`, `actions/setup-python@v6`, `permissions.contents=read`로 workflow를 올려 `Node.js 20 actions are deprecated` 경고 제거
-- `Daily Rollup` 과거 schedule 실패 원인은 `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` 시크릿 누락이었고, 현재는 수동 `dry-run` 성공으로 복구 상태 확인
-- `scripts/verify_streamlit_deployment.py`가 대시보드 렌더 완료까지 대기한 뒤 `자산 배분` 상태 칩 텍스트를 파싱하고, `--expect-allocation-status`로 기대값 비교까지 수행하도록 보강
-- `app.py` 내부 전역 CSS를 `.streamlit/app.css`로 분리하고, `.streamlit/config.toml`의 `primary/background/secondaryBackground/text`를 기준으로 카드·차트·배경 토큰을 Python 로더에서 파생하도록 정리
-- 대시보드 차트 계열의 선택 강조색, 라인 색, 툴팁/캔버스 색을 동일 토큰 체계에 연결하고, `tests/test_app_dashboard.py`에 토큰/외부 CSS 로딩 회귀 테스트를 추가
-- `보유 종목 수익률` ECharts 막대가 음수일 때도 상단 라운드가 적용되던 문제를 수정하고, 값 부호에 따라 양수는 상단 라운드, 음수는 하단 라운드가 적용되도록 변경
-- Altair fallback 막대차트도 `cornerRadiusEnd`로 맞춰 ECharts 미사용 환경에서 같은 방향성을 유지하도록 정리
-- 선택 종목 트렌드 기간에 `당일`을 추가하고, `fetch_intraday_price_snapshot()`의 세션 타임라인을 사용해 장 시작부터 장 마감까지의 intraday 누적 손익 흐름을 그리도록 연결
-- KIS/Yahoo intraday 스냅샷 반환값에 `timeline(datetime, close)`를 추가하고, 선택 종목 데이터 보기에서 `당일`일 때 `시간` 컬럼과 `HH:MM` 축 라벨을 함께 노출하도록 정리
-- 선택 종목 `당일` 프레임 생성 시 자산 배분 카드가 쓰는 `current_price/as_of`를 마지막 포인트로 덮어써 화면 간 금일 시세 불일치를 줄이고, 타임라인이 비어도 금일 시세 1포인트를 만들도록 fallback 추가
-- 현재 보유 종목 표의 `가격갱신`을 `YYYY-MM-DD HH:MM:SS`로 통일하고, `손익`/`수익률`은 양수/음수/0에 따라 컬러와 굵기를 다르게 표시하도록 `Styler` 기반 렌더로 변경
-- 현재 보유 종목 박스 상단에 `위험자산/안전자산/보유현금` 스택 막대바와 비중/금액 legend를 추가해 자산 구성을 표 안에서 바로 읽을 수 있게 정리
-- 현재 보유 종목 비중 막대는 별도 `보유현금` 세그먼트를 없애고 `안전자산` 금액에 현금을 합산해, `안전자산(보유현금 포함)` 기준으로 보이도록 조정
-- `record_trade()` 직전에 기존 `daily_interest`/`interest` 이력이 남은 계좌만 이자 원장을 다시 맞추는 복구 훅을 추가해, 자동 적립 제거 이후 `보유현금 부족` 오탐이 날 수 있는 경로를 보정
-- 누적 원금 화면 문구도 `새 이자는 자동 적립하지 않지만 기존 일별 이자 이력은 현금 계산에 반영된다`는 현재 동작에 맞게 수정
-- 매수 등록은 보유현금 부족이어도 허용하고, 이후 `현금 조정`으로 실제 통장 잔액을 수동 최신화하는 현재 운영 방식에 맞게 `buy` 현금 부족 차단을 제거
-- `app.py` 초기 로딩에서 `src.market` import 직후 다시 호출하던 `importlib.reload()`를 제거해, Streamlit 재실행마다 중복 모듈 초기화 비용이 생기던 경로를 정리
-- `src/market.py`의 `search_products()`를 정규화 질의값 기준 내부 캐시(`ttl=3600`, `max_entries=300`)로 감싸, 동일 검색어의 공백/표기 차이로 외부 검색 API를 반복 호출하던 경로를 줄임
-- `tests/test_market.py`에 `" 삼성전자 "`와 `"삼성전자"`가 동일 캐시 엔트리를 재사용하는지 검증하는 회귀 테스트를 추가
-- 검색 캐시 보강 커밋 `e2dd5fd`를 `origin/main`에 푸시했고, 원격 Streamlit 앱 대시보드 로그인/저장소 검증을 다시 통과함
-- `src/db.py`에 사용자별 `scope_key`와 `data_refresh_token`을 포함한 조회 캐시를 추가해 `accounts`, `account`, `holdings`, `trade_logs`, `daily_account_snapshot` 반복 조회를 줄였고, 쓰기 작업 성공 후에는 자동으로 refresh token을 증가시키도록 정리
-- Supabase 읽기 경로에서 `holdings`, `trade_logs`, `daily_account_snapshot`, `realtime_*` 조회 전에 `accounts` 존재 확인용 추가 GET을 보내던 경로를 제거해 데이터 페이지/대시보드 렌더 시 중복 호출 수를 낮춤
-- `app.py`의 대시보드/데이터 페이지에서 `daily_interest` 조회와 관련 문구를 제거하고, `record_trade()`의 legacy 이자 재동기화 훅도 빼서 이자 제거 방향에 맞게 정리
-- 앱 코드 커밋 `8eb14d5`를 `origin/main`에 푸시했고, 원격 Streamlit 앱 `데이터` 페이지에서 로그인/저장소 상태 검증을 다시 통과함
-- `.streamlit/app.css`의 Pretendard jsDelivr `@import`를 제거하고 시스템 폰트 스택(`system-ui`, `-apple-system`, `"Segoe UI"`, `"Apple SD Gothic Neo"`, `"Noto Sans KR"`)으로 전환해 첫 렌더 시 외부 폰트 CSS 응답 대기를 없앰
-- `tests/test_app_dashboard.py`에 외부 CDN 폰트 import 부재와 시스템 폰트 스택 적용 회귀 테스트를 추가
-- 앱 코드 커밋 `569e2f9`를 `origin/main`에 푸시했고, 원격 Streamlit 앱 대시보드 로그인/렌더 검증을 다시 통과함
-- 거래 페이지에서 계좌 간 이체 입력 패널과 관련 세션 상태를 제거하고, 대시보드/데이터/데모 문구도 현재 기능 집합에 맞게 정리
-- `src/db.py` 데모 블루프린트의 `transfers` 예시와 `seed_demo_workspace()` 이체 생성 루프를 제거해 데모 작업공간도 더 이상 계좌 이체 이벤트를 만들지 않도록 맞춤
-- `tests/test_db.py`에서 데모 시드 회귀를 계좌 이체 없는 블루프린트 기준으로 갱신
-- 앱 코드 커밋 `83861ad`를 `origin/main`에 푸시했고, 원격 Streamlit 앱 `거래` 페이지에서 로그인/작업공간/`Supabase` 저장소 상태 검증을 다시 통과함
-- 대시보드 `보유 현금` 카드 수정이 `trade_logs`에 `cash_adjustment` 행을 남기지 않도록 `src/db.py`/`src/sqlite_db.py` 조정 경로를 바꾸고, 기존 `cash_adjustment` 이력도 거래 화면에서는 숨기도록 정리
-- `src/analytics.py`에서는 과거 `cash_adjustment` 로그를 원금/순유입 계산에서 제외해, 보유현금은 현재 잔액으로만 자산배분·평가손익·원금대비 수익률에 반영되도록 정리
-- 앱 코드 커밋 `e7a445c`를 `origin/main`에 푸시했고, 원격 Streamlit 앱 `거래`/`데이터` 페이지에서 로그인·작업공간·`Supabase` 저장소 상태 검증을 다시 통과함
-- 배포 웹 검증이 불안정하던 원인을 `반복 로그인에 따른 인증 rate limit`과 `실패 시 마지막 화면 증거 부족`으로 분리했고, `scripts/verify_streamlit_deployment.py`에 `--storage-state`, `--debug-dir` 옵션과 `auth_error`/`rate_limited` 진단 필드를 추가
-- 검증 실패 시 단계별 `txt/png/url` 아티팩트를 남기도록 보강해, 로그인 실패/페이지 전환 실패/배포 미반영 상태를 이후 세션에서도 바로 재확인할 수 있게 정리
-
-### 2026-05-12
-- `app.py`의 `load_design_tokens()`와 `render_app_stylesheet()`에 `st.cache_data(show_spinner=False)`를 적용해 Streamlit rerun마다 `.streamlit/config.toml`과 `.streamlit/app.css`를 반복 파싱/렌더링하던 비용을 줄임
-- `.streamlit/app.css`는 기존 상태를 확인했고 외부 Pretendard CDN `@import` 없이 `system-ui`, `-apple-system`, `"Segoe UI"`, `"Apple SD Gothic Neo"`, `"Noto Sans KR"` fallback 폰트 스택을 사용 중임
-- `src/market.py`의 공개 `search_products()` 함수에도 `st.cache_data(ttl=3600, max_entries=300, show_spinner=False)`를 적용했고, 기존 정규화 질의 기반 `_search_products_cached()`는 유지해 공백 차이가 있는 검색어도 외부 검색 재호출을 피하도록 유지함
-- 테스트에 남아 있던 SQLite 격리용 `importlib.reload(sqlite_db)`를 `patch.object(sqlite_db, "DB_PATH", database_path)` 방식으로 바꿔 모듈 재로딩 없이 임시 DB를 사용하도록 정리함
-- 저장소 활성 코드와 테스트 기준 `importlib.reload()`와 `st.experimental_rerun()` 호출이 없음을 확인함
-- `st.rerun()` 호출부를 점검하고, 인증 콜백 URL 처리와 잘못된 계좌 선택 복구처럼 자동 반복 가능성이 있는 경로에 세션 상태 가드를 추가해 같은 조건에서 자동 rerun이 1회만 발생하도록 제한함
-- 남은 작업: 실제 Streamlit Cloud 운영 세션에서 흰 화면/초기 로딩 지연 재현 여부를 일정 시간 관찰하고, 필요하면 브라우저 콘솔/네트워크 타이밍까지 추가 수집
-
-### 2026-05-13
-- GitHub Actions `KIS Realtime Worker` schedule 로그와 운영 Supabase 상태를 대조한 결과, `realtime_price_ticks` 최신 시각은 남아 있는데 `realtime_worker_status.last_quote_at`가 `null`로 덮어써지는 문제를 확인함
-- 원인은 worker 상태 갱신 경로가 `error`/`disconnected`/`stopped` 전이에서 `last_quote_at=None`을 그대로 PATCH/UPSERT 해 기존 quote 시각을 지우는 동작이었음
-- `scripts/run_kis_quote_worker.py`, `src/db.py`, `src/sqlite_db.py`에서 새 quote 시각이 없을 때는 기존 `last_quote_at`를 유지하도록 수정함
-- `tests/test_run_kis_quote_worker.py`, `tests/test_db.py`에 Supabase/SQLite 모두 `last_quote_at` 보존 회귀 테스트를 추가함
-- 운영 Supabase의 `realtime_worker_status`에서 계좌 `24`, `25`, `26`의 `last_quote_at`를 최신 tick 시각(`2026-05-12T15:59:50`, `2026-05-12T15:59:58`, `2026-05-12T15:48:44`)으로 1회 복구함
-- 수정된 로컬 코드로 `SupabaseAdminClient.update_account_status()`를 실제 운영 계좌 `24`에 다시 호출해도 `last_quote_at=2026-05-12T15:59:50`가 유지됨을 확인함
-- 원격 `데이터` 페이지 검증에서 `KIS WebSocket worker=stopped`, `last_seen_at=2026-05-13T00:43:36`, `마지막 quote 반영=2026-05-12T15:59:50 / 2026-05-12T15:59:50` 노출을 확인함
-- 코드 fix 커밋 `aab9d67`(`Preserve realtime worker last quote timestamps`)를 `origin/main`에 푸시했고, 푸시 후 원격 `데이터` 페이지 재검증도 통과함
-- `workflow_dispatch` run `25771266167`를 `segment=manual`, `run_minutes=1`, `backend=supabase`로 직접 실행했고, 대상 커밋은 `b293d0a`
-- 해당 run 로그에서 `2026-05-13T00:54:22Z` `ping/pong timed out` 후 재연결이 발생했고, 종료 시 `worker 세션 종료 코드: 137`, 전체 job `success`를 확인함
-- 같은 run의 post-check 출력에서 계좌 `24`, `25`, `26`이 `connection_state=stopped` 전이 뒤에도 `last_quote_at`를 유지함을 확인함
-- 운영 Supabase 최종 상태 기준 계좌 `24`, `25`는 새 tick `2026-05-13T09:54:33`과 동일한 `last_quote_at`를 기록했고, 계좌 `26`은 quote 미수신 상태에서도 기존 `2026-05-12T15:48:44`를 유지함
-- 계좌 `23`은 이번 run에서도 tick 이력이 없어 `last_quote_at=null`이 유지됐고, 이는 보존 대상 값 자체가 없는 케이스로 기록함
+## 핵심 설계 결정 요약
+- Supabase를 기본 저장소로 사용하고, 로컬/개발 fallback은 SQLite로 유지한다.
+- `app.py`는 얇은 엔트리포인트로 두고 실제 구현은 `src/ui/app_core.py`와 `pages/`에 둔다.
+- 기존 테스트와 monkey patch 호환을 위해 `app.py` 공개 함수/상수 접근은 앱 코어로 위임한다.
+- 보유현금은 거래 저장과 자동 연동하지 않고 사용자가 직접 수정한 현재 잔액으로 관리한다.
+- 매수는 현재 보유현금 부족 여부와 무관하게 저장을 허용한다.
+- 레거시 `cash_adjustment` 거래는 거래 화면과 원금/순유입 계산에서 제외한다.
+- 보유현금은 자산 비중 표시에서 안전자산에 포함한다.
+- 계좌 간 이체 UI와 데모 seed 이체 예시는 제거된 상태다.
+- realtime worker 상태 갱신 시 새 quote 시각이 없으면 기존 `last_quote_at`를 보존한다.
+- KIS 가능한 종목은 KIS를 우선하고, KRX 알파뉴메릭 종목은 Naver chart fallback을 사용한다.
+- `altair`는 Streamlit Cloud Python 3.14 호환 문제 때문에 `altair>=5.3,<5.4`로 제한한다.
+- Supabase hotfix 상세 절차는 기본 비노출이며 `PORTFOLIO_SHOW_HOTFIX_GUIDE=true`일 때만 표시한다.
+- 전역 차트 색상은 `ChartColors`/`CHART_COLORS` 네임스페이스를 기준으로 관리한다.
+- `.streamlit/config.toml`의 테마/서버 설정은 요청이 없으면 변경하지 않는다.
 
 ## 최신 검증 결과
-- `python3 -m compileall app.py src scripts tests` 성공
-- `python3 -m unittest discover -s tests -p "test_*.py"` 성공
-- 최신 테스트 수: `108`건 통과
-- 배포 검증 산출물:
-  - `artifacts/deploy-verify-realtime-data-20260511.txt`
-  - `artifacts/deploy-verify-realtime-data-20260511.png`
-  - `artifacts/deploy-verify-realtime-dashboard-20260511.txt`
-  - `artifacts/deploy-verify-realtime-dashboard-20260511.png`
-- 이번 턴 로컬 추가 검증:
-  - `python3 -m compileall app.py tests/test_app_dashboard.py` 성공
-  - `python3 -m unittest tests.test_app_dashboard` 성공 (`20`건)
-  - `python3 -m unittest discover -s tests -p "test_*.py"` 성공 (`78`건)
-- 이번 턴 배포 추가 검증:
-  - GitHub Actions run `25646982752` 장중 연결 상태에서 계좌 `24`의 `connection_state=connected`, `last_quote_at=2026-05-11T11:30:26` 확인
-  - `artifacts/deploy-verify-dashboard-live-chip-postdeploy.txt`에서 `실시간 연동 중` 확인
-  - `artifacts/deploy-verify-dashboard-live-chip-postdeploy.png` 스크린샷 저장
-- 이번 턴 Actions 추가 검증:
+- 기존 최신 코드 검증 기록은 `docs/VALIDATION.md`에 상세 정리했다.
+- 대표 로컬 검증 기록:
   - `python3 -m compileall app.py src scripts tests` 성공
-  - `python3 -m unittest discover -s tests -p "test_*.py"` 성공 (`78`건)
-  - `Daily Rollup` 수동 `dry-run` run `25648283262` 성공, 로그에서 `actions/checkout@v6`, `actions/setup-python@v6` 확인
-  - `KIS Realtime Worker` 수동 1분 run `25648283181` 성공, 로그에서 `actions/checkout@v6`, `actions/setup-python@v6` 확인
-  - 두 run 모두 `Node.js 20 actions are deprecated` 경고 문구 미발견
-  - `gh workflow list`, `gh api repos/.../actions/workflows` 기준 `KIS Realtime Worker`, `Daily Rollup` 모두 `active`
-  - 다만 `gh run list --workflow "KIS Realtime Worker" --event schedule` 결과는 비어 있어 `schedule` 이벤트 실주행은 다음 자동 사이클에서 추가 확인 필요
-- 이번 턴 GitHub Actions 자동 스케줄 확인:
-  - GitHub REST API `actions/workflows/kis-realtime-worker.yml/runs?event=schedule` 기준 최근 `schedule` run `25709934302`, `25716327035`, `25654005320` 모두 `success`
-  - GitHub job 로그 기준 `run 25709934302`는 `SCHEDULE_VALUE="0 0 * * 1-5"`와 `WORKER_SEGMENT=morning` 확인
-  - GitHub job 로그 기준 `run 25716327035`는 `SCHEDULE_VALUE="55 2 * * 1-5"`와 `WORKER_SEGMENT=afternoon` 확인
-  - GitHub REST API `actions/workflows/daily-rollup.yml/runs?event=schedule` 기준 최근 `schedule` run `25750582150`, `25686240371`도 `success`
-- 이번 턴 Streamlit Cloud 초기 로딩 추가 점검:
-  - `./.venv/bin/python scripts/verify_streamlit_deployment.py --page dashboard --expect-backend supabase --debug-dir artifacts/deploy-verify-dashboard-20260513-run1 --storage-state artifacts/streamlit-storage-state.json --wait-ms 12000` 실행 후 로그인, 작업공간, 대시보드 렌더 정상 확인
-  - 동일 세션 상태 재사용 run2 결과 `ok=true`, `backend_storage=supabase`, `allocation_status="지연 데이터 표시 중"`, `rate_limited=false` 확인
-  - 대시보드 2회 점검 모두 흰 화면/로그인 실패 재현 없음
-  - 산출물: `artifacts/deploy-verify-dashboard-20260513-run1/*`, `artifacts/deploy-verify-dashboard-20260513-run2/*`, `artifacts/deploy-verify-dashboard-20260513-run2-summary.json`
-- 이번 턴 realtime worker 상태 보존/복구 검증:
-  - `python3 -m compileall app.py src scripts tests` 성공
-  - `python3 -m unittest discover -s tests -p "test_*.py"` 성공 (`140`건)
-  - `python3 -m unittest tests.test_run_kis_quote_worker tests.test_db` 성공 (`40`건)
-  - 운영 Supabase `realtime_worker_status` 조회에서 계좌 `24`, `25`, `26`의 `last_quote_at=null` 확인, 같은 시점 `realtime_price_ticks` 최신 row는 각각 존재함을 확인
-  - 운영 Supabase `realtime_worker_status.last_quote_at`를 최신 tick 기준으로 1회 복구했고, 복구 대상은 계좌 `24`, `25`, `26`
-  - 수정된 `scripts/run_kis_quote_worker.py`의 `SupabaseAdminClient.update_account_status()`를 운영 계좌 `24`에 `last_quote_at` 없이 호출한 뒤에도 `last_quote_at=2026-05-12T15:59:50` 유지 확인
-  - `./.venv/bin/python scripts/verify_streamlit_deployment.py --page data --expect-backend supabase --debug-dir artifacts/deploy-verify-data-worker-status-20260513 --storage-state artifacts/streamlit-storage-state.json --wait-ms 12000` 성공
-  - 원격 데이터 페이지 텍스트에서 `KIS WebSocket worker=stopped`, `마지막 quote 반영=2026-05-12T15:59:50 / 2026-05-12T15:59:50` 확인
-  - 산출물: `artifacts/deploy-verify-data-worker-status-20260513/*`, `artifacts/deploy-verify-data-worker-status-20260513-summary.json`
-  - 커밋 `aab9d67`를 `origin/main`에 푸시 완료
-  - 푸시 후 `./.venv/bin/python scripts/verify_streamlit_deployment.py --page data --expect-backend supabase --debug-dir artifacts/deploy-verify-data-after-push-aab9d67 --storage-state artifacts/streamlit-storage-state.json --wait-ms 12000` 성공
-  - 푸시 후 원격 데이터 페이지에서도 `마지막 quote 반영=2026-05-12T15:59:50 / 2026-05-12T15:59:50` 유지 확인
-  - 산출물: `artifacts/deploy-verify-data-after-push-aab9d67/*`, `artifacts/deploy-verify-data-after-push-aab9d67-summary.json`
-- 이번 턴 GitHub Actions 실주행 추가 검증:
-  - `./.local/bin/gh workflow run "KIS Realtime Worker" --ref main -f segment=manual -f run_minutes=1 -f backend=supabase`로 manual run `25771266167` 실행
-  - run 대상 head SHA는 `b293d0ab7af23f102063d0736a060e57e12d0ff0` (`b293d0a`)
-  - job `75694701236` 로그에서 `KIS WebSocket 연결 완료: 6개 종목 구독` 후 `ping/pong timed out`, 재연결, 종료코드 `137`, 최종 `success` 확인
-  - run 중간 운영 Supabase 상태에서 계좌 `24`, `25`는 `connection_state=connected`, `last_quote_at=2026-05-13T09:53:32`, 계좌 `26`은 기존 `2026-05-12T15:48:44` 유지 확인
-  - run 종료 후 운영 Supabase 상태에서 계좌 `24`, `25`는 `last_quote_at=2026-05-13T09:54:33`, 계좌 `26`은 `2026-05-12T15:48:44` 유지, 계좌 `23`은 tick 이력 부재로 `null` 유지 확인
-  - run 로그 post-check 출력도 위 운영 DB 조회와 같은 값으로 일치함을 확인
-- 이번 턴 배포 검증 스크립트 추가 검증:
-  - `python3 -m unittest tests.test_verify_streamlit_deployment` 성공 (`7`건)
-  - `python3 -m unittest discover -s tests -p "test_*.py"` 재실행 성공 (`81`건)
-  - `./.venv/bin/python scripts/verify_streamlit_deployment.py --page dashboard --expect-backend supabase` 성공
-  - 위 실행에서 `allocation_status="지연 데이터 표시 중"` 파싱 확인
-  - `./.venv/bin/python scripts/verify_streamlit_deployment.py --page dashboard --expect-backend supabase --expect-allocation-status "지연 데이터 표시 중"` 성공
-  - 산출물: `artifacts/deploy-verify-dashboard-allocation-status-20260511.txt`, `artifacts/deploy-verify-dashboard-allocation-status-20260511.png`
-  - `2026-05-11 03:30 UTC` 기준 `gh run list --workflow "KIS Realtime Worker" --event schedule` 결과는 여전히 비어 있음
-- 이번 턴 계좌 간 이체 기능 삭제 검증:
-  - `python3 -m compileall app.py src/db.py tests/test_db.py` 성공
-  - `python3 -m unittest tests.test_db tests.test_app_dashboard tests.test_analytics` 성공 (`66`건)
-  - `python3 -m compileall app.py src scripts tests` 성공
-  - `python3 -m unittest discover -s tests -p "test_*.py"` 성공 (`104`건)
-  - `./.venv/bin/python scripts/verify_streamlit_deployment.py --page trades --expect-backend supabase --debug-dir artifacts/deploy-verify-remove-transfer-83861ad` 성공
-  - 원격 검증 결과: `backend_storage=supabase`, `logged_in=true`, `workspace_visible=true`, `target_page="trades"`
-- 이번 턴 보유현금 수정 로그 분리 검증:
-  - `python3 -m compileall app.py src tests` 성공
-  - `python3 -m unittest tests.test_db tests.test_analytics tests.test_app_dashboard` 성공 (`70`건)
-  - `python3 -m unittest discover -s tests -p "test_*.py"` 성공 (`108`건)
-  - `./.venv/bin/python scripts/verify_streamlit_deployment.py --page trades --expect-backend supabase --debug-dir artifacts/deploy-verify-cash-adjustment-e7a445c` 성공
-  - `./.venv/bin/python scripts/verify_streamlit_deployment.py --page data --expect-backend supabase --debug-dir artifacts/deploy-verify-cash-adjustment-data-e7a445c` 성공
-  - 원격 검증 결과: `backend_storage=supabase`, `logged_in=true`, `workspace_visible=true`, `target_page in {"trades","data"}`
-- 이번 턴 Streamlit 초기 렌더/새로고침 안정화 패치 검증:
-  - `python -m py_compile app.py src/market.py src/db.py` 성공
-  - `python -m py_compile tests/test_db.py` 성공
-  - `python -m unittest tests.test_app_dashboard tests.test_market tests.test_db` 성공 (`88`건)
-  - `rg` 기준 `app.py`, `src`, `scripts`, `tests`에서 `importlib.reload()`와 `st.experimental_rerun()` 호출 없음 확인
-  - `.streamlit/app.css`에서 외부 Pretendard CDN `@import` 없음과 시스템 폰트 스택 사용 확인
-- 이번 턴 디자인 토큰/CSS 구조 검증:
-  - `python3 -m compileall app.py tests/test_app_dashboard.py` 성공
-  - `python3 -m unittest tests.test_app_dashboard` 성공 (`22`건)
-  - `python3 -m compileall app.py src scripts tests` 재실행 성공
-  - `python3 -m unittest discover -s tests -p "test_*.py"` 성공 (`83`건)
-  - `python3 -m streamlit run app.py --server.port 8511 --server.headless true` 로컬 기동 성공
-  - `./.local/bin/agent-browser`로 `http://localhost:8511` 확인 시 초기 skeleton 이후 로그인 카드 렌더 스크린샷 확보
-  - 로컬 시각 검증 산출물: `artifacts/design-token-local-8511.png`, `artifacts/design-token-local-8511-after-wait.png`
-- 이번 턴 보유 종목 수익률 막대 방향 수정 검증:
-  - `python3 -m compileall app.py tests/test_app_dashboard.py` 성공
-  - `python3 -m unittest tests.test_app_dashboard` 성공 (`22`건)
-  - `python3 -m unittest discover -s tests -p "test_*.py"` 성공 (`83`건)
-  - `holdings_bar_options()` 테스트에서 양수 막대 `borderRadius=[10, 10, 0, 0]`, 음수 막대 `borderRadius=[0, 0, 10, 10]` 회귀 검증 추가
-  - Altair fallback 차트 `mark_bar(cornerRadiusEnd=8)` 스펙 직렬화 확인
-  - 로컬 브라우저 기동: `python3 -m streamlit run app.py --server.port 8512 --server.headless true` 성공
-  - `agent-browser`로 로그인 화면 렌더 스크린샷 확보: `artifacts/holdings-bar-login-8512-after-double-wait.png`
-- 이번 턴 선택 종목 트렌드 `당일` intraday 추가 검증:
-  - `python3 -m compileall app.py tests/test_app_dashboard.py` 성공
-  - `python3 -m unittest tests.test_app_dashboard` 성공 (`24`건)
-  - `python3 -m compileall app.py src scripts tests` 성공
-  - `python3 -m unittest discover -s tests -p "test_*.py"` 성공 (`85`건)
-  - `python3 -m streamlit run app.py --server.port 8514 --server.headless true` 로컬 기동 성공
-  - `agent-browser`로 `http://localhost:8514` 로그인 화면 렌더, 에러 오버레이 없음, 본문 텍스트 존재 확인
-  - 로컬 시각 검증 산출물: `artifacts/selected-trend-local-8514-login.png`, `artifacts/selected-trend-local-8514-after-wait.png`
-  - `./.venv/bin/python scripts/verify_streamlit_deployment.py --url http://localhost:8514 ...` 는 로컬 앱 프레임 감지 실패로 중단되어, 로컬 브라우저 검증은 `agent-browser` 기준으로 기록
-- 이번 턴 선택 종목 `당일` 금일 시세 정합 검증:
-  - `python3 -m compileall app.py tests/test_app_dashboard.py` 성공
-  - `python3 -m unittest tests.test_app_dashboard` 성공 (`25`건)
-  - `./.venv/bin/python -m compileall app.py src scripts tests` 성공
-  - `./.venv/bin/python -m unittest discover -s tests -p "test_*.py"` 성공 (`86`건)
-  - `build_selected_holding_trend_frame()` 테스트에서 intraday 타임라인 부재 시 `current_price/as_of` fallback으로 1포인트를 만드는 회귀 검증 추가
-  - 배포 커밋 `0147543` 푸시 후 `git push origin main` 기준 원격 반영
-  - `./.venv/bin/python scripts/verify_streamlit_deployment.py --page dashboard --expect-backend supabase` 성공
-  - 원격 검증 결과: `backend_storage=supabase`, `allocation_status="지연 데이터 표시 중"`, 로그인/작업공간 노출 정상
-  - 원격 검증 산출물: `artifacts/deploy-verify-selected-trend-0147543.txt`, `artifacts/deploy-verify-selected-trend-0147543.png`
-- 이번 턴 현재 보유 종목 표 표시 개선 검증:
-  - `python3 -m compileall app.py tests/test_app_dashboard.py` 성공
-  - `python3 -m unittest tests.test_app_dashboard` 성공 (`29`건)
-  - `build_holdings_table_display()` 테스트에서 `가격갱신=2026-05-11 09:15:27` 초 단위 포맷 확인
-  - `style_holdings_table()` 테스트에서 손익/수익률 셀에 상승/하락/중립 색상 스타일이 포함되는지 확인
-  - `style_holdings_table()` 테스트에서 `손익="12,000"`처럼 콤마가 들어간 문자열도 상승색으로 인식하는지 확인
-  - `build_holdings_mix_bar_html()` 테스트에서 위험/안전/보유현금 `50.0/30.0/20.0%` 비율 렌더 확인
-  - `./.venv/bin/python -m compileall app.py src scripts tests` 성공
-  - `./.venv/bin/python -m unittest discover -s tests -p "test_*.py"` 성공 (`90`건)
-- 이번 턴 현재 보유 종목 비율 막대 보정 검증:
-  - `python3 -m compileall app.py tests/test_app_dashboard.py` 성공
-  - `python3 -m unittest tests.test_app_dashboard` 성공 (`29`건)
-  - `./.venv/bin/python -m compileall app.py src scripts tests` 성공
-  - `./.venv/bin/python -m unittest discover -s tests -p "test_*.py"` 성공 (`90`건)
-  - `build_holdings_mix_bar_html()` 테스트에서 `보유현금`이 독립 세그먼트로 나오지 않고 `안전자산` 설명에 `보유현금 ₩200,000 포함`으로 합산 표시되는지 확인
-  - 배포 커밋 `cb871df` 푸시 후 `git push origin main` 기준 원격 반영
-  - `./.venv/bin/python scripts/verify_streamlit_deployment.py --page dashboard --expect-backend supabase` 성공
-  - 원격 검증 결과: `backend_storage=supabase`, `allocation_status="실시간 연동 중"`, 로그인/작업공간 노출 정상
-  - 원격 검증 산출물: `artifacts/deploy-verify-holdings-safe-cash-cb871df.txt`, `artifacts/deploy-verify-holdings-safe-cash-cb871df.png`
-  - 배포 커밋 `1d55a5d` 푸시 후 `git push origin main` 기준 원격 반영
-  - `./.venv/bin/python scripts/verify_streamlit_deployment.py --page dashboard --expect-backend supabase` 성공
-  - 원격 검증 산출물: `artifacts/deploy-verify-holdings-table-1d55a5d.txt`, `artifacts/deploy-verify-holdings-table-1d55a5d.png`
-- 이번 턴 기존 이자 이력 매수 전 재동기화 검증:
-  - `python3 -m compileall src/db.py tests/test_db.py` 성공
-  - `python3 -m unittest tests.test_db` 성공 (`16`건)
-  - `./.venv/bin/python -m compileall app.py src scripts tests` 성공
-  - `./.venv/bin/python -m unittest discover -s tests -p "test_*.py"` 성공 (`92`건)
-  - `_sync_legacy_interest_history_for_buy()` 테스트에서 기존 `interest`/`daily_interest` 이력이 있으면 `_replace_interest_history()`를 호출하는지 확인
-  - 이자 이력이 없는 계좌는 매수 전 재동기화를 건너뛰는지 확인
-- 이번 턴 검색 캐시 보강 검증:
-  - `python3 -m compileall src/market.py tests/test_market.py` 성공
-  - `python3 -m unittest tests.test_market` 성공 (`11`건)
-  - `python3 -m compileall app.py src scripts tests` 성공
-  - `python3 -m unittest discover -s tests -p "test_*.py"` 성공 (`101`건)
-- 이번 턴 검색 캐시 배포 검증:
-  - 배포 커밋 `e2dd5fd` 푸시 후 `git push origin main` 기준 원격 반영
-  - 로컬 `.streamlit/secrets.toml`의 검증 계정 값을 환경 변수로 주입해 원격 검증 실행
-  - `./.venv/bin/python scripts/verify_streamlit_deployment.py --page dashboard --expect-backend supabase --debug-dir artifacts/deploy-verify-search-cache-e2dd5fd` 성공
-  - 원격 검증 결과: `backend_storage=supabase`, `allocation_status="데이터 대기"`, 로그인/작업공간 노출 정상
-- 이번 턴 DB 캐시/이자 제거 검증:
-  - `python3 -m compileall app.py src/db.py tests/test_db.py` 성공
-  - `python3 -m unittest tests.test_db tests.test_app_dashboard tests.test_analytics` 성공 (`65`건)
-  - `python3 -m compileall app.py src scripts tests` 성공
-  - `python3 -m unittest discover -s tests -p "test_*.py"` 성공 (`103`건)
-  - 배포 커밋 `8eb14d5` 푸시 후 `git push origin main` 기준 원격 반영
-  - 로컬 `.streamlit/secrets.toml`의 검증 계정 값을 환경 변수로 주입해 원격 검증 실행
-  - `./.venv/bin/python scripts/verify_streamlit_deployment.py --page data --expect-backend supabase --debug-dir artifacts/deploy-verify-db-cache-8eb14d5` 성공
-  - 원격 검증 결과: `backend_storage=supabase`, `status_panel_visible=true`, `snapshot_count="1건"`, 로그인/작업공간 노출 정상
-- 이번 턴 CSS 초기 로딩 개선 검증:
-  - `python3 -m compileall app.py tests/test_app_dashboard.py` 성공
-  - `python3 -m unittest tests.test_app_dashboard` 성공 (`32`건)
-  - `python3 -m compileall app.py src scripts tests` 성공
-  - `python3 -m unittest discover -s tests -p "test_*.py"` 성공 (`104`건)
-  - 배포 커밋 `569e2f9` 푸시 후 `git push origin main` 기준 원격 반영
-  - 로컬 `.streamlit/secrets.toml`의 검증 계정 값을 환경 변수로 주입해 원격 검증 실행
-  - `./.venv/bin/python scripts/verify_streamlit_deployment.py --page dashboard --expect-backend supabase --debug-dir artifacts/deploy-verify-system-font-569e2f9` 성공
-  - 원격 검증 결과: `backend_storage=supabase`, `allocation_status="지연 데이터 표시 중"`, 로그인/작업공간 노출 정상
-- 이번 턴 매수 현금 부족 차단 해제 검증:
-  - `python3 -m compileall src/db.py src/sqlite_db.py tests/test_db.py` 성공
-  - `python3 -m unittest tests.test_db` 성공 (`17`건)
-  - `./.venv/bin/python -m compileall app.py src scripts tests` 성공
-  - `./.venv/bin/python -m unittest discover -s tests -p "test_*.py"` 성공 (`93`건)
-  - SQLite 통합 테스트에서 `opening_cash=100000` 계좌가 `140000` 매수 후에도 저장되고 `cash_balance=-40000`으로 남는지 확인
-  - 배포 커밋 `d44a3b3` 푸시 후 `git push origin main` 기준 원격 반영
-  - `./.venv/bin/python scripts/verify_streamlit_deployment.py --page dashboard --expect-backend supabase` 성공
-  - 원격 검증 결과: `backend_storage=supabase`, `allocation_status="실시간 연동 중"`, 로그인/작업공간 노출 정상
-  - 원격 검증 산출물: `artifacts/deploy-verify-buy-cash-rule-d44a3b3.txt`, `artifacts/deploy-verify-buy-cash-rule-d44a3b3.png`
-- 이번 턴 거래 등록 재수정 검증:
-  - 실제 배포 UI 재현에서 임시 계좌 `codex-tmp-qbvcsv` 매수 저장 시 `매수하기에 현금이 부족합니다.` 문구가 다시 노출되는 것을 확인
-  - 원인: `record_trade()`의 현금 부족 검사는 제거됐지만 `_supabase_update_cash_balance()` helper가 여전히 음수 잔액을 금지하고 있었음
-  - 조치: `src/db.py`에서 `_supabase_update_cash_balance(..., allow_negative=False)` 플래그를 추가하고, `buy`/기존 이자 재동기화 경로에서만 `allow_negative=True`를 사용하도록 수정
-  - `python3 -m compileall src/db.py tests/test_db.py` 성공
-  - `python3 -m unittest tests.test_db` 성공 (`19`건)
-  - `./.venv/bin/python -m compileall app.py src scripts tests` 성공
-  - `./.venv/bin/python -m unittest discover -s tests -p "test_*.py"` 성공 (`95`건)
-  - 로컬 `streamlit run app.py --server.port 8520 --server.headless true` 재현에서 기존 `매수하기에 현금이 부족합니다.` / `현금은 0 이상이어야 합니다.` 문구가 더 이상 나타나지 않음을 확인
-  - 로컬 재현 산출물: `artifacts/trade-register-local-8520-fixed.txt`, `artifacts/trade-register-local-8520-fixed.png`
-  - 후속 확인에서 저장 직후 `st.session_state.trade_symbol cannot be modified after the widget ... is instantiated` 예외가 발생하는 것을 발견
-  - 조치: `app.py` 거래 페이지를 `pending reset + rerun` 구조로 바꿔 거래/현금 흐름/계좌 이체 폼을 다음 실행에서만 초기화하도록 수정
-  - `python3 -m compileall app.py src/db.py tests/test_db.py tests/test_app_dashboard.py` 성공
-  - `python3 -m unittest tests.test_db tests.test_app_dashboard` 성공 (`50`건)
-  - `./.venv/bin/python -m compileall app.py src scripts tests` 성공
-  - `./.venv/bin/python -m unittest discover -s tests -p "test_*.py"` 성공 (`97`건)
-  - 로컬 `streamlit run app.py --server.port 8520 --server.headless true` 재현 후 서버 종료 시 더 이상 `StreamlitAPIException` traceback이 발생하지 않음을 확인
-  - 최신 로컬 재현 산출물: `artifacts/trade-register-local-8520-fixed-2.txt`, `artifacts/trade-register-local-8520-fixed-2.png`
-  - 기능 커밋 `2cb8006`, `dbef65a`를 `origin/main`에 푸시 완료
-  - 원격 일반 배포 검증: `./.venv/bin/python scripts/verify_streamlit_deployment.py --page dashboard --expect-backend supabase` 성공
-  - 원격 거래 저장 재현은 `2026-05-11 09:39~09:45 UTC` 시점에도 여전히 예전 문구 `매수하기에 현금이 부족합니다.`를 반환해, Streamlit Cloud가 새 커밋을 아직 반영하지 않은 상태로 기록
-- 이번 턴 `src.market reload` 제거 검증:
-  - `python3 -m compileall app.py tests/test_app_dashboard.py` 성공
-  - `python3 -m unittest tests.test_app_dashboard` 성공 (`29`건)
-  - `./.venv/bin/python -m compileall app.py src scripts tests` 성공
-  - `./.venv/bin/python -m unittest discover -s tests -p "test_*.py"` 성공 (`93`건)
-  - 운영 배포 기준 `app.py`에서 `importlib.reload(src.market)` 제거 후 대시보드/차트 테스트 회귀 없음 확인
-  - 배포 커밋 `89038db` 푸시 후 `git push origin main` 기준 원격 반영
-  - `./.venv/bin/python scripts/verify_streamlit_deployment.py --page dashboard --expect-backend supabase` 성공
-  - 원격 검증 결과: `backend_storage=supabase`, `allocation_status="실시간 연동 중"`, 로그인/작업공간 노출 정상
-  - 원격 검증 산출물: `artifacts/deploy-verify-remove-reload-89038db.txt`, `artifacts/deploy-verify-remove-reload-89038db.png`
-- 이번 턴 배포 검증 디버그성 보강 검증:
-  - `python3 -m compileall scripts/verify_streamlit_deployment.py tests/test_verify_streamlit_deployment.py` 성공
-  - `python3 -m unittest tests.test_verify_streamlit_deployment` 성공 (`10`건)
-  - `python3 -m compileall app.py src scripts tests` 성공
-  - `python3 -m unittest discover -s tests -p "test_*.py"` 성공 (`100`건)
-  - `scripts/verify_streamlit_deployment.py`에 `--storage-state` 재사용 옵션 추가
-  - `scripts/verify_streamlit_deployment.py`에 `--debug-dir` 단계별 `txt/png/url` 저장 옵션 추가
-  - 로그인 실패 시 `Request rate limit reached` 같은 인증 제한 문구를 `auth_error`, `rate_limited`로 분리 노출하도록 보강
+  - `python3 -m unittest discover -s tests -p "test_*.py"` 성공
+  - `python -m compileall app.py src scripts tests pages` 성공
+  - `python scripts/run_kis_quote_worker.py --backend sqlite --preflight-only` 성공
+  - BUG-03 패치 검증: `python -m compileall src/db.py tests/test_db.py` 성공
+  - BUG-03 패치 검증: `python -m unittest tests.test_db.DataCacheTests` 성공
+  - BUG-03 패치 검증: `python -m compileall app.py src scripts tests pages` 성공
+  - BUG-03 패치 검증: `python -m unittest discover -s tests -p "test_*.py"` 성공, 142 tests
+  - DESIGN-01 패치 검증: `python -m compileall src/ui/app_core.py tests/test_app_dashboard.py` 성공
+  - DESIGN-01 패치 검증: `python -m unittest tests.test_app_dashboard.ThemeStylesheetTests` 성공
+  - DESIGN-01 패치 검증: `python -m compileall app.py src scripts tests pages` 성공
+  - DESIGN-01 패치 검증: `python -m unittest discover -s tests -p "test_*.py"` 성공, 144 tests
+  - DESIGN-02 패치 검증: `python -m compileall src/ui/app_core.py tests/test_app_dashboard.py` 성공
+  - DESIGN-02 패치 검증: `python -m unittest tests.test_app_dashboard.ThemeStylesheetTests tests.test_app_dashboard.TradeFormResetTests.test_dashboard_selected_trend_period_options_exclude_today` 성공
+  - DESIGN-02 패치 검증: `python -m compileall app.py src scripts tests pages` 성공
+  - DESIGN-02 패치 검증: `python -m unittest discover -s tests -p "test_*.py"` 성공, 144 tests
+  - DESIGN-04 패치 검증: `python -m compileall src/ui/app_core.py tests/test_app_dashboard.py` 성공
+  - DESIGN-04 패치 검증: `python -m unittest tests.test_app_dashboard.HoldingsTableDisplayTests` 성공, 7 tests
+  - DESIGN-04 패치 검증: `python -m compileall app.py src scripts tests pages` 성공
+  - DESIGN-04 패치 검증: `python -m unittest discover -s tests -p "test_*.py"` 성공, 146 tests
+  - DESIGN-04 브라우저 검증: 로컬 Streamlit `http://127.0.0.1:8531` 데모 데이터 페이지에서 `.holdings-table-shell` 2개와 `table.holdings-table` 2개 확인
+  - DESIGN-03 패치 검증: `python -m compileall src/ui/app_core.py tests/test_app_dashboard.py` 성공
+  - DESIGN-03 패치 검증: `python -m unittest tests.test_app_dashboard.AllocationTreemapVisualMapTests` 성공
+  - DESIGN-03 패치 검증: `python -m compileall app.py src scripts tests pages` 성공
+  - DESIGN-03 패치 검증: `python -m unittest discover -s tests -p "test_*.py"` 성공, 143 tests
+  - DESIGN-05 패치 검증: `python -m compileall src/ui/app_core.py tests/test_app_dashboard.py` 성공
+  - DESIGN-05 패치 검증: `python -m unittest tests.test_app_dashboard` 성공, 47 tests
+  - DESIGN-05 패치 검증: `python -m compileall app.py src scripts tests pages` 성공
+  - DESIGN-05 패치 검증: `python -m unittest discover -s tests -p "test_*.py"` 성공, 144 tests
+- 대표 배포 검증 기록:
+  - `python3 scripts/verify_streamlit_deployment.py --page data --expect-backend supabase --wait-ms 12000` 성공
+  - Streamlit Cloud 대시보드/거래/데이터 페이지 검증 성공 기록 존재
+- 이번 BUG-03/DESIGN-01/DESIGN-02/DESIGN-03/DESIGN-04/DESIGN-05 패치는 로컬 코드/단위 테스트로 검증했으며 운영 배포 검증은 수행하지 않았다.
+
+## 문서 분리 결과
+- 날짜별 상세 로그:
+  - `docs/archive/memory-2026-05-11.md`
+  - `docs/archive/memory-2026-05-12.md`
+  - `docs/archive/memory-2026-05-13.md`
+  - `docs/archive/memory-2026-05-15.md`
+- `2026-05-15` archive는 현재 기준일보다 뒤라 날짜 오류 가능성을 파일 상단에 표시했다.
+- 검증 상세 이력: `docs/VALIDATION.md`
+- 완료 변경 이력: `docs/CHANGELOG.md`
+- 설계 결정: `docs/DECISIONS.md`
 
 ## Git/GitHub 상태
 - 기본 브랜치: `main`
-- 최근 기능 커밋:
-  - `89038db` `Remove market module reload on app startup`
-  - `d44a3b3` `Allow buys regardless of current cash`
-  - `b57ab5a` `Restore legacy interest cash sync before buys`
-  - `cb871df` `Fold holdings cash into safe allocation`
-  - `7337b17` `Improve holdings table visual cues`
-  - `1d55a5d` `Polish holdings table quote timestamps`
-  - `0147543` `Align today's selected trend with live allocation quotes`
-  - `13a98c7` `Refine dashboard theme and selected intraday trend`
-  - `72f0f41` `Refresh auth UI and allocation status chip`
-  - `12748fd` `Add scheduled KIS realtime worker workflow`
-  - `7ee4d45` `Fix GitHub worker shutdown handling`
-  - `2ede61d` `Improve dashboard live status fallback`
-  - `c07e7d7` `Upgrade GitHub Actions to Node 24 runtimes`
-- 최근 기록 커밋:
-  - `0f53406` `Record Node 24 workflow verification`
-  - `2654620` `Record realtime table activation verification`
-  - `00aa563` `Record GitHub worker validation`
-- 로컬 도구:
-  - `./.local/bin/agent-browser`
-  - `./.local/bin/gh`
-- 현재 워크트리 주의:
-  - `data/portfolio.db`는 로컬 변경 상태
-  - `.local/`, `artifacts/`, `.playwright-browsers/`, `data/kis_cache/` 등은 커밋 제외 대상
+- 최근 커밋 기록에는 `437c4db`, `b293d0a`, `aab9d67`, `5e2584b`, `a3d9285`, `32fe43a`, `33e754f` 등이 있음.
+- `2026-05-15`로 기록된 `33e754f`, `32fe43a` 관련 내용은 현재 파일/커밋에는 존재하지만 날짜는 오류 가능성으로 취급한다.
+- 기존 워크트리에는 `data/portfolio.db` 수정과 여러 untracked 로컬 산출물이 남아 있다.
+- 이번 BUG-03 작업 변경 파일은 `src/db.py`, `tests/test_db.py`, `docs/VALIDATION.md`, `docs/CHANGELOG.md`, `Memory.md`다.
+- 이번 DESIGN-01 작업 변경 파일은 `.streamlit/app.css`, `tests/test_app_dashboard.py`, `docs/VALIDATION.md`, `docs/CHANGELOG.md`, `Memory.md`다.
+- 이번 DESIGN-02 작업 변경 파일은 `src/ui/app_core.py`, `.streamlit/app.css`, `tests/test_app_dashboard.py`, `docs/VALIDATION.md`, `docs/CHANGELOG.md`, `Memory.md`다.
+- 이번 DESIGN-03 작업 변경 파일은 `src/ui/app_core.py`, `tests/test_app_dashboard.py`, `docs/VALIDATION.md`, `docs/CHANGELOG.md`, `Memory.md`다.
+- 이번 DESIGN-04 작업 변경 파일은 `src/ui/app_core.py`, `tests/test_app_dashboard.py`, `docs/VALIDATION.md`, `docs/CHANGELOG.md`, `Memory.md`다.
+- 이번 DESIGN-05 작업 변경 파일은 `src/ui/app_core.py`, `tests/test_app_dashboard.py`, `docs/VALIDATION.md`, `docs/CHANGELOG.md`, `Memory.md`다.
+- 커밋 시 이번 요청 관련 파일만 선별하고 `data/portfolio.db`, `.local/`, `artifacts/`, `.playtools*/`, `.playwright-browsers/`, `.vscode/`, `data/kis_cache/` 등은 제외한다.
+- DESIGN-04 요청에서 푸시까지 명시했으므로 이번 요청 관련 변경은 검증 후 커밋/푸시한다.
 
 ## 운영 runbook 요약
-- realtime 테이블 수정은 `docs/supabase-realtime-schema-hotfix.sql`
+- realtime schema hotfix: `docs/supabase-realtime-schema-hotfix.sql`
+- realtime worker runbook: `docs/supabase-realtime-worker-runbook.md`
+- Supabase hotfix runbook: `docs/supabase-hotfix-runbook.md`
 - worker 수동 실행:
 ```powershell
 python scripts/run_kis_quote_worker.py --backend supabase
@@ -438,756 +193,13 @@ python scripts/verify_streamlit_deployment.py --page data --expect-backend supab
 ```
 - GitHub Actions 장중 자동 실행:
   - workflow: `KIS Realtime Worker`
-  - 스케줄 1: `UTC 00:00` (`KST 09:00`)
-  - 스케줄 2: `UTC 02:55` (`KST 11:55`)
+  - schedule 1: `UTC 00:00` (`KST 09:00`)
+  - schedule 2: `UTC 02:55` (`KST 11:55`)
 
 ## 남은 작업
-1. 계좌 `23`처럼 quote 이력이 없는 계좌를 장중 장시간 run에서도 별도 예외 없이 처리하는 현재 동작이 운영 요구와 맞는지 확인
-2. 모바일 viewport 기준 대시보드 트리맵/보유 종목 표/거래 입력 폼 가독성을 점검하고 필요한 CSS만 보강
-3. 필요하면 Streamlit Cloud 초기 로딩을 다른 시간대에도 추가 관찰하고 콘솔/네트워크 타이밍을 수집
-
-## 2026-05-11 현금/데이터 정합성 읽기 전용 점검
-- [x] 저장소 구조, 핵심 문서, `Memory.md`, 현금/거래/스냅샷 관련 코드 경로 확인
-- [x] 로컬 SQLite `data/portfolio.db` 읽기 전용 무결성 점검
-- [x] Supabase 서버 데이터를 service role 및 인증 사용자 기준으로 읽기 전용 점검
-- [x] `python3 -m compileall app.py src scripts tests` 성공
-- [x] `python3 -m unittest discover -s tests -p "test_*.py"` 성공 (`108`건)
-- [ ] 승인 후 보유현금/스냅샷/레거시 현금조정 데이터 수정
-
-### 발견 사항
-- 현재 설계 의도는 `매수는 현금 부족이어도 허용`, `보유현금 수동 수정은 trade_logs에 남기지 않음`, `cash_adjustment는 원금/순유입 계산에서 제외`, `보유현금은 안전자산 비중에 합산`으로 확인됨.
-- 로컬 SQLite는 외래키 깨짐, 중복 보유종목, 음수 수량/단가, `cash_delta` 부호 오류는 발견되지 않음.
-- 로컬 SQLite에는 레거시 `cash_adjustment` 로그 2건이 남아 있음.
-- 운영 Supabase에는 계좌 4개, 보유종목 14개, 거래 71건, 스냅샷 9건이 조회됐고 외래키 깨짐, 중복 보유종목, 음수 수량/단가, `cash_delta` 부호 오류는 발견되지 않음.
-- 운영 Supabase에는 레거시 `cash_adjustment` 로그 3건이 남아 있음: 계좌 23 1건, 계좌 24 2건.
-- 운영 Supabase의 과거 스냅샷 중 계좌 23의 `2026-05-09`, `2026-05-10` 현금이 현재 원장 흐름과 크게 어긋나 보임.
-- `src/db.py`의 과거 스냅샷 현금 재계산 경로는 현재 현금에서 모든 거래 델타를 뺀 뒤 과거 날짜 델타를 다시 누적하는 구조라, 오늘/미래 거래 또는 계좌 생성일보다 과거인 거래일이 있으면 과거 현금이 왜곡될 수 있음.
-- `setup_supabase.sql`에는 `CREATE POLICY holdings_update_own` 중복 구문처럼 보이는 부분과 `daily_interest_update_own` 부근 괄호 불일치처럼 보이는 부분이 있어 재적용 전 수정 검토 필요.
-
-### 다음 수정 계획
-- `src/db.py` 과거 현금 스냅샷 재계산 로직을 현재 현금에서 스냅샷일 이후 거래 델타를 역산하는 방식으로 보정하고, 계좌 생성일보다 과거인 거래일/당일 거래가 있는 회귀 테스트를 추가한다.
-- 레거시 `cash_adjustment` 로그는 현재 설계와 맞지 않으므로 서버/로컬 정리 SQL을 별도 스크립트 또는 일회성 절차로 준비하되, `accounts.cash_balance`는 변경하지 않는다.
-- 운영 Supabase의 잘못된 과거 스냅샷은 수정 로직 적용 후 대상 계좌만 재계산하거나 명시 SQL로 보정한다.
-- `setup_supabase.sql` 정책 구문 오류 후보를 수정하고 SQL 적용 전 문법 검증을 수행한다.
-- 수정 후 `compileall`, 전체 unittest, 배포 데이터 페이지 검증, Supabase 읽기 전용 재점검을 수행한다.
-
-## 2026-05-11 현금 스냅샷 계산 수정
-- [x] 과거 현금 스냅샷 계산에서 기준일 이후 거래가 과거 현금에 섞이던 문제 수정
-- [x] 계좌 생성일보다 과거로 backdate된 거래가 과거 현금 스냅샷에서 누락되던 문제 수정
-- [x] 회귀 테스트 2건 추가
-- [x] 로컬 SQLite 스냅샷 재검산 후 추가 보정 필요 없음 확인
-- [x] 운영 Supabase 스냅샷 재대조 후 추가 보정 필요 없음 확인
-
-### 변경 내용
-- `src/db.py`
-  - `_daily_interest_row_amount_by_date()`, `_trade_interest_amount_by_date()`, `_cash_delta_by_date()`가 `target_date=None`인 전체 기간 계산을 지원하도록 확장
-  - `_historical_cash_balance_by_date()`가 현재 현금에서 전체 원장/고아 이자 합계를 기준으로 opening cash를 잡고, `snapshot_date`뿐 아니라 실제 가장 이른 거래일/이자일도 iteration 시작점으로 사용하도록 수정
-- `tests/test_db.py`
-  - 기준일 이후 거래가 과거 스냅샷 현금을 오염시키지 않는 회귀 테스트 추가
-  - 계좌 생성 후 입력했지만 거래일이 더 과거인 backdate 거래를 과거 스냅샷 계산에 포함하는 회귀 테스트 추가
-
-### 검증 결과
-- `python3 -m compileall src/db.py tests/test_db.py` 성공
-- `python3 -m unittest tests.test_db` 성공 (`25`건)
-- `python3 -m compileall app.py src scripts tests` 성공
-- `python3 -m unittest discover -s tests -p "test_*.py"` 성공 (`110`건)
-- 로컬 SQLite 재대조 결과: `sqlite_pending_snapshot_changes=0`
-- 운영 Supabase 재대조 결과:
-  - 계좌 `23` `미래에셋증권`: historical snapshot 추가 보정 필요 없음
-  - 계좌 `24` `IRP (신한)`: historical snapshot 추가 보정 필요 없음
-
-### 비고
-- 운영 Supabase의 레거시 `cash_adjustment` 거래 로그 3건은 현재도 남아 있지만, 현재 계산 로직/스냅샷 재대조 기준으로는 별도 강제 삭제보다 보존이 안전하다고 판단해 이번 턴에는 삭제하지 않음
-- 로컬 `data/portfolio.db`는 재검산 과정에서 다시 저장되어 워크트리에 변경으로 남아 있음
-
-## 2026-05-11 보유현금 수동값 유지 배포
-- [x] 상품 매수/매도 저장이 `보유현금`을 자동으로 깎거나 더하지 않도록 수정
-- [x] 거래 페이지 안내 문구에 현금 규칙 반영
-- [x] 관련 테스트 갱신 및 전체 검증
-- [x] `main` 배포 및 운영 페이지 검증
-
-### 변경 내용
-- `src/sqlite_db.py`
-  - `record_trade()`가 `accounts.cash_balance`를 갱신하지 않고 보유 종목과 거래 로그만 반영하도록 수정
-- `src/db.py`
-  - `_supabase_record_trade()`가 Supabase 계좌 `cash_balance`를 자동 변경하지 않도록 수정
-- `app.py`
-  - 거래 페이지 캡션에 `보유현금은 거래와 연동하지 않고 직접 수정한 값만 유지` 문구 추가
-- `tests/test_db.py`
-  - 매수 저장 후 현금이 자동 음수로 바뀌지 않는 규칙으로 테스트 기대값 갱신
-
-### 검증 결과
-- `python3 -m compileall app.py src/db.py src/sqlite_db.py tests/test_db.py` 성공
-- `python3 -m unittest tests.test_db` 성공 (`25`건)
-- `python3 -m compileall app.py src scripts tests` 성공
-- `python3 -m unittest discover -s tests -p "test_*.py"` 성공 (`110`건)
-- 배포 검증:
-  - 명령: `./.venv/bin/python scripts/verify_streamlit_deployment.py --page trades --expect-backend supabase --text-output artifacts/deploy-trades.txt --screenshot artifacts/deploy-trades.png --debug-dir artifacts/deploy-trades-debug`
-  - 결과: `logged_in=true`, `workspace_visible=true`, `backend_storage=supabase`, `ok=true`
-  - 배포 페이지 본문에서 새 안내 문구 노출 확인
-
-### 배포/커밋
-- 기능 커밋: `ea2fd37` `Keep cash balance manual on trade entry`
-- 배포 방법: `git push origin main`
-
-### 메모
-- 이번 변경은 `매수/매도`와 `보유현금`의 자동 연동만 끊었고, `거래기록 수정/삭제` 기능은 아직 구현하지 않음
-
-## 2026-05-11 거래기록 수정/삭제 배포
-- [x] 거래 페이지에서 보이는 거래기록을 선택해 수정/삭제하는 UI 추가
-- [x] SQLite/Supabase 공통 거래기록 수정/삭제 백엔드 구현
-- [x] 매수/매도 수정/삭제 시 보유 종목 재계산 반영
-- [x] 현금 흐름 수정/삭제 시 현재 보유현금 재계산 반영
-- [x] 관련 테스트 추가 및 `main` 배포 확인
-
-### 지원 범위
-- 수정/삭제 지원:
-  - `buy`
-  - `sell`
-  - `personal_deposit`
-  - `employer_deposit`
-  - `withdraw`
-- 현재 미지원:
-  - `transfer_in`
-  - `transfer_out`
-  - `interest`
-  - `cash_adjustment`
-
-### 변경 내용
-- `src/db.py`
-  - `update_trade_log()`, `delete_trade_log()` 공개 wrapper 추가
-  - Supabase/SQLite 각각의 거래기록 수정/삭제 구현 추가
-  - 매수/매도 로그를 기준으로 holdings를 다시 계산하는 helper 추가
-  - 현금 흐름 로그 수정/삭제 시 `cash_balance`를 다시 계산하는 helper 추가
-- `app.py`
-  - 거래 기록 표 아래에 `수정/삭제할 기록` 선택 UI 추가
-  - 선택한 기록 유형에 따라 매수/매도 편집 폼 또는 현금 흐름 편집 폼을 표시
-  - 삭제 확인 체크 후 삭제 실행 버튼 추가
-  - 이체/이자/레거시 현금조정은 현재 미지원 안내 추가
-- `tests/test_db.py`
-  - SQLite 거래 수정/삭제 통합 테스트 4건 추가
-  - Supabase 거래 수정/삭제 경로 unit test 2건 추가
-- `tests/test_app_dashboard.py`
-  - 거래기록 편집 가능 유형과 선택 라벨 표시 helper 테스트 추가
-
-### 검증 결과
-- `python3 -m compileall app.py src/db.py tests/test_db.py tests/test_app_dashboard.py` 성공
-- `python3 -m unittest tests.test_db tests.test_app_dashboard` 성공 (`66`건)
-- `python3 -m compileall app.py src scripts tests` 성공
-- `python3 -m unittest discover -s tests -p "test_*.py"` 성공 (`118`건)
-- 배포 검증:
-  - 명령: `./.venv/bin/python scripts/verify_streamlit_deployment.py --page trades --expect-backend supabase --text-output artifacts/deploy-trade-edit.txt --screenshot artifacts/deploy-trade-edit.png --debug-dir artifacts/deploy-trade-edit-debug`
-  - 결과: `logged_in=true`, `workspace_visible=true`, `backend_storage=supabase`, `ok=true`
-  - 본문 텍스트 확인:
-    - `수정/삭제할 기록`
-    - `선택한 거래 기록 수정 / 삭제`
-    - `수정 저장`
-    - `삭제 실행`
-
-### 배포/커밋
-- 기능 커밋: `bec3f67` `Add trade log edit and delete flows`
-- 배포 방법: `git push origin main`
-
-### 메모
-- 거래기록 수정/삭제는 현재 `거래` 페이지에서 보이는 사용자 입력 로그 중심으로 지원한다.
-- 이체/이자/레거시 현금조정까지 편집 대상으로 넓히려면 paired event 정합성과 다계좌 재계산을 추가로 설계해야 한다.
-
-## 2026-05-11 16:17 거래기록 수정 UI 업데이트
-
-### 변경 내용
-- 매수/매도 컬러 배지 스타일 추가
-- 거래유형 컬러 배지 HTML 함수 추가
-- 거래유형 셀 표시를 컬러 배지로 변경
-- 거래기록 셀 HTML 렌더링 적용
-
-### 검증 방법
-- `streamlit run app.py` 실행
-- 거래 화면에서 매수/매도 배지가 색상으로 표시되는지 확인
-- 거래기록의 `수정` 버튼 클릭 시 해당 행 바로 아래에 수정 입력 박스가 표시되는지 확인
-- 저장 후 거래기록, 보유 종목, 대시보드 금액이 갱신되는지 확인
-
-## 2026-05-11 16:35 거래기록 삭제 후 대시보드 잔상 수정
-
-- `src/sqlite_db.py`
-  - 거래기록 삭제 시 남아 있는 `buy`/`sell` 원장을 기준으로 `holdings`를 재계산하도록 수정.
-  - 매수/매도 삭제 시 `cash_balance`는 변경하지 않도록 처리.
-  - 개인 입금, 회사 납입금, 출금, 이자, 이체, 현금조정 등 현금성 이벤트 삭제 시에만 `cash_delta`를 반대로 반영.
-- `src/db.py`
-  - `delete_trade_log()` 실행 후 `mark_data_dirty()`를 호출해 Streamlit 데이터 캐시 잔상 방지.
-- 검증 필요
-  - 거래기록에서 매수 기록 삭제 후 대시보드/보유종목에서 해당 종목이 사라지는지 확인.
-  - 개인 입금/회사 납입금/출금 삭제 시 현금 잔액이 정상 보정되는지 확인.
-
-## 2026-05-11 19:06 대시보드 카드/트렌드 컨트롤 스타일 조정
-
-### 변경 파일
-- `app.py`
-- `.streamlit/app.css`
-- `tests/test_app_dashboard.py`
-
-### 변경 내용
-- 상단 5개 요약 카드와 `현재 보유 종목` 패널 내부 배경을 흰색 기준으로 정리.
-- `원금 대비 평가손익`, `원금 대비 수익률` 카드 tone을 값 부호 기준 초록/빨강으로 복원.
-- `현재 보유 종목` 비중 막대는 `위험자산=빨강`, `안전자산=초록`, 트랙 배경은 흰색으로 조정.
-- 선택 종목 트렌드 컨트롤에서 `기간`, `지표`, `선택 해제`를 한 행에 배치하고 `선택 해제` 버튼을 동일한 박스 스타일로 통일.
-- 대시보드 상단/패널 관련 CSS 회귀를 반영하고 테스트 expectation을 갱신.
-
-### 검증 결과
-- `python -m compileall app.py src tests` 성공
-- `python -m unittest discover -s tests -p "test_*.py"` 성공 (`124`건)
-- 추가 확인:
-  - `python -m compileall app.py` 성공
-  - `python -m unittest tests.test_app_dashboard` 성공 (`40`건)
-
-### 로컬 실행 메모
-- Streamlit 로컬 서버: `python -m streamlit run app.py --server.port 8522 --server.headless true`
-- 확인 URL: `http://localhost:8522`
-- Playwright 기반 로컬 자동 확인은 Streamlit 초기 렌더 프레임을 안정적으로 잡지 못해 스크린샷이 빈 흰 화면으로 남았고, 이 한계는 `artifacts/local-dashboard-manual.png` 및 `artifacts/local-dashboard-debug/`에 기록함.
-
-## 2026-05-11 19:08 자산 배분 차트 세로 비율 확대
-
-### 변경 내용
-- `app.py`에 자산 배분 전용 높이 상수 `DASHBOARD_ALLOCATION_PANEL_HEIGHT=720`, `DASHBOARD_ALLOCATION_CHART_HEIGHT=520`를 추가.
-- 자산 배분 패널만 더 길게 보이도록 컨테이너 높이와 트리맵 렌더 높이를 전용 상수로 분리.
-- Altair fallback 자산 배분 차트도 동일 전용 높이를 사용하도록 맞춤.
-
-### 검증 결과
-- `python -m compileall app.py` 성공
-- `python -m unittest tests.test_app_dashboard` 성공 (`40`건)
-
-## 2026-05-11 19:29 대시보드 레이아웃/모바일/트리맵 경계 재조정
-
-### 변경 파일
-- `app.py`
-- `.streamlit/app.css`
-- `.streamlit/config.toml`
-- `tests/test_app_dashboard.py`
-
-### 변경 내용
-- 상단 5개 요약 카드 아래에 `기준시각`을 `YYYY-MM-DD HH:MM:SS` 형식으로 우측 정렬 배치.
-- 자산 배분/선택 종목 트렌드/보유 종목 수익률 패널의 고정 높이를 풀고 내부 gap을 줄여, 하단 공백이 과도하게 남지 않도록 정리.
-- `현재 보유 종목` 패널과 표 영역을 흰색 기준으로 맞추고, 자산 비중 막대 트랙도 흰색으로 정리.
-- 선택 종목 트렌드와 보유 종목 수익률 2열 영역에 모바일 전용 nowrap/축소 레이아웃을 적용해, 모바일에서도 PC와 같은 배치를 유지하고 필요 시 확대해서 볼 수 있게 조정.
-- 트리맵 상위/하위 레벨 `gapWidth`, `borderWidth`, `upperLabel` 높이, 외곽 margin을 줄여 경계선 어긋남과 과한 흰 여백을 완화.
-- 상단 카드 중 `입금 원금`, `원금 대비 평가손익`, `원금 대비 수익률`도 `보유 현금`, `현재 평가액` 카드와 같은 높이 기준으로 재정렬.
-
-### 검증 결과
-- `python -m compileall app.py src scripts tests` 성공
-- `python -m unittest discover -s tests -p "test_*.py"` 성공 (`125`건)
-- 추가 확인:
-  - `python -m unittest tests.test_app_dashboard` 성공 (`41`건)
-  - `python -m unittest tests.test_app_dashboard.ThemeStylesheetTests` 성공 (`3`건)
-
-### 로컬 확인 메모
-- Streamlit 로컬 서버: `python -m streamlit run app.py --server.port 8524 --server.headless true`
-- Playwright 로컬 확인에서는 Streamlit skeleton 단계 스크린샷까지만 안정적으로 캡처됐고, 산출물은 `artifacts/local-dashboard-8524.png`에 남김.
-
-## 2026-05-11 19:42 현재 보유 종목 표 테마 조정
-
-### 변경 파일
-- `app.py`
-- `.streamlit/app.css`
-- `tests/test_app_dashboard.py`
-
-### 변경 내용
-- `현재 보유 종목` 표만 `st.dataframe` 기본 캔버스 렌더 대신 커스텀 HTML 테이블 스킨으로 전환.
-- 헤더 배경, 셀 보더, 숫자 정렬, hover 배경, 손익/수익률 양수·음수 컬러를 첨부 스크린샷 톤에 맞게 정리.
-- 표 스킨 회귀 테스트와 CSS 클래스 존재 검증을 추가.
-
-### 검증 결과
-- `python -m compileall app.py tests/test_app_dashboard.py` 성공
-- `python -m unittest tests.test_app_dashboard.HoldingsTableDisplayTests tests.test_app_dashboard.ThemeStylesheetTests` 성공 (`8`건)
-- `python -m unittest discover -s tests -p "test_*.py"` 성공 (`126`건)
-
-## 2026-05-12 02:20 거래/대시보드 레이아웃 및 실현손익 차트 정리
-
-### 변경 파일
-- `app.py`
-- `.streamlit/app.css`
-- `tests/test_app_dashboard.py`
-
-### 변경 내용
-- 상단 요약 카드 5개에 동일한 최소 높이 기준을 적용해 `입금 원금`, `원금 대비 평가손익`, `원금 대비 수익률` 카드 하단 라인을 `보유 현금`, `현재 평가액`과 맞춤.
-- 선택 종목 트렌드 기간 옵션에서 대시보드 전용 `당일`을 제거하고, `기간`/`지표`/`선택 해제` 컨트롤 폭과 높이를 줄여 한 줄 배치가 더 타이트하게 보이도록 정리.
-- 거래 페이지에서 `상품 등록`과 `현금입금/출금` 패널을 2열로 병렬 배치.
-- `실현손익` 차트를 대시보드 `보유 종목 수익률`과 같은 막대 톤으로 맞춘 ECharts/Altair helper로 교체.
-- 대시보드 기간 옵션 제외와 실현손익 막대 라벨/모서리 회귀 테스트를 추가.
-
-### 검증 결과
-- `python -m compileall app.py tests/test_app_dashboard.py` 성공
-- `python -m unittest tests.test_app_dashboard.TradeFormResetTests tests.test_app_dashboard.HoldingsBarLabelTests tests.test_app_dashboard.RealizedProfitBarTests` 성공 (`14`건)
-- `python -m compileall app.py src scripts tests` 성공
-- `python -m unittest discover -s tests -p "test_*.py"` 성공 (`128`건)
-- `python scripts/verify_streamlit_deployment.py --page dashboard --expect-backend supabase --wait-ms 15000` 성공
-- `python scripts/verify_streamlit_deployment.py --page trades --expect-backend supabase --wait-ms 15000` 성공
-
-### 배포 메모
-- 커밋: `5de102e` (`Adjust dashboard and trade layouts`)
-- `origin/main` 푸시 완료
-- 원격 검증 결과:
-  - dashboard: `logged_in=true`, `workspace_visible=true`, `backend_storage=Supabase`, `allocation_status="지연 데이터 표시 중"`
-  - trades: `logged_in=true`, `workspace_visible=true`, `backend_storage=Supabase`
-
-## 2026-05-12 03:48 거래 실현손익 오류 및 선택 종목 트렌드 컨트롤 재조정
-
-### 변경 파일
-- `app.py`
-- `.streamlit/app.css`
-
-### 변경 내용
-- `trade_entry_page()`에서 `echarts_available` 지역 변수를 먼저 계산하도록 보강해, 실현손익 차트 렌더 분기에서 발생하던 `NameError`를 제거.
-- 상단 5개 카드 높이 정렬이 실제 Streamlit DOM에도 적용되도록 `dashboard-summary-strip` 하위 `stVerticalBlockBorderWrapper` 기준 최소 높이/스트레치 셀렉터를 강화.
-- 선택 종목 트렌드 컨트롤은 기간 영역 폭을 더 넓히고, 라벨/버튼/segmented control 높이와 padding을 추가로 줄여 `1개월·3개월·6개월·1년`이 같은 행에 유지되도록 재조정.
-
-### 검증 결과
-- `python -m compileall app.py src scripts tests` 성공
-- `python -m unittest tests.test_app_dashboard` 성공 (`44`건)
-- `python -m unittest discover -s tests -p "test_*.py"` 성공 (`128`건)
-- `python scripts/verify_streamlit_deployment.py --page dashboard --expect-backend supabase --wait-ms 15000` 성공
-- `python scripts/verify_streamlit_deployment.py --page trades --expect-backend supabase --wait-ms 15000` 성공
-
-### 배포 메모
-- 커밋: `0cb1796` (`Fix trade chart error and compact trend controls`)
-- `origin/main` 푸시 완료
-- 원격 검증 결과:
-  - dashboard: `logged_in=true`, `workspace_visible=true`, `backend_storage=Supabase`, `allocation_status="실시간 연동 중"`
-  - trades: `logged_in=true`, `workspace_visible=true`, `backend_storage=Supabase`
-
-## 2026-05-12 03:56 대시보드 카드 헤더 정렬 및 실현손익 요약 컬러 보강
-
-### 변경 파일
-- `app.py`
-- `.streamlit/app.css`
-
-### 변경 내용
-- 요약 카드 본문을 항상 동일한 `header(label + ghost action slot)` 구조로 렌더링해 상단 카드들의 시각적 정렬 기준을 통일.
-- 선택 종목 트렌드 컨트롤은 바깥 `border=True` 래퍼를 제거하고, 내부 행 정렬/segmented control/button 간격을 더 줄여 박스 높이를 낮춤.
-- `실현 손익 요약` 표에 `실현손익`, `실현수익률(%)` 컬러 스타일을 추가해 양수/음수 톤이 보이도록 변경.
-
-### 검증 결과
-- `python -m compileall app.py` 성공
-- `python -m unittest tests.test_app_dashboard` 성공 (`44`건)
-- `python -m compileall app.py src scripts tests` 성공
-- `python -m unittest discover -s tests -p "test_*.py"` 성공 (`128`건)
-
-## 2026-05-12 04:06 대시보드 상단 카드/선택 종목 트렌드 추가 압축
-
-### 변경 파일
-- `app.py`
-- `.streamlit/app.css`
-
-### 변경 내용
-- 선택 종목 트렌드 컨트롤을 `기간 / 지표 / 선택 해제` 3블록만 남기도록 단순화해, 라벨 칸 때문에 생기던 세로 높이와 줄바꿈을 제거.
-- 상단 요약 카드 라벨은 `nowrap`과 더 작은 글자 크기로 조정하고, ghost action slot에 고정 최소 폭을 줘 카드별 헤더 줄수 차이를 줄임.
-- 선택 종목 트렌드 segmented control / 버튼 높이, padding, gap을 한 단계 더 줄여 한 줄형 밀도를 높임.
-
-### 검증 결과
-- `python -m compileall app.py` 성공
-- `python -m unittest tests.test_app_dashboard` 성공 (`44`건)
-- `python -m unittest discover -s tests -p "test_*.py"` 성공 (`128`건)
-
-### 배포 메모
-- 커밋: `1152639` (`Compress dashboard summary and trend controls`)
-- `origin/main` 푸시 완료
-- 원격 검증:
-- `python scripts/verify_streamlit_deployment.py --page dashboard --expect-backend supabase --wait-ms 15000 --screenshot artifacts/dashboard-top-after-1152639.png --text-output artifacts/dashboard-top-after-1152639.txt` 성공
-- 상단 카드 원격 스크린샷에서 라벨 줄바꿈 제거 확인
-
-## 2026-05-12 04:23 선택 종목 트렌드 컨트롤 한 줄 고정 전환
-
-### 변경 파일
-- `app.py`
-- `.streamlit/app.css`
-
-### 변경 내용
-- 선택 종목 트렌드의 `기간`, `지표` 컨트롤을 segmented control에서 compact `selectbox`로 바꿔 좁은 폭에서도 한 줄이 유지되도록 변경.
-- 해당 컨트롤 전용 `selectbox` 높이/폰트/라운드값을 조정해 기존 박스 계열 톤은 유지하면서 세로 높이를 줄임.
-
-### 검증 결과
-- `python -m compileall app.py` 성공
-- `python -m unittest tests.test_app_dashboard` 성공 (`44`건)
-- `python -m unittest discover -s tests -p "test_*.py"` 성공 (`128`건)
-
-## 2026-05-12 04:27 보유종목 수익률 패널 높이 확장
-
-### 변경 파일
-- `app.py`
-
-### 변경 내용
-- 대시보드 우측 `보유종목 수익률` 차트 전용 높이를 `430px`로 분리해, `선택 종목 트렌드` 패널 하단선과 더 가깝게 맞춤.
-- 거래 페이지 `실현손익` 차트는 기존 `DASHBOARD_HOLDINGS_CHART_HEIGHT`를 그대로 사용하도록 유지.
-
-### 검증 결과
-- `python -m compileall app.py` 성공
-- `python -m unittest tests.test_app_dashboard` 성공 (`44`건)
-- `python -m unittest discover -s tests -p "test_*.py"` 성공 (`128`건)
-
-## 2026-05-12 04:51 대시보드 카드/좌우 패널 높이 실제 DOM 기준 재정렬
-
-### 변경 파일
-- `app.py`
-- `.streamlit/app.css`
-- `tests/test_app_dashboard.py`
-
-### 변경 내용
-- `선택 종목 트렌드` 차트 높이를 `보유 종목 수익률` 비교 차트 높이와 같은 상수로 공유하도록 변경.
-- Streamlit 실제 DOM에서 `key` 클래스가 붙는 `stVerticalBlock` 자체에 상단 카드 `120px`, 좌우 보조 패널 `560px` 최소 높이를 직접 적용.
-- 상단 5개 카드가 `보유 현금` 카드 기준으로 같은 높이를 갖도록 정렬하고, 금액 텍스트가 좁은 폭에서 잘리지 않도록 요약 카드 전용 글자 크기와 ghost action slot 폭을 조정.
-- CSS 높이 계약과 선택/보유 차트 높이 동기화를 `tests/test_app_dashboard.py` 회귀 테스트에 추가.
-
-### 검증 결과
-- `python3 -m compileall app.py src scripts tests` 성공
-- `python3 -m unittest tests.test_app_dashboard` 성공 (`45`건)
-- `python3 -m unittest discover -s tests -p "test_*.py"` 성공 (`129`건)
-- `python3 -m streamlit run app.py --server.port 8526 --server.headless true` 로컬 기동 성공
-- `agent-browser` 데모 대시보드 측정:
-  - 상단 카드 5개 모두 `height=120`, `minHeight=120px`
-  - `선택 종목 트렌드`, `보유 종목 수익률` 모두 `height=560`, `minHeight=560px`
-  - 상단 카드 값 텍스트 5개 모두 `clipped=false`
-  - 에러 오버레이 없음, 본문 렌더 확인
-- 브라우저 검증 산출물: `artifacts/dashboard-height-final-polished.png`, `artifacts/dashboard-height-final-verified.png`
-
-## 2026-05-15 review_report.md 전체 반영 패치 진행 중단 기록
-
-### 변경 파일
-- `app.py`
-- `src/ui/app_core.py`
-- `src/ui/__init__.py`
-- `src/ui/charts.py`
-- `src/ui/forms.py`
-- `src/ui/layout.py`
-- `pages/dashboard.py`
-- `pages/trades.py`
-- `pages/data.py`
-- `.streamlit/app.css`
-- `requirements.txt`
-- `Memory.md`
-
-### 반영한 내용
-- `app.py`를 얇은 엔트리포인트/호환 레이어로 바꾸고, 기존 4천 줄대 구현을 `src/ui/app_core.py`로 이동.
-- `pages/dashboard.py`, `pages/trades.py`, `pages/data.py`를 추가해 `st.Page`/`st.navigation` 기반 라우팅 구조를 만들기 시작함.
-- `src/ui/charts.py`, `src/ui/forms.py`, `src/ui/layout.py`는 기존 `app_core` 헬퍼를 re-export하는 호환 모듈로 추가.
-- `TRADE_LOG_TABLE_COLUMN_WEIGHTS`를 `TRADE_LOG_TABLE_COLUMN_WEIGHT_BY_LABEL` dict에서 파생되도록 변경.
-- 차트 색상 상수를 `ChartColors` dataclass/`CHART_COLORS`로 묶고 기존 상수명 alias는 유지.
-- `st_keyup`, `st_echarts` fallback을 제거하고 필수 의존성 오류를 명시적으로 발생시키도록 변경.
-- `streamlit-echarts` v2 component manifest가 import 전에 등록되도록 `_discover_streamlit_component_manifests()`를 추가.
-- Supabase hotfix 상세 안내는 `PORTFOLIO_SHOW_HOTFIX_GUIDE=true`일 때만 노출되도록 변경.
-- `page_icon`을 `💼`로 변경.
-- `.streamlit/app.css`에 `prefers-color-scheme: dark` 변수와 모바일 세로 스택 보강, 인증/온보딩 화면 자동 pages nav 숨김 CSS를 추가.
-- `requirements.txt`의 `altair==5.0.1`을 `altair>=5.4,<6`으로 변경했고 로컬 환경은 `altair 5.5.0` 설치 완료.
-- 현재가 갱신과 orphan holdings 정리에 `st.status` 진행 상태 표시를 추가.
-
-### 검증 결과
-- `python -m compileall app.py src scripts tests pages` 성공.
-- `python -m unittest discover -s tests -p "test_*.py"` 성공 (`129`건), Altair 5.5.0 설치 후에도 재성공.
-- `python scripts/run_kis_quote_worker.py --backend sqlite --preflight-only` 성공 (`accounts=8`, `holdings=34`).
-- `python -m pip install -r requirements.txt` 성공, `altair 5.5.0`, `narwhals 2.21.0` 설치됨.
-
-### 미완료/주의 사항
-- 로컬 Streamlit 브라우저 검증은 아직 통과하지 못함.
-- `python -m streamlit run app.py --server.port 8527 --server.headless true`는 서버 기동 자체는 성공하지만, Playwright 확인 시 본문이 기대대로 렌더되지 않고 Streamlit chrome/nav만 보이는 상태가 있었음.
-- 원인 후보:
-  - `app.py`를 lazy import/호환 레이어로 바꾸면서 Streamlit ScriptRunner 실행 컨텍스트 판별이 안정적이지 않음.
-  - `pages/` 디렉터리를 추가하자 인증/온보딩 화면에서도 Streamlit 자동 pages navigation이 노출되어 `st.navigation` 전환 방식과 충돌 가능성이 있음.
-  - `hide_implicit_pages_navigation()`에서 `st.navigation(..., position="hidden")`을 실행했을 때 auth 본문 렌더가 막혀서 현재는 no-op + CSS 숨김 방식으로 되돌려 둠.
-- 다음 세션은 우선 `app.py` 실행 가드를 단순화하고, 로그인 전/온보딩 화면에서는 자동 pages nav가 본문 렌더를 막지 않는지부터 확인해야 함.
-- 필요하면 대형 분리 대신 `app.py` 원본 구조를 복구한 뒤 `requirements`, hotfix 플래그, 색상/컬럼 dict, CSS, status UX 같은 저위험 패치부터 분리 적용하는 편이 안전함.
-- 현재 작업트리에 기존 사용자 변경/산출물(`data/portfolio.db`, `docs/review_report.md`, 여러 untracked 파일)이 섞여 있으므로 커밋 전 `git status`와 변경 범위를 반드시 재확인할 것.
-
-## 2026-05-15 review_report.md 다음 단계 로컬 검증
-
-### 확인한 문서
-- `docs/review_report.md`
-- `docs/PLAN.md`
-- `docs/progress-memory.md`
-- `Memory.md`
-
-### 진행 내용
-- 이전 중단 기록의 핵심 이슈였던 로컬 Streamlit 본문 렌더 상태를 재검증.
-- `python -m streamlit run app.py --server.port 8527 --server.headless true`로 별도 포트 기동 후 Playwright로 인증 화면과 데모 작업공간 진입을 확인.
-- 첫 브라우저 접근 직후 약 9~15초 동안 Streamlit skeleton만 보일 수 있으나, 이후 인증 화면이 정상 렌더됨을 확인.
-- `데모 모드` → `데모 작업공간 시작하기` 흐름으로 로컬 SQLite 데모 세션에 진입했고, `st.navigation` 기반 대시보드 본문과 사이드바가 정상 표시됨을 확인.
-- 검증 산출물:
-  - `artifacts/local-streamlit-8527-current.png`
-  - `artifacts/local-streamlit-8527-long-wait.png`
-  - `artifacts/local-streamlit-8527-demo-mode.png`
-  - `artifacts/local-streamlit-8527-demo-dashboard.png`
-
-### 검증 결과
-- `python -m compileall app.py src scripts tests pages` 성공.
-- `python -m unittest discover -s tests -p "test_*.py"` 성공 (`129`건).
-- `python scripts/run_kis_quote_worker.py --backend sqlite --preflight-only` 성공 (`accounts=8`, `holdings=34`).
-- 로컬 Streamlit 브라우저 검증 성공:
-  - 인증 화면 렌더 확인
-  - 데모 모드 화면 렌더 확인
-  - 데모 대시보드 진입 확인
-  - 브라우저 콘솔 오류 없음
-
-### 남은 주의 사항
-- 첫 렌더가 즉시 표시되지 않고 skeleton 상태가 몇 초 이상 지속될 수 있으므로, 이후 성능 개선 단계에서는 `src/ui/app_core.py`의 무거운 import와 인증 전 초기화 비용을 줄이는 작업을 우선 검토한다.
-- 데모 브라우저 검증 과정에서 로컬 `data/portfolio.db`가 갱신될 수 있으므로 커밋/배포 전 제외 여부를 반드시 재확인한다.
-- 이번 턴에서는 사용자의 명시적 커밋 요청이 없어 커밋과 원격 배포는 수행하지 않음.
-
-## 2026-05-15 첫 렌더 지연 축소 및 인증 화면 경고 제거
-
-### 변경 파일
-- `src/ui/app_core.py`
-- `src/auth.py`
-- `Memory.md`
-
-### 변경 내용
-- 인증 화면 첫 렌더에서 필요 없는 무거운 의존성을 지연 로드하도록 변경.
-  - `streamlit-echarts` / `JsCode`
-  - `streamlit-keyup`
-  - `src.analytics` / `src.market` / `yfinance`
-  - `src.db` / `requests` / SQLite 관련 import
-- 기존 공개 함수명은 `app.py` 호환 레이어와 테스트 monkey patch가 유지되도록 래퍼 함수로 보존.
-- `src/auth.py`의 Supabase 클라이언트 생성도 실제 인증/세션 작업 시점에만 `create_client()`를 import하도록 변경.
-- ECharts 옵션 생성 테스트가 직접 옵션 함수를 호출해도 `JsCode`가 필요하면 지연 로드되도록 `get_jscode_runtime()`을 추가.
-- Supabase Python 클라이언트 초기화 방식은 공식 문서의 `create_client(url, key)` 흐름을 유지했고, 관련 변경 전 Supabase changelog와 Python initializing docs를 확인함.
-- 인증이 비활성화된 로컬 환경에서 `st.form_submit_button(disabled=True)`가 Streamlit `Missing Submit Button` 경고를 띄우는 문제를 피하도록, 비활성 로그인/회원가입 화면은 form 없이 disabled input/button으로 렌더링.
-
-### 성능 측정
-- `src.ui.app_core` 단독 import 측정:
-  - 이전 관측값: 약 `2.631s`
-  - Supabase 클라이언트 지연 로드 후: 약 `1.818s`
-  - analytics/market/db 지연 로드 후: 약 `1.470s`
-- 로컬 브라우저 인증 화면 ready 시간:
-  - 이전 관측값: 약 `9.33s`
-  - 이번 최종 관측값: 약 `1.29s`
-
-### 검증 결과
-- `python -m compileall app.py src scripts tests pages` 성공.
-- `python -m unittest tests.test_app_dashboard.SelectedHoldingTrendOptionTests tests.test_auth` 성공 (`9`건).
-- `python -m unittest discover -s tests -p "test_*.py"` 성공 (`129`건).
-- `python scripts/run_kis_quote_worker.py --backend sqlite --preflight-only` 성공 (`accounts=8`, `holdings=34`).
-- `python -m streamlit run app.py --server.port 8528 --server.headless true` 로컬 기동 후 Playwright 검증 성공.
-  - 인증 화면 ready `1.29s`
-  - `Missing Submit Button` 경고 없음
-  - 데모 모드 진입 후 대시보드 렌더 확인
-  - ECharts 경고 없음
-  - 브라우저 콘솔 오류 없음
-
-### 검증 산출물
-- `artifacts/importtime-app-core-before.txt`
-- `artifacts/importtime-app-core-after.txt`
-- `artifacts/importtime-app-core-after-auth-lazy.txt`
-- `artifacts/importtime-app-core-after-lazy-runtime.txt`
-- `artifacts/importtime-app-core-after-db-lazy.txt`
-- `artifacts/local-streamlit-8528-auth-ready.png`
-- `artifacts/local-streamlit-8528-auth-ready-fixed.png`
-- `artifacts/local-streamlit-8528-demo-dashboard.png`
-- `artifacts/local-streamlit-8528-demo-dashboard-fixed.png`
-
-### 남은 주의 사항
-- 로컬 데모 검증으로 `data/portfolio.db`가 갱신됐을 수 있으므로 커밋 전 제외 여부를 확인해야 한다.
-- 현재 작업트리에는 기존 untracked 산출물과 review 문서가 많아, 커밋/배포 전 요청 범위 파일만 선별해야 한다.
-- 이번 턴에서는 사용자의 명시적 커밋 요청이 없어 커밋과 원격 배포는 수행하지 않음.
-
-## 2026-05-15 st.navigation 페이지 전환 로컬 검증
-
-### 변경 파일
-- `src/ui/app_core.py`
-- `Memory.md`
-
-### 진행 내용
-- 성능 패치 이후 다음 단계로 `st.navigation` 기반 대시보드/거래/데이터 페이지 전환을 로컬 브라우저에서 검증.
-- `python -m streamlit run app.py --server.port 8530 --server.headless true`로 서버를 재기동하고 Playwright로 데모 세션 진입 후 페이지 전환을 확인.
-- 검증 중 사이드바의 `열려 있는 페이지` 문구가 페이지 전환보다 한 박자 늦게 표시되는 문제를 발견.
-- Streamlit 페이지 파일 실행 타이밍과 맞지 않는 동적 상태 문구라서, 잘못된 상태를 보여주지 않도록 `페이지는 좌측 내비게이션에서 전환합니다.` 정적 안내로 교체.
-
-### 검증 결과
-- `python -m compileall app.py src scripts tests pages` 성공.
-- `python -m unittest tests.test_app_dashboard` 성공 (`45`건).
-- `python -m unittest discover -s tests -p "test_*.py"` 성공 (`129`건).
-- `python scripts/run_kis_quote_worker.py --backend sqlite --preflight-only` 성공 (`accounts=8`, `holdings=34`).
-- Playwright 로컬 브라우저 검증 성공.
-  - 대시보드: `자산 배분`, `현재 보유 종목` 표시
-  - 거래: `상품 등록`, `거래 기록` 표시
-  - 데이터: `운영 상태`, `데이터 저장소` 표시
-  - 사이드바 정적 안내 문구 표시
-  - `열려 있는 페이지:` stale 문구 제거 확인
-  - `Traceback`/주요 런타임 오류 없음
-  - `Missing Submit Button`/ECharts 경고 없음
-
-### 검증 산출물
-- `artifacts/local-streamlit-8529-dashboard-start.png`
-- `artifacts/local-streamlit-8529-dashboard.png`
-- `artifacts/local-streamlit-8529-trades.png`
-- `artifacts/local-streamlit-8529-data.png`
-- `artifacts/local-streamlit-8530-dashboard-navigation-final.png`
-- `artifacts/local-streamlit-8530-trades-navigation-final.png`
-- `artifacts/local-streamlit-8530-data-navigation-final.png`
-
-### 남은 주의 사항
-- 브라우저 데모 검증으로 `data/portfolio.db`와 KIS 캐시 시간이 갱신됐을 수 있으므로 커밋 전 제외 여부를 재확인해야 한다.
-- 현재 변경은 로컬 검증까지 완료됐지만, 원격 반영은 아직 하지 않았다.
-
-## 2026-05-15 커밋/배포 및 Streamlit Cloud 복구
-
-### 변경 파일
-- `requirements.txt`
-- `docs/PLAN.md`
-- `scripts/verify_streamlit_deployment.py`
-- `Memory.md`
-
-### 커밋 및 배포
-- `33e754f` `Refactor Streamlit navigation and startup` 커밋 후 `origin/main`에 푸시.
-- 첫 원격 검증에서 Streamlit Cloud Python 3.14 런타임의 `altair` import `TypeError`가 재현됨.
-- `32fe43a` `Fix Streamlit Cloud Altair runtime` 커밋으로 `altair>=5.3,<5.4` 제한 후 `origin/main`에 푸시.
-- 배포 방식: Streamlit Cloud가 `origin/main` 푸시를 감지해 재배포.
-
-### 검증 결과
-- `python -m pip install --dry-run -r requirements.txt` 성공, `altair-5.3.0` 선택 확인.
-- 임시 target 설치로 `altair 5.3.0` wheel에 `closed=True` 타입 정의가 없음을 확인.
-- `python -m compileall app.py src scripts tests pages` 성공.
-- `python -m unittest discover -s tests -p "test_*.py"` 성공 (`129`건).
-- `python scripts/run_kis_quote_worker.py --backend sqlite --preflight-only` 성공 (`accounts=8`, `holdings=34`).
-- 원격 Streamlit 배포 검증 성공:
-  - 대시보드: 로그인 성공, `Supabase`, `자산 배분`, `선택 종목 트렌드` 확인.
-  - 거래: 로그인 성공, `Supabase`, `상품 등록`, `거래 기록` 확인.
-  - 데이터: 로그인 성공, `Supabase`, `운영 상태`, `데이터 저장소`, `현재 배포본은 Supabase를 사용 중입니다.` 확인.
-
-### 검증 스크립트 보강
-- `st.navigation` 전환 후 사이드바 페이지 링크가 기존 `label`이 아닌 `a[data-testid="stSidebarNavLink"]`로 렌더링되어, `scripts/verify_streamlit_deployment.py`가 새 내비게이션 링크를 찾도록 보강.
-- 페이지 핵심 마커를 찾지 못한 경우에도 성공으로 끝날 수 있던 경로를 실패 처리하도록 변경.
-
-### 커밋 제외 항목
-- `data/portfolio.db`: 로컬/브라우저 검증 중 갱신된 개인 SQLite DB라 제외.
-- `artifacts/`, `.playtools*/`, `.playwright-browsers/`, `.local/`, `.vscode/`, `data/kis_cache/`, 임시 스크립트와 로그 파일은 커밋 제외.
-
-### 다음 단계
-- [ ] KIS WebSocket worker 장시간 실행 중 재연결/상태 복구 로직을 실제 운영 로그 기준으로 점검.
-- [ ] DB/시세 TTL 캐시가 화면별로 충분히 적용됐는지 Supabase 호출 빈도와 체감 응답 시간을 기준으로 추가 측정.
-- [ ] 모바일 화면에서 대시보드 트리맵/보유 종목 표/거래 입력 폼의 가독성을 실제 viewport로 확인하고 필요한 CSS만 보강.
-- [ ] 운영 검증 스크립트의 거래/데이터 요약 추출값을 새 화면 구조에 맞게 더 정확히 정리.
-
-## 2026-05-12 review_report.md 기준 반영 상태 체크
-
-### 완료된 항목
-- [x] 1. `app.py` 단일 파일 분리 + `st.navigation` 전환
-  - `app.py`는 66줄 호환/지연 로더로 축소됨.
-  - 실제 화면 구현은 `src/ui/app_core.py`, `pages/dashboard.py`, `pages/trades.py`, `pages/data.py`로 분리됨.
-  - 원격 검증에서 대시보드/거래/데이터 페이지 전환 성공.
-- [x] 2. DB/시세 호출 TTL 캐시 적용
-  - `src/db.py`에 계좌/보유종목/거래기록/스냅샷 조회 캐시가 `@st.cache_data(ttl=...)`로 구현됨.
-  - `src/market.py`의 `fetch_latest_price()`는 `ttl=900`, 관련 시장 데이터 조회는 TTL 캐시 적용됨.
-- [x] 3. `altair==5.0.1` 고정 해제
-  - 운영 배포 호환성을 우선해 `requirements.txt`를 `altair>=5.3,<5.4`로 조정.
-  - `altair>=5.4`는 Streamlit Cloud Python 3.14에서 import `TypeError`가 재현되어 제외함.
-- [x] 4. KIS WebSocket worker 재연결 로직
-  - `scripts/run_kis_quote_worker.py`에 `--reconnect-delay`, `on_close`, `run_forever()` 이후 재연결 루프가 구현됨.
-  - `python scripts/run_kis_quote_worker.py --backend sqlite --preflight-only` 성공 확인.
-- [x] 5. Supabase hotfix 상세 절차 관리자 전용화
-  - `render_operation_error()`는 기본적으로 상세 절차를 숨기고 `PORTFOLIO_SHOW_HOTFIX_GUIDE=true`일 때만 표시함.
-- [x] 6. 전역 차트 색상 상수 네임스페이스화
-  - `ChartColors` dataclass와 `CHART_COLORS`가 추가됨.
-  - 기존 테스트/호환성을 위해 기존 `FEARGREED_*`, `TREEMAP_*`, `CHART_*` alias는 유지됨.
-- [x] 7. `TRADE_LOG_TABLE_COLUMN_WEIGHTS` dict 기반 파생
-  - `TRADE_LOG_TABLE_COLUMN_WEIGHT_BY_LABEL`에서 헤더 순서에 맞춰 weight list를 생성함.
-- [x] 8. `st_keyup` / `st_echarts` 선택적 fallback 정리
-  - 런타임 지연 로드 실패 시 조용히 `None` 처리하지 않고 설치 안내가 포함된 `RuntimeError`를 발생시킴.
-  - `requirements.txt`에 `streamlit-keyup`, `streamlit-echarts`가 명시됨.
-- [x] 9. 다크모드 CSS 변수 추가
-  - `.streamlit/app.css`에 `@media (prefers-color-scheme: dark)` 토큰 전환이 추가됨.
-- [x] 11. `page_icon` 업그레이드
-  - `st.set_page_config(page_icon="💼")` 적용됨.
-
-### 부분 완료 또는 추가 확인 필요
-- [ ] 10. 모바일 레이아웃 개선
-  - `.streamlit/app.css`에 `max-width: 860px`, `max-width: 560px` 반응형 보강은 적용됨.
-  - 아직 모바일 viewport 기준 Playwright 스크린샷으로 대시보드 트리맵/보유 종목 표/거래 입력 폼의 실제 가독성까지 확정하지 못함.
-- [ ] 12. 로딩 스피너 / 스켈레톤 UI
-  - 데모 접속, 현재가 갱신, 선택 종목 추이 로드, orphan holdings 정리에는 `st.spinner`/`st.status`가 적용됨.
-  - 스냅샷 저장과 일부 데이터 export/운영 작업까지 모든 장시간 작업에 일관 적용됐는지는 추가 점검 필요.
-
-### 후속 작업 체크리스트
-- [ ] 모바일 viewport 원격/로컬 스크린샷 검증 후 필요한 CSS만 보강.
-- [ ] 스냅샷 저장, CSV export, 운영 정리 작업의 로딩 상태 표시 누락 여부 점검.
-- [ ] KIS WebSocket worker 재연결은 코드 구현 상태이므로, 장중 운영 로그로 실제 재연결/상태 복구를 확인.
-- [ ] `scripts/verify_streamlit_deployment.py`의 거래/데이터 요약 추출값을 새 화면 구조에 맞게 정밀화.
-
-## 2026-05-12 자산배분 일부 종목 일일차트 미표시 패치
-
-### 변경 파일
-- `src/market.py`
-- `tests/test_market.py`
-- `Memory.md`
-
-### 원인
-- 자산배분 tooltip/선택 종목 당일 차트는 `fetch_intraday_price_snapshot()`의 분봉/당일 시세를 사용한다.
-- `0162Z0`, `0113D0`처럼 숫자 6자리만으로 구성되지 않은 KRX 알파뉴메릭 ETF/ETN 코드는 KIS REST 분봉 대상에서 제외된다.
-- 이 코드들은 yfinance에서도 빈 응답이 나올 수 있어 일부 종목의 당일 차트가 `당일 데이터 없음`으로 표시될 수 있었다.
-
-### 변경 내용
-- `src/market.py`에 Naver `siseJson.naver` 기반 국내 차트 fallback을 추가.
-  - 최신가: Naver 일봉 마지막 종가
-  - 당일 차트: Naver minute 데이터
-  - 기간별 일봉: Naver day 데이터
-- `is_krx_symbol()`을 추가해 `.KS/.KQ` suffix 포함 심볼도 KRX fallback 대상으로 판별.
-- 기존 provider 순서:
-  - KIS 가능 종목은 KIS 우선
-  - KRX 종목은 Naver fallback
-  - 그래도 비면 yfinance fallback
-- `tests/test_market.py`에 알파뉴메릭 KRX 코드의 Naver 최신가/분봉/일봉 fallback 테스트 추가.
-
-### 검증 결과
-- `python -m compileall app.py src scripts tests pages` 성공.
-- `python -m unittest tests.test_market tests.test_app_dashboard.SelectedHoldingTrendFrameTests tests.test_app_dashboard.AllocationTreemapVisualMapTests` 성공.
-- `python -m unittest discover -s tests -p "test_*.py"` 성공 (`133`건).
-- `python scripts/run_kis_quote_worker.py --backend sqlite --preflight-only` 성공 (`accounts=8`, `holdings=34`).
-- 직접 조회 확인:
-  - `0162Z0`: Naver 분봉 `400`개, 일봉 `20`개, 최신가 `13,375`.
-  - `0113D0`: Naver 분봉 `296`개, 일봉 `20`개, 최신가 `12,405`.
-- `allocation_treemap_options()` 직접 확인:
-  - `0162Z0`, `0113D0` leaf tooltip에 `<svg>` 당일 sparkline 생성 확인.
-  - 기준시각 각각 `2026-05-12 15:58:00`, `2026-05-12 15:46:00` 표시 확인.
-
-### 남은 주의 사항
-- Naver chart fallback은 외부 비공식 JSON endpoint이므로 응답 형식 변경 가능성이 있다.
-- 원격 배포 전에는 Streamlit Cloud에서 자산배분 tooltip과 선택 종목 차트를 한 번 더 확인하는 것이 좋다.
-
-### 커밋 및 배포
-- `a3d9285` `Fix KRX intraday chart fallback` 커밋 후 `origin/main`에 푸시.
-- Streamlit Cloud 원격 대시보드 검증 성공:
-  - `python scripts/verify_streamlit_deployment.py --page dashboard --expect-backend supabase --wait-ms 20000`
-  - `logged_in=true`, `workspace_visible=true`, `backend_storage_code=supabase`, `ok=true`.
-
-## 2026-05-13 `setup_supabase.sql` 정책 재실행 안정화
-
-### 변경 파일
-- `setup_supabase.sql`
-- `tests/test_setup_supabase_sql.py`
-- `Memory.md`
-
-### 원인
-- SQL Editor에서 정책 블록만 부분 재실행할 경우 `holdings_update_own`, `daily_interest_update_own`가 이미 존재하면 `duplicate policy` 오류로 중단될 수 있었다.
-- 기존 파일은 정책 섹션 시작부에 일괄 `DROP POLICY IF EXISTS`가 있었지만, 개별 블록만 다시 실행하는 흐름까지는 충분히 방어하지 못했다.
-- `daily_interest_update_own` 부근 괄호 불일치 의심이 있어 실제 PostgreSQL 파서 기준 문법 확인이 필요했다.
-
-### 변경 내용
-- `setup_supabase.sql` RLS 정책 섹션 상단에 정책 점검용 `pg_policies` 조회 쿼리 주석 추가.
-- `CREATE POLICY holdings_update_own` 직전에 `DROP POLICY IF EXISTS holdings_update_own ON public.holdings;` 추가.
-- `CREATE POLICY daily_interest_update_own` 직전에 `DROP POLICY IF EXISTS daily_interest_update_own ON public.daily_interest;` 추가.
-- `tests/test_setup_supabase_sql.py`에 정책명 중복, 문제 정책의 로컬 `DROP POLICY IF EXISTS`, UPDATE 정책 블록 괄호 균형을 확인하는 회귀 테스트 4건 추가.
-- SQL 문법 검증용 로컬 패키지 `pglast`를 프로젝트 `.venv`에 설치.
-
-### 검증 결과
-- `./.venv/bin/python -m pip install pglast` 성공.
-- `./.venv/bin/python` + `pglast.parse_sql()`로 `setup_supabase.sql` 전체 파싱 성공 (`parse_ok`).
-- 괄호 개수 점검 결과 `open_paren=258`, `close_paren=258`로 불균형 없음 확인.
-- `python3 -m compileall tests/test_setup_supabase_sql.py` 성공.
-- `python3 -m unittest tests.test_setup_supabase_sql` 성공 (`4`건).
-- `python3 -m compileall app.py src scripts tests` 성공.
-- `python3 -m unittest discover -s tests -p "test_*.py"` 성공 (`137`건).
-- `python3 scripts/verify_streamlit_deployment.py --page data --expect-backend supabase --wait-ms 12000` 성공.
-  - 결과: `logged_in=true`, `workspace_visible=true`, `backend_storage_code=supabase`, `hotfix_required=false`, `ok=true`
-- `git diff -- setup_supabase.sql` 기준 정책 섹션 보강만 반영됨 확인.
-
-### 남은 작업
-- 현재 세션에는 원격 SQL 실행 도구가 없어 `pg_policies` 직접 조회/재적용은 아직 못 했다.
-- Supabase SQL Editor에서 전체 스크립트 또는 문제 정책 블록 재실행으로 운영 환경 확인이 필요하다.
-
-### 커밋 및 배포
-- `5e2584b` `Harden Supabase policy setup reruns` 커밋 후 `origin/main` 푸시 완료.
-- 이번 변경은 `setup_supabase.sql`과 테스트/작업 기록만 포함하므로 별도 앱 재배포는 수행하지 않았다.
+1. KIS WebSocket worker 장시간 실행 중 재연결/상태 복구 로직을 장중 운영 로그로 추가 확인한다.
+2. 계좌 `23`처럼 tick 이력이 없는 계좌의 `last_quote_at=null` 유지가 운영 요구와 맞는지 확인한다.
+3. 모바일 viewport에서 대시보드 트리맵, 보유 종목 표, 거래 입력 폼 가독성을 실제 스크린샷으로 확인한다.
+4. 장시간 작업의 `st.spinner`/`st.status` 적용 누락 여부를 점검한다.
+5. `scripts/verify_streamlit_deployment.py`의 거래/데이터 페이지 요약 추출값을 새 화면 구조에 맞게 정밀화한다.
+6. Supabase SQL Editor에서 `setup_supabase.sql` 전체 또는 문제 정책 블록 재실행 결과를 확인한다.

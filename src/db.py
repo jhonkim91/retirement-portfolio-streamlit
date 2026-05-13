@@ -2887,6 +2887,13 @@ def clear_data_cache() -> None:
         getattr(cache_function, "clear", lambda: None)()
 
 
+def _invalidate_data_cache_after_write() -> None:
+    """쓰기 성공 후 세션 토큰과 Streamlit DB 조회 캐시를 함께 무효화한다."""
+
+    mark_data_dirty()
+    clear_data_cache()
+
+
 def _sqlite_record_trade(
     account_id: int,
     *,
@@ -3699,14 +3706,13 @@ def _delete_trade_log_original(account_id: int, log_id: int) -> None:
         supabase_call=lambda: _supabase_delete_trade_log(account_id, log_id),
         sqlite_call=lambda: _sqlite_delete_trade_log(account_id, log_id),
     )
-    mark_data_dirty()
 
 
 def delete_trade_log(*args: Any, **kwargs: Any) -> None:
     """거래기록 삭제 후 데이터 캐시를 무효화한다."""
 
     result = _delete_trade_log_original(*args, **kwargs)
-    mark_data_dirty()
+    _invalidate_data_cache_after_write()
     return result
 
 

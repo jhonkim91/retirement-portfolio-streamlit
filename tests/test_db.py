@@ -248,6 +248,45 @@ class DataCacheTests(unittest.TestCase):
         self.assertEqual(fourth, first)
         self.assertEqual(list_accounts_mock.call_count, 3)
 
+    def test_delete_trade_log_clears_data_cache_after_success(self) -> None:
+        """거래 삭제 성공 후 세션 토큰과 DB 조회 캐시를 즉시 무효화한다."""
+
+        call_order = unittest.mock.Mock()
+        with (
+            patch("src.db._delete_trade_log_original", return_value="deleted") as delete_original_mock,
+            patch("src.db.mark_data_dirty") as mark_data_dirty_mock,
+            patch("src.db.clear_data_cache") as clear_data_cache_mock,
+        ):
+            call_order.attach_mock(delete_original_mock, "delete_original")
+            call_order.attach_mock(mark_data_dirty_mock, "mark_dirty")
+            call_order.attach_mock(clear_data_cache_mock, "clear_cache")
+
+            result = db_module.delete_trade_log(7, 9)
+
+        self.assertEqual(result, "deleted")
+        self.assertEqual(
+            call_order.mock_calls,
+            [
+                unittest.mock.call.delete_original(7, 9),
+                unittest.mock.call.mark_dirty(),
+                unittest.mock.call.clear_cache(),
+            ],
+        )
+
+    def test_delete_trade_log_keeps_cache_when_delete_fails(self) -> None:
+        """거래 삭제 실패 시 성공 후처리 캐시 무효화를 실행하지 않는다."""
+
+        with (
+            patch("src.db._delete_trade_log_original", side_effect=ValueError("삭제 실패")),
+            patch("src.db.mark_data_dirty") as mark_data_dirty_mock,
+            patch("src.db.clear_data_cache") as clear_data_cache_mock,
+        ):
+            with self.assertRaisesRegex(ValueError, "삭제 실패"):
+                db_module.delete_trade_log(7, 9)
+
+        mark_data_dirty_mock.assert_not_called()
+        clear_data_cache_mock.assert_not_called()
+
 
 class RealtimeWorkerStatusPersistenceTests(unittest.TestCase):
     """실시간 worker 상태의 마지막 quote 시각 보존을 검증한다."""

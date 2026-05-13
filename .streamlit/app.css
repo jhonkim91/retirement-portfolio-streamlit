@@ -1066,18 +1066,24 @@ h6 {
     align-items: stretch;
 }
 
+.st-key-dashboard-summary-strip [data-testid="stHorizontalBlock"] > div {
+    display: flex;
+    flex-direction: column;
+    min-height: var(--dashboard-summary-card-height);
+}
+
+.st-key-dashboard-summary-strip [data-testid="stHorizontalBlock"] > div > div {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+}
+
+.st-key-dashboard-summary-strip [data-testid="stHorizontalBlock"] > div > div > div {
+    flex: 1 1 auto;
+}
+
 .st-key-dashboard-secondary-grid [data-testid="column"] > div {
     height: 100%;
-}
-
-.st-key-dashboard-summary-strip [data-testid="stVerticalBlockBorderWrapper"] {
-    min-height: var(--dashboard-summary-card-height);
-    height: 100%;
-}
-
-.st-key-dashboard-summary-strip [data-testid="stVerticalBlockBorderWrapper"] > div,
-.st-key-dashboard-summary-strip [data-testid="stVerticalBlockBorderWrapper"] > div > [data-testid="stVerticalBlock"] {
-    min-height: 100%;
 }
 
 .st-key-dashboard-card-principal,
@@ -1090,32 +1096,6 @@ h6 {
 .st-key-dashboard-panel-holdings-table {
     background: #ffffff;
     height: 100%;
-}
-
-.st-key-dashboard-card-principal,
-.st-key-dashboard-card-cash,
-.st-key-dashboard-card-total-value,
-.st-key-dashboard-card-profit,
-.st-key-dashboard-card-profit-rate {
-    min-height: var(--dashboard-summary-card-height);
-}
-
-.st-key-dashboard-card-principal [data-testid="stVerticalBlockBorderWrapper"],
-.st-key-dashboard-card-cash [data-testid="stVerticalBlockBorderWrapper"],
-.st-key-dashboard-card-total-value [data-testid="stVerticalBlockBorderWrapper"],
-.st-key-dashboard-card-profit [data-testid="stVerticalBlockBorderWrapper"],
-.st-key-dashboard-card-profit-rate [data-testid="stVerticalBlockBorderWrapper"] {
-    min-height: var(--dashboard-summary-card-height);
-    height: 100%;
-    display: flex;
-}
-
-.st-key-dashboard-card-principal [data-testid="stVerticalBlock"],
-.st-key-dashboard-card-cash [data-testid="stVerticalBlock"],
-.st-key-dashboard-card-total-value [data-testid="stVerticalBlock"],
-.st-key-dashboard-card-profit [data-testid="stVerticalBlock"],
-.st-key-dashboard-card-profit-rate [data-testid="stVerticalBlock"] {
-    min-height: 100%;
 }
 
 .st-key-dashboard-panel-selected-trend,
@@ -1301,7 +1281,12 @@ h6 {
     gap: 0.24rem;
 }
 
+.st-key-dashboard-trend-controls [data-testid="column"] {
+    min-width: 0 !important;
+}
+
 .st-key-dashboard-trend-controls [data-baseweb="select"] > div {
+    min-width: 0;
     min-height: 2rem;
     border-radius: 0.58rem;
 }
