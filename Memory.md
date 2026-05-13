@@ -165,6 +165,7 @@ streamlit run app.py
 - 운영 Supabase의 `realtime_worker_status`에서 계좌 `24`, `25`, `26`의 `last_quote_at`를 최신 tick 시각(`2026-05-12T15:59:50`, `2026-05-12T15:59:58`, `2026-05-12T15:48:44`)으로 1회 복구함
 - 수정된 로컬 코드로 `SupabaseAdminClient.update_account_status()`를 실제 운영 계좌 `24`에 다시 호출해도 `last_quote_at=2026-05-12T15:59:50`가 유지됨을 확인함
 - 원격 `데이터` 페이지 검증에서 `KIS WebSocket worker=stopped`, `last_seen_at=2026-05-13T00:43:36`, `마지막 quote 반영=2026-05-12T15:59:50 / 2026-05-12T15:59:50` 노출을 확인함
+- 코드 fix 커밋 `aab9d67`(`Preserve realtime worker last quote timestamps`)를 `origin/main`에 푸시했고, 푸시 후 원격 `데이터` 페이지 재검증도 통과함
 
 ## 최신 검증 결과
 - `python3 -m compileall app.py src scripts tests` 성공
@@ -211,6 +212,10 @@ streamlit run app.py
   - `./.venv/bin/python scripts/verify_streamlit_deployment.py --page data --expect-backend supabase --debug-dir artifacts/deploy-verify-data-worker-status-20260513 --storage-state artifacts/streamlit-storage-state.json --wait-ms 12000` 성공
   - 원격 데이터 페이지 텍스트에서 `KIS WebSocket worker=stopped`, `마지막 quote 반영=2026-05-12T15:59:50 / 2026-05-12T15:59:50` 확인
   - 산출물: `artifacts/deploy-verify-data-worker-status-20260513/*`, `artifacts/deploy-verify-data-worker-status-20260513-summary.json`
+  - 커밋 `aab9d67`를 `origin/main`에 푸시 완료
+  - 푸시 후 `./.venv/bin/python scripts/verify_streamlit_deployment.py --page data --expect-backend supabase --debug-dir artifacts/deploy-verify-data-after-push-aab9d67 --storage-state artifacts/streamlit-storage-state.json --wait-ms 12000` 성공
+  - 푸시 후 원격 데이터 페이지에서도 `마지막 quote 반영=2026-05-12T15:59:50 / 2026-05-12T15:59:50` 유지 확인
+  - 산출물: `artifacts/deploy-verify-data-after-push-aab9d67/*`, `artifacts/deploy-verify-data-after-push-aab9d67-summary.json`
 - 이번 턴 배포 검증 스크립트 추가 검증:
   - `python3 -m unittest tests.test_verify_streamlit_deployment` 성공 (`7`건)
   - `python3 -m unittest discover -s tests -p "test_*.py"` 재실행 성공 (`81`건)
