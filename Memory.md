@@ -31,6 +31,12 @@
 - [x] DESIGN-03 자산 배분 트리맵 경계선/여백 정렬
 - [x] DESIGN-04 데이터 페이지 보유종목/거래기록 테이블 테마 통일
 - [x] DESIGN-05 현금흐름 거래유형 배지 스타일 보강
+- [x] DESIGN-07 모바일 거래 페이지 2열 입력 영역 overflow 보강
+- [x] 실시간 worker/quote 상태 영역 `st.fragment(run_every="10s")` 분리
+- [x] `realtime_price_ticks` 보존/집계 정책 스크립트와 bar 테이블 추가
+- [x] CSS radius/shadow 디자인 토큰 교체
+- [x] DESIGN-02 KPI 카드 시각적 위계 보강
+- [x] DESIGN-04 KPI 카드 반응형 grid 보강
 - [ ] KIS WebSocket worker 장시간 실행 중 재연결/상태 복구를 장중 운영 로그 기준으로 추가 점검
 - [ ] 모바일 viewport에서 대시보드 트리맵/보유 종목 표/거래 입력 폼 가독성 확인
 - [ ] 스냅샷 저장, CSV export, 운영 정리 작업의 로딩 상태 표시 누락 여부 점검
@@ -62,6 +68,7 @@
 - `src/market.py`: KIS/Naver/yfinance 시세 조회와 캐시
 - `scripts/run_daily_rollup.py`: 일별 롤업 배치
 - `scripts/run_kis_quote_worker.py`: KIS realtime quote worker
+- `scripts/run_realtime_tick_retention.py`: realtime tick 1분/5분/일봉 집계와 raw tick 보존 정책 실행
 - `scripts/verify_streamlit_deployment.py`: Streamlit Cloud 운영 검증
 - `setup_supabase.sql`: Supabase schema/RLS 정책 기준 스크립트
 - `.github/workflows/kis-realtime-worker.yml`: 장중 worker 자동 실행
@@ -124,35 +131,21 @@ python scripts/verify_streamlit_deployment.py --page data --expect-backend supab
   - `python3 -m unittest discover -s tests -p "test_*.py"` 성공
   - `python -m compileall app.py src scripts tests pages` 성공
   - `python scripts/run_kis_quote_worker.py --backend sqlite --preflight-only` 성공
-  - BUG-03 패치 검증: `python -m compileall src/db.py tests/test_db.py` 성공
-  - BUG-03 패치 검증: `python -m unittest tests.test_db.DataCacheTests` 성공
-  - BUG-03 패치 검증: `python -m compileall app.py src scripts tests pages` 성공
-  - BUG-03 패치 검증: `python -m unittest discover -s tests -p "test_*.py"` 성공, 142 tests
-  - DESIGN-01 패치 검증: `python -m compileall src/ui/app_core.py tests/test_app_dashboard.py` 성공
-  - DESIGN-01 패치 검증: `python -m unittest tests.test_app_dashboard.ThemeStylesheetTests` 성공
-  - DESIGN-01 패치 검증: `python -m compileall app.py src scripts tests pages` 성공
-  - DESIGN-01 패치 검증: `python -m unittest discover -s tests -p "test_*.py"` 성공, 144 tests
-  - DESIGN-02 패치 검증: `python -m compileall src/ui/app_core.py tests/test_app_dashboard.py` 성공
-  - DESIGN-02 패치 검증: `python -m unittest tests.test_app_dashboard.ThemeStylesheetTests tests.test_app_dashboard.TradeFormResetTests.test_dashboard_selected_trend_period_options_exclude_today` 성공
-  - DESIGN-02 패치 검증: `python -m compileall app.py src scripts tests pages` 성공
-  - DESIGN-02 패치 검증: `python -m unittest discover -s tests -p "test_*.py"` 성공, 144 tests
-  - DESIGN-04 패치 검증: `python -m compileall src/ui/app_core.py tests/test_app_dashboard.py` 성공
-  - DESIGN-04 패치 검증: `python -m unittest tests.test_app_dashboard.HoldingsTableDisplayTests` 성공, 7 tests
-  - DESIGN-04 패치 검증: `python -m compileall app.py src scripts tests pages` 성공
-  - DESIGN-04 패치 검증: `python -m unittest discover -s tests -p "test_*.py"` 성공, 146 tests
-  - DESIGN-04 브라우저 검증: 로컬 Streamlit `http://127.0.0.1:8531` 데모 데이터 페이지에서 `.holdings-table-shell` 2개와 `table.holdings-table` 2개 확인
-  - DESIGN-03 패치 검증: `python -m compileall src/ui/app_core.py tests/test_app_dashboard.py` 성공
-  - DESIGN-03 패치 검증: `python -m unittest tests.test_app_dashboard.AllocationTreemapVisualMapTests` 성공
-  - DESIGN-03 패치 검증: `python -m compileall app.py src scripts tests pages` 성공
-  - DESIGN-03 패치 검증: `python -m unittest discover -s tests -p "test_*.py"` 성공, 143 tests
-  - DESIGN-05 패치 검증: `python -m compileall src/ui/app_core.py tests/test_app_dashboard.py` 성공
-  - DESIGN-05 패치 검증: `python -m unittest tests.test_app_dashboard` 성공, 47 tests
-  - DESIGN-05 패치 검증: `python -m compileall app.py src scripts tests pages` 성공
-  - DESIGN-05 패치 검증: `python -m unittest discover -s tests -p "test_*.py"` 성공, 144 tests
+  - DESIGN-07 브라우저 검증: 로컬 Streamlit `http://127.0.0.1:8532` 375px 거래 페이지에서 `.st-key-trade-form-cols`와 `bodyOverflows=false` 확인
+  - 실시간 상태 fragment 패치 검증: `python -m unittest tests.test_app_dashboard.RealtimeStatusFragmentTests tests.test_app_dashboard.DashboardAllocationStatusTests` 성공, 13 tests
+  - tick retention 패치 검증: `python -m unittest tests.test_realtime_tick_retention tests.test_setup_supabase_sql` 성공, 8 tests
+  - tick retention dry-run: `python scripts/run_realtime_tick_retention.py --backend sqlite --as-of 2026-05-13T00:00:00` 성공
+  - CSS radius/shadow 토큰 패치: `python -m unittest tests.test_app_dashboard.ThemeStylesheetTests` 성공, 5 tests
+  - DESIGN-02 KPI 카드 위계 패치: `python -m unittest tests.test_app_dashboard.ThemeStylesheetTests` 성공, 6 tests
+  - DESIGN-02 KPI 카드 브라우저 검증: 로컬 Streamlit `http://127.0.0.1:8533` 데모 대시보드에서 `.dashboard-summary-card=5`, `borderRadius=24px`, `beforeHeight=3px`, `bodyOverflows=false` 확인
+  - DESIGN-04 KPI 반응형 grid 패치: `python -m unittest tests.test_app_dashboard.ThemeStylesheetTests` 성공, 6 tests
+  - DESIGN-04 KPI 반응형 브라우저 검증: 로컬 Streamlit `http://127.0.0.1:8534` 데모 대시보드 1180/820/560px에서 `.dashboard-summary-card=5`, `bodyOverflows=false`, 560px `minHeight=0px`, header `column/flex-start` 확인
+  - 최신 전체 검증: `python -m compileall app.py src scripts tests pages` 성공
+  - 최신 전체 검증: `python -m unittest discover -s tests -p "test_*.py"` 성공, 155 tests
 - 대표 배포 검증 기록:
   - `python3 scripts/verify_streamlit_deployment.py --page data --expect-backend supabase --wait-ms 12000` 성공
   - Streamlit Cloud 대시보드/거래/데이터 페이지 검증 성공 기록 존재
-- 이번 BUG-03/DESIGN-01/DESIGN-02/DESIGN-03/DESIGN-04/DESIGN-05 패치는 로컬 코드/단위 테스트로 검증했으며 운영 배포 검증은 수행하지 않았다.
+- 이번 BUG-03/DESIGN-01/DESIGN-02/DESIGN-03/DESIGN-04/DESIGN-05/DESIGN-07/실시간 상태 fragment/tick retention/CSS token/KPI card/KPI responsive 패치는 로컬 코드/단위 테스트로 검증했으며 운영 배포 검증은 수행하지 않았다.
 
 ## 문서 분리 결과
 - 날짜별 상세 로그:
@@ -176,12 +169,18 @@ python scripts/verify_streamlit_deployment.py --page data --expect-backend supab
 - 이번 DESIGN-03 작업 변경 파일은 `src/ui/app_core.py`, `tests/test_app_dashboard.py`, `docs/VALIDATION.md`, `docs/CHANGELOG.md`, `Memory.md`다.
 - 이번 DESIGN-04 작업 변경 파일은 `src/ui/app_core.py`, `tests/test_app_dashboard.py`, `docs/VALIDATION.md`, `docs/CHANGELOG.md`, `Memory.md`다.
 - 이번 DESIGN-05 작업 변경 파일은 `src/ui/app_core.py`, `tests/test_app_dashboard.py`, `docs/VALIDATION.md`, `docs/CHANGELOG.md`, `Memory.md`다.
+- 이번 DESIGN-07 작업 변경 파일은 `src/ui/app_core.py`, `.streamlit/app.css`, `tests/test_app_dashboard.py`, `docs/VALIDATION.md`, `docs/CHANGELOG.md`, `Memory.md`다.
+- 이번 실시간 상태 fragment 작업 변경 파일은 `src/ui/app_core.py`, `tests/test_app_dashboard.py`, `docs/VALIDATION.md`, `docs/CHANGELOG.md`, `Memory.md`다.
+- 이번 tick retention 작업 변경 파일은 `setup_supabase.sql`, `src/sqlite_db.py`, `scripts/run_realtime_tick_retention.py`, `tests/test_realtime_tick_retention.py`, `tests/test_setup_supabase_sql.py`, `README.md`, `docs/realtime-tick-retention-runbook.md`, `docs/VALIDATION.md`, `docs/CHANGELOG.md`, `Memory.md`다.
+- 이번 CSS radius/shadow token 작업 변경 파일은 `.streamlit/app.css`, `tests/test_app_dashboard.py`, `docs/VALIDATION.md`, `docs/CHANGELOG.md`, `Memory.md`다.
+- 이번 DESIGN-02 KPI card 작업 변경 파일은 `.streamlit/app.css`, `src/ui/app_core.py`, `tests/test_app_dashboard.py`, `docs/VALIDATION.md`, `docs/CHANGELOG.md`, `Memory.md`다.
+- 이번 DESIGN-04 KPI responsive 작업 변경 파일은 `.streamlit/app.css`, `tests/test_app_dashboard.py`, `docs/VALIDATION.md`, `docs/CHANGELOG.md`, `Memory.md`다.
 - 커밋 시 이번 요청 관련 파일만 선별하고 `data/portfolio.db`, `.local/`, `artifacts/`, `.playtools*/`, `.playwright-browsers/`, `.vscode/`, `data/kis_cache/` 등은 제외한다.
-- DESIGN-04 요청에서 푸시까지 명시했으므로 이번 요청 관련 변경은 검증 후 커밋/푸시한다.
 
 ## 운영 runbook 요약
 - realtime schema hotfix: `docs/supabase-realtime-schema-hotfix.sql`
 - realtime worker runbook: `docs/supabase-realtime-worker-runbook.md`
+- realtime tick retention runbook: `docs/realtime-tick-retention-runbook.md`
 - Supabase hotfix runbook: `docs/supabase-hotfix-runbook.md`
 - worker 수동 실행:
 ```powershell

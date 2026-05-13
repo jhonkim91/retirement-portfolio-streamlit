@@ -7,6 +7,33 @@
 - 최신 검증 결과는 각 작업 완료 시 대표 명령만 갱신한다.
 
 ## 최신 대표 검증 결과
+- DESIGN-04 KPI 반응형 grid 패치: `python -m compileall src/ui/app_core.py tests/test_app_dashboard.py` 성공.
+- DESIGN-04 KPI 반응형 grid 패치: `python -m unittest tests.test_app_dashboard.ThemeStylesheetTests` 성공, 6 tests.
+- DESIGN-04 KPI 반응형 grid 패치: `python -m compileall app.py src scripts tests pages` 성공.
+- DESIGN-04 KPI 반응형 grid 패치: `python -m unittest discover -s tests -p "test_*.py"` 성공, 155 tests.
+- DESIGN-04 KPI 반응형 브라우저 검증: 로컬 Streamlit `http://127.0.0.1:8534` 데모 대시보드 1180/820/560px에서 `.dashboard-summary-card=5`, `bodyOverflows=false`, 560px `minHeight=0px`, header `column/flex-start` 확인.
+- DESIGN-02 KPI 카드 위계 패치: `python -m compileall src/ui/app_core.py tests/test_app_dashboard.py` 성공.
+- DESIGN-02 KPI 카드 위계 패치: `python -m unittest tests.test_app_dashboard.ThemeStylesheetTests` 성공, 6 tests.
+- DESIGN-02 KPI 카드 위계 패치: `python -m compileall app.py src scripts tests pages` 성공.
+- DESIGN-02 KPI 카드 위계 패치: `python -m unittest discover -s tests -p "test_*.py"` 성공, 155 tests.
+- DESIGN-02 KPI 카드 브라우저 검증: 로컬 Streamlit `http://127.0.0.1:8533` 데모 대시보드에서 `.dashboard-summary-card=5`, `borderRadius=24px`, `beforeHeight=3px`, `bodyOverflows=false` 확인.
+- CSS radius/shadow 토큰 패치: `python -m compileall app.py src scripts tests pages` 성공.
+- CSS radius/shadow 토큰 패치: `python -m unittest tests.test_app_dashboard.ThemeStylesheetTests` 성공, 5 tests.
+- CSS radius/shadow 토큰 패치: `python -m unittest discover -s tests -p "test_*.py"` 성공, 154 tests.
+- realtime tick retention 패치: `python -m compileall scripts/run_realtime_tick_retention.py src/sqlite_db.py tests/test_realtime_tick_retention.py tests/test_setup_supabase_sql.py` 성공.
+- realtime tick retention 패치: `python -m unittest tests.test_realtime_tick_retention tests.test_setup_supabase_sql` 성공, 8 tests.
+- realtime tick retention dry-run: `python scripts/run_realtime_tick_retention.py --backend sqlite --as-of 2026-05-13T00:00:00` 성공.
+- realtime tick retention 포함 전체 검증: `python -m compileall app.py src scripts tests pages` 성공.
+- realtime tick retention 포함 전체 검증: `python -m unittest discover -s tests -p "test_*.py"` 성공, 154 tests.
+- 실시간 상태 fragment 패치: `python -m compileall src/ui/app_core.py tests/test_app_dashboard.py` 성공.
+- 실시간 상태 fragment 패치: `python -m unittest tests.test_app_dashboard.RealtimeStatusFragmentTests tests.test_app_dashboard.DashboardAllocationStatusTests` 성공, 13 tests.
+- 실시간 상태 fragment 패치: `python -m compileall app.py src scripts tests pages` 성공.
+- 실시간 상태 fragment 패치: `python -m unittest discover -s tests -p "test_*.py"` 성공, 150 tests.
+- DESIGN-07 모바일 거래 페이지 overflow 패치: `python -m compileall src/ui/app_core.py tests/test_app_dashboard.py` 성공.
+- DESIGN-07 모바일 거래 페이지 overflow 패치: `python -m unittest tests.test_app_dashboard.ThemeStylesheetTests` 성공.
+- DESIGN-07 모바일 거래 페이지 overflow 패치: `python -m compileall app.py src scripts tests pages` 성공.
+- DESIGN-07 모바일 거래 페이지 overflow 패치: `python -m unittest discover -s tests -p "test_*.py"` 성공, 147 tests.
+- DESIGN-07 브라우저 검증: 로컬 Streamlit `http://127.0.0.1:8532` 375px 거래 페이지에서 `.st-key-trade-form-cols` 존재, form block `flex-direction=column`, `bodyOverflows=false` 확인.
 - DESIGN-04 데이터 페이지 테이블 테마 통일 패치: `python -m compileall src/ui/app_core.py tests/test_app_dashboard.py` 성공.
 - DESIGN-04 데이터 페이지 테이블 테마 통일 패치: `python -m unittest tests.test_app_dashboard.HoldingsTableDisplayTests` 성공, 7 tests.
 - DESIGN-04 데이터 페이지 테이블 테마 통일 패치: `python -m compileall app.py src scripts tests pages` 성공.
@@ -40,6 +67,32 @@
 - Streamlit Cloud 대시보드/거래/데이터 페이지 원격 검증 성공 기록 있음.
 
 ## 2026-05-13 검증 요약
+- DESIGN-04 KPI 카드 반응형 grid 보강 검증.
+  - `.dashboard-metric-strip` breakpoint를 `1180px=3열`, `820px=2열`, `560px=1열` 기준으로 추가.
+  - `820px` 이하 섹션 헤더 상태 영역 세로 정렬과 `560px` 이하 카드 min-height/padding/value font 보정을 스타일시트 테스트로 확인.
+  - 로컬 Streamlit 데모 대시보드 1180/820/560px에서 가로 overflow가 없고 560px 모바일 보정이 적용됨을 Playwright로 확인.
+- DESIGN-02 KPI 카드 시각적 위계 보강 검증.
+  - 대시보드 요약/metric 카드에 gradient surface, `--radius-xl`, `--shadow-card`, hover shadow, 상단 accent bar 적용.
+  - 렌더러가 카드 tone class와 delta class를 출력하는지 단위 테스트로 확인.
+  - 로컬 Streamlit 데모 대시보드 브라우저 검증에서 KPI 카드 스타일 적용과 가로 overflow 없음 확인.
+- CSS radius/shadow 디자인 토큰 교체 검증.
+  - `.streamlit/app.css` 상단 `:root`의 radius/shadow 토큰을 `--radius-*`, `--shadow-*` 구조로 정리.
+  - 기존 `--card-shadow` CSS 변수 정의와 참조를 제거하고 주요 카드/패널 shadow를 새 토큰으로 전환.
+  - 스타일시트 회귀 테스트와 전체 compileall/unittest discover 성공.
+- realtime tick 보존/집계 정책 검증.
+  - `setup_supabase.sql`에 `realtime_price_bars` 테이블, 인덱스, grant, RLS 정책 추가.
+  - SQLite fallback에 같은 bar 테이블을 추가하고 `scripts/run_realtime_tick_retention.py`로 7일 raw, 90일 1분/5분봉, 90일 초과 일봉 정책을 구현.
+  - 기본 실행은 dry-run이며 `--apply`를 명시한 경우에만 집계 저장과 raw tick 삭제를 수행.
+  - SQLite retention 단위 테스트, setup SQL 회귀 테스트, CLI dry-run, 전체 compileall/unittest discover 성공.
+- 실시간 worker/quote 상태 영역 fragment 갱신 검증.
+  - 대시보드 기준시각, 자산 배분 상태 칩, 데이터 페이지 KIS worker/마지막 quote metric을 `st.fragment(run_every="10s")`로 분리.
+  - 대시보드 전체 자동 rerun fragment는 제거하고 상태 표시 조각만 독립 갱신하도록 조정.
+  - fragment 적용 범위 회귀 테스트와 전체 compileall/unittest discover 성공.
+- DESIGN-07 모바일 거래 페이지 2열 입력 영역 overflow 보강 검증.
+  - 거래/현금흐름 상위 2열을 `trade-form-cols` key 컨테이너로 감싸 모바일 CSS 적용 범위를 명시.
+  - `max-width: 768px`에서 거래 입력 영역의 Streamlit horizontal block/column을 단일 컬럼으로 전환.
+  - 로컬 Streamlit 375px 모바일 뷰포트에서 거래 페이지 body overflow가 없음을 확인.
+  - 스타일시트 회귀 테스트와 전체 compileall/unittest discover 성공.
 - DESIGN-04 데이터 페이지 보유종목/거래기록 테이블 테마 통일 검증.
   - 데이터 페이지 export preview 중 `holdings`, `trade_logs`를 `.holdings-table` HTML 테이블로 렌더링.
   - `accounts`, `daily_account_snapshot`, 원금 누적 기록은 기존 `st.dataframe` 표시 유지.

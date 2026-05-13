@@ -694,6 +694,7 @@ DASHBOARD_HOLDINGS_CHART_HEIGHT = 360
 DASHBOARD_HOLDINGS_COMPARE_CHART_HEIGHT = 430
 DASHBOARD_DETAIL_CHART_HEIGHT = DASHBOARD_HOLDINGS_COMPARE_CHART_HEIGHT
 DASHBOARD_HOLDINGS_TABLE_HEIGHT = 380
+REALTIME_STATUS_FRAGMENT_INTERVAL = "10s"
 
 
 @dataclass(frozen=True)
@@ -1749,19 +1750,26 @@ def render_dashboard_metric_strip(cards: list[dict[str, str]]) -> None:
         note = str(card.get("note") or "").strip()
         action = str(card.get("action") or "").strip()
         tone = str(card.get("tone") or "").strip()
+        delta = str(card.get("delta") or "").strip()
+        valid_tone = tone in {"accent", "positive", "negative"}
+        card_class = "dashboard-metric-card"
+        if valid_tone:
+            card_class += f" dashboard-metric-card--{tone}"
         value_class = "dashboard-metric-card__value"
-        if tone in {"accent", "positive", "negative"}:
+        if valid_tone:
             value_class += f" dashboard-metric-card__value--{tone}"
+        delta_html = f'<div class="dashboard-metric-card__delta">{html.escape(delta)}</div>' if delta else ""
         note_html = f'<div class="dashboard-metric-card__note">{html.escape(note)}</div>' if note else ""
         action_html = f'<div class="dashboard-metric-card__action">{html.escape(action)}</div>' if action else ""
         card_html = (
-            '<div class="dashboard-metric-card">'
+            f'<div class="{card_class}">'
             '<div>'
             '<div class="dashboard-metric-card__top">'
             f'<div class="dashboard-metric-card__label">{label}</div>'
             f"{action_html}"
             "</div>"
             f'<div class="{value_class}">{value}</div>'
+            f"{delta_html}"
             "</div>"
             f"{note_html}"
             "</div>"
@@ -1770,15 +1778,27 @@ def render_dashboard_metric_strip(cards: list[dict[str, str]]) -> None:
             st.markdown(card_html, unsafe_allow_html=True)
 
 
-def render_dashboard_summary_card(label: str, value: str, *, tone: str = "", action: str = "", actionable: bool = False) -> None:
+def render_dashboard_summary_card(
+    label: str,
+    value: str,
+    *,
+    tone: str = "",
+    action: str = "",
+    actionable: bool = False,
+    delta: str = "",
+) -> None:
     """기본 요약 카드 본문을 렌더링한다."""
 
+    valid_tone = tone in {"accent", "positive", "negative"}
     value_class = "dashboard-summary-card__value"
-    if tone in {"accent", "positive", "negative"}:
+    if valid_tone:
         value_class += f" dashboard-summary-card__value--{tone}"
-    field_class = "dashboard-summary-card__field"
+    field_class = "dashboard-summary-card dashboard-summary-card__field"
+    if valid_tone:
+        field_class += f" dashboard-summary-card--{tone}"
     if actionable:
         field_class += " dashboard-summary-card__field--actionable"
+    delta_html = f'<div class="dashboard-summary-card__delta">{html.escape(delta)}</div>' if delta else ""
     action_caption = html.escape(action) if action else ""
     action_modifier = "" if action else " dashboard-summary-card__action--ghost"
     action_html = (
@@ -1792,6 +1812,7 @@ def render_dashboard_summary_card(label: str, value: str, *, tone: str = "", act
             f'<div class="{field_class}">'
             f"{action_html}"
             f'<div class="{value_class}">{html.escape(value)}</div>'
+            f"{delta_html}"
             "</div>"
         ),
         unsafe_allow_html=True,
@@ -1943,6 +1964,14 @@ def render_dashboard_reference_time(reference_time_text: str) -> None:
         ),
         unsafe_allow_html=True,
     )
+
+
+@st.fragment(run_every=REALTIME_STATUS_FRAGMENT_INTERVAL)
+def render_dashboard_reference_time_fragment(account_id: int) -> None:
+    """대시보드 기준시각만 주기적으로 갱신한다."""
+
+    reference_time_text = format_dashboard_reference_time(latest_realtime_quote_time(account_id))
+    render_dashboard_reference_time(reference_time_text)
 
 
 def normalize_holding_symbol(value: Any) -> str:
@@ -2137,6 +2166,30 @@ def dashboard_allocation_status(
     ):
         return ("실시간 반영 중", "live")
     return ("지연 데이터 표시 중", "stale")
+
+
+@st.fragment(run_every=REALTIME_STATUS_FRAGMENT_INTERVAL)
+def render_dashboard_allocation_status_header_fragment(
+    account_id: int,
+    holdings: list[dict[str, Any]],
+    *,
+    has_allocation_data: bool,
+    status_palette_colors: list[str] | None = None,
+) -> None:
+    """자산 배분 패널 헤더의 실시간 상태 칩만 주기적으로 갱신한다."""
+
+    allocation_status_text, allocation_status_tone = dashboard_allocation_status(
+        account_id,
+        holdings,
+        has_allocation_data=has_allocation_data,
+    )
+    render_dashboard_section_header(
+        "자산 배분",
+        "자산군에서 보유 종목까지 한 번에 보고, 종목을 누르면 아래에서 개별 트렌드를 바로 확인합니다.",
+        status_text=allocation_status_text,
+        status_tone=allocation_status_tone,
+        status_palette_colors=status_palette_colors,
+    )
 
 
 def interpolate_hex_color(start_hex: str, end_hex: str, ratio: float) -> str:
@@ -4268,7 +4321,6 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]], roll
     if str(st.session_state.get(trend_measure_key) or "").strip() not in DETAIL_MEASURE_LABELS:
         st.session_state[trend_measure_key] = DEFAULT_SELECTED_TREND_MEASURE
     overview_frame = holdings_overview_frame(holdings, selected_symbol=selected_symbol or None, limit=10)
-    reference_time_text = format_dashboard_reference_time(latest_realtime_quote_time(account_id))
 
     with st.container(key="dashboard-summary-strip"):
         summary_cols = st.columns(5, gap="small", vertical_alignment="top")
@@ -4291,7 +4343,7 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]], roll
             with st.container(border=True, key="dashboard-card-profit-rate"):
                 render_dashboard_summary_card("원금 대비 수익률", format_pct(display_principal_profit_rate), tone=profit_rate_tone)
 
-    render_dashboard_reference_time(reference_time_text)
+    render_dashboard_reference_time_fragment(account_id)
 
     if not echarts_available:
         st.warning(echarts_error or "현재 환경에서는 ECharts 모듈을 불러오지 못해 대시보드 차트를 표시할 수 없습니다.")
@@ -4302,16 +4354,10 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]], roll
             holdings,
             selected_symbol=selected_symbol or None,
         )
-        allocation_status_text, allocation_status_tone = dashboard_allocation_status(
+        render_dashboard_allocation_status_header_fragment(
             account_id,
             holdings,
             has_allocation_data=treemap_options is not None,
-        )
-        render_dashboard_section_header(
-            "자산 배분",
-            "자산군에서 보유 종목까지 한 번에 보고, 종목을 누르면 아래에서 개별 트렌드를 바로 확인합니다.",
-            status_text=allocation_status_text,
-            status_tone=allocation_status_tone,
             status_palette_colors=FEARGREED_TREEMAP_PALETTE if treemap_options is not None else None,
         )
         if treemap_options is None:
@@ -4493,7 +4539,8 @@ def trade_entry_page(account: dict[str, Any], holdings: list[dict[str, Any]], ac
     feedback_message = consume_session_message(st.session_state, TRADE_PAGE_SUCCESS_MESSAGE_KEY)
     if feedback_message:
         st.success(feedback_message)
-    trade_col, cash_flow_col = st.columns((1.45, 1.0), gap="large", vertical_alignment="top")
+    with st.container(key="trade-form-cols"):
+        trade_col, cash_flow_col = st.columns((1.45, 1.0), gap="large", vertical_alignment="top")
 
     with trade_col:
         with st.container(border=True):
@@ -4767,6 +4814,30 @@ def trade_entry_page(account: dict[str, Any], holdings: list[dict[str, Any]], ac
         st.info("아직 기록된 거래가 없습니다.")
 
 
+@st.fragment(run_every=REALTIME_STATUS_FRAGMENT_INTERVAL)
+def render_realtime_worker_status_panel(account_id: int, market_status: dict[str, Any]) -> None:
+    """데이터 페이지의 실시간 worker 상태와 마지막 quote 시각만 주기적으로 갱신한다."""
+
+    worker_status = get_realtime_worker_status(account_id) or {}
+    last_quote_at = latest_realtime_quote_time(account_id)
+    quote_col_1, quote_col_2, quote_col_3 = st.columns(3)
+    quote_col_1.metric(
+        "KIS REST",
+        "사용 가능" if market_status.get("kis_rest_enabled") else "미설정",
+        f"env={market_status.get('kis_env', '-')}",
+    )
+    quote_col_2.metric(
+        "KIS WebSocket worker",
+        str(worker_status.get("connection_state") or "미확인"),
+        str(worker_status.get("last_seen_at") or "-"),
+    )
+    quote_col_3.metric(
+        "마지막 quote 반영",
+        str(last_quote_at or "-"),
+        str(worker_status.get("last_quote_at") or "-"),
+    )
+
+
 def data_page(account: dict[str, Any], rollup_state: dict[str, Any] | None = None) -> None:
     st.title("데이터")
     st.caption("운영 상태 확인과 원본 데이터 CSV 내보내기를 한 곳에서 처리합니다.")
@@ -4775,11 +4846,9 @@ def data_page(account: dict[str, Any], rollup_state: dict[str, Any] | None = Non
     status = backend_status()
     market_status = quote_provider_status() or {}
     holdings = list_holdings(account_id)
-    worker_status = get_realtime_worker_status(account_id) or {}
     trade_logs = list_trade_logs(account_id)
     visible_trade_logs = [row for row in trade_logs if is_visible_trade_log(row)]
     snapshot_rows = list_account_snapshots(account_id)
-    last_quote_at = latest_realtime_quote_time(account_id)
     snapshot_date = str((rollup_state or {}).get("snapshot_date") or date.today().isoformat()).strip()
     summary = account_summary(account, holdings, trade_logs=trade_logs)
     cumulative_frame = cumulative_contribution_frame(
@@ -4800,22 +4869,7 @@ def data_page(account: dict[str, Any], rollup_state: dict[str, Any] | None = Non
         status_col_2.metric("거래 기록", f"{len(visible_trade_logs):,}건", latest_date_text(visible_trade_logs, "trade_date"))
         status_col_3.metric("현재 보유현금", format_won(summary["cash"]))
         status_col_4.metric("자산 스냅샷", f"{len(snapshot_rows):,}건", latest_date_text(snapshot_rows, "snapshot_date"))
-        quote_col_1, quote_col_2, quote_col_3 = st.columns(3)
-        quote_col_1.metric(
-            "KIS REST",
-            "사용 가능" if market_status.get("kis_rest_enabled") else "미설정",
-            f"env={market_status.get('kis_env', '-')}",
-        )
-        quote_col_2.metric(
-            "KIS WebSocket worker",
-            str(worker_status.get("connection_state") or "미확인"),
-            str(worker_status.get("last_seen_at") or "-"),
-        )
-        quote_col_3.metric(
-            "마지막 quote 반영",
-            str(last_quote_at or "-"),
-            str(worker_status.get("last_quote_at") or "-"),
-        )
+        render_realtime_worker_status_panel(account_id, market_status)
         if status.get("override", "auto") != "auto":
             st.caption(f"백엔드 강제 설정: `{status['override']}`")
         st.caption(f"Supabase 설정 감지: `{'예' if status.get('has_supabase_config') else '아니오'}`")
@@ -4993,18 +5047,7 @@ def render_navigation_page(page_name: str) -> None:
         return
 
     if page_name == "Dashboard":
-        account_id = int(account["id"])
-        live_refresh_interval = dashboard_live_refresh_interval(account_id, holdings)
-        if live_refresh_interval and hasattr(st, "fragment"):
-            @st.fragment(run_every=live_refresh_interval)
-            def render_dashboard_fragment() -> None:
-                refreshed_account = get_account(account_id) or account
-                refreshed_holdings = list_holdings(account_id)
-                dashboard_page(refreshed_account, refreshed_holdings, rollup_state)
-
-            render_dashboard_fragment()
-        else:
-            dashboard_page(account, holdings, rollup_state)
+        dashboard_page(account, holdings, rollup_state)
     elif page_name == "Trades":
         trade_entry_page(account, holdings, accounts)
     else:

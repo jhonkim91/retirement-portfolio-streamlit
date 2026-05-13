@@ -9,6 +9,30 @@
 ## 최근 완료 변경 요약
 
 ### 2026-05-13
+- DESIGN-04 KPI 카드 반응형 grid 보강.
+  - `.dashboard-metric-strip`를 `1180px` 이하 3열, `820px` 이하 2열, `560px` 이하 1열로 전환.
+  - 좁은 화면에서 대시보드 섹션 헤더 상태 영역을 세로 정렬하고, 모바일 카드 높이와 본문 좌우 padding을 보정.
+  - 로컬 단위 테스트와 Streamlit 데모 대시보드 1180/820/560px 브라우저 검증 완료.
+- DESIGN-02 KPI 카드 시각적 위계 보강.
+  - 대시보드 요약/metric 카드에 gradient surface, `--radius-xl`, `--shadow-card`, hover shadow, 상단 accent bar를 적용.
+  - 카드 렌더러가 `dashboard-*-card--positive/negative/accent`와 `dashboard-*-card__delta`를 출력할 수 있도록 확장.
+  - 수익률/손익 상태별 delta chip 색상 CSS를 분리하고 데모 대시보드 브라우저 검증 완료.
+- CSS radius/shadow 디자인 토큰 교체.
+  - `.streamlit/app.css` 상단 `:root`에 `--radius-*`, `--shadow-*` 토큰을 추가하고 `--panel-radius`를 `--radius-lg` 기준으로 변경.
+  - 기존 `--card-shadow` CSS 변수 의존을 제거하고 공통 카드/패널 shadow를 `--shadow-soft`/`--shadow-card`로 전환.
+  - 대시보드 요약 카드 기준 높이를 `128px`로 조정하고 스타일시트 회귀 테스트 갱신.
+- realtime tick 보존/집계 정책 추가.
+  - `realtime_price_bars` 스키마와 RLS 정책을 추가해 raw tick을 1분/5분/일봉으로 집계할 수 있게 함.
+  - `scripts/run_realtime_tick_retention.py` 추가: 기본 dry-run, `--apply` 명시 시에만 집계 저장과 raw tick 삭제 수행.
+  - SQLite/Supabase 공통 retention runbook과 회귀 테스트 추가.
+- 실시간 worker/quote 상태 영역 fragment 갱신 보강.
+  - 대시보드 기준시각, 자산 배분 상태 칩, 데이터 페이지 worker/마지막 quote metric을 `st.fragment(run_every="10s")`로 분리.
+  - 대시보드 전체 자동 rerun fragment는 제거하고 상태 표시 조각만 독립 갱신하도록 범위 축소.
+  - fragment 적용 범위 회귀 테스트와 전체 unittest discover 검증 완료.
+- DESIGN-07 모바일 거래 페이지 2열 입력 영역 overflow 보강.
+  - 거래/현금흐름 상위 2열을 `trade-form-cols` key 컨테이너로 감싸 CSS 적용 범위를 고정.
+  - `max-width: 768px`에서 거래 입력 영역의 Streamlit horizontal block/column을 단일 컬럼으로 전환.
+  - 스타일시트 회귀 테스트, 전체 unittest discover, 375px 로컬 브라우저 검증 완료.
 - DESIGN-04 데이터 페이지 보유종목/거래기록 테이블 테마 통일.
   - `holdings`, `trade_logs` export preview를 `.holdings-table` HTML 테이블로 렌더링.
   - `accounts`, `daily_account_snapshot`, 원금 누적 기록은 기존 `st.dataframe` 표시 유지.

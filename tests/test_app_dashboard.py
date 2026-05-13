@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import importlib.util
 from pathlib import Path
 import sys
@@ -63,8 +64,27 @@ class ThemeStylesheetTests(unittest.TestCase):
         self.assertIn(".holdings-table-shell", stylesheet)
         self.assertIn(".st-key-dashboard-panel-allocation", stylesheet)
         self.assertIn(".st-key-dashboard-panel-holdings-table", stylesheet)
-        self.assertIn("--dashboard-summary-card-height: 120px;", stylesheet)
+        self.assertIn("--radius-lg: 18px;", stylesheet)
+        self.assertIn("--shadow-card: 0 14px 38px rgba(15, 23, 42, 0.08);", stylesheet)
+        self.assertIn("--panel-radius: var(--radius-lg);", stylesheet)
+        self.assertIn("--dashboard-summary-card-height: 128px;", stylesheet)
         self.assertIn("--dashboard-secondary-panel-min-height: 560px;", stylesheet)
+        self.assertNotIn("--card-shadow:", stylesheet)
+        self.assertIn(".dashboard-summary-card,\n.dashboard-metric-card", stylesheet)
+        self.assertIn("border-radius: var(--radius-xl);", stylesheet)
+        self.assertIn("box-shadow: var(--shadow-card);", stylesheet)
+        self.assertIn(".dashboard-summary-card::before,\n.dashboard-metric-card::before", stylesheet)
+        self.assertIn("box-shadow: var(--shadow-hover);", stylesheet)
+        self.assertIn(".dashboard-summary-card--positive .dashboard-summary-card__delta", stylesheet)
+        self.assertIn(".dashboard-summary-card--negative .dashboard-summary-card__delta", stylesheet)
+        self.assertIn(".dashboard-summary-card--accent .dashboard-summary-card__delta", stylesheet)
+        self.assertIn('@media (max-width: 1180px) {\n    .dashboard-metric-strip {\n        grid-template-columns: repeat(3, minmax(0, 1fr));', stylesheet)
+        self.assertIn('@media (max-width: 820px) {\n    .dashboard-metric-strip {\n        grid-template-columns: repeat(2, minmax(0, 1fr));', stylesheet)
+        self.assertIn(".dashboard-section-header__top {\n        align-items: flex-start;\n        flex-direction: column;", stylesheet)
+        self.assertIn(".dashboard-section-header__status-group {\n        justify-content: flex-start;", stylesheet)
+        self.assertIn(".dashboard-summary-card,\n    .dashboard-metric-card {\n        min-height: auto;", stylesheet)
+        self.assertIn(".dashboard-summary-card__value,\n    .dashboard-metric-card__value,\n    .st-key-dashboard-summary-strip .dashboard-summary-card__value {\n        font-size: 1.65rem;", stylesheet)
+        self.assertIn(".block-container {\n        padding-left: 0.9rem;\n        padding-right: 0.9rem;", stylesheet)
         self.assertIn(".st-key-dashboard-card-principal,\n.st-key-dashboard-card-cash", stylesheet)
         self.assertIn(".st-key-dashboard-panel-selected-trend,\n.st-key-dashboard-panel-holdings {\n    min-height", stylesheet)
         self.assertIn(".st-key-dashboard-summary-strip .dashboard-summary-card__value", stylesheet)
@@ -76,6 +96,8 @@ class ThemeStylesheetTests(unittest.TestCase):
         self.assertIn('.st-key-dashboard-panel-selected-trend [data-testid="stVerticalBlockBorderWrapper"]', stylesheet)
         self.assertIn('.st-key-dashboard-trend-controls [data-testid="column"] {\n    min-width: 0 !important;', stylesheet)
         self.assertIn('.st-key-dashboard-trend-controls [data-baseweb="select"] > div {\n    min-width: 0;', stylesheet)
+        self.assertIn('@media (max-width: 768px) {\n    .st-key-trade-form-cols [data-testid="stHorizontalBlock"]', stylesheet)
+        self.assertIn('.st-key-trade-form-cols [data-testid="stHorizontalBlock"] > div,\n    .st-key-trade-form-cols [data-testid="column"] {\n        width: 100% !important;', stylesheet)
         self.assertIn(".st-key-trade-log-inline-editor-shell", stylesheet)
         self.assertNotIn("${theme_primary_color}", stylesheet)
 
@@ -88,6 +110,13 @@ class ThemeStylesheetTests(unittest.TestCase):
         self.assertNotIn("Pretendard", stylesheet)
         self.assertIn('font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI"', stylesheet)
 
+    def test_trade_page_wraps_form_columns_for_mobile_styles(self) -> None:
+        """거래 페이지 상단 2열 입력 영역은 모바일 CSS 적용용 key 컨테이너로 감싼다."""
+
+        source = inspect.getsource(dashboard_app.trade_entry_page)
+
+        self.assertIn('st.container(key="trade-form-cols")', source)
+
     def test_dashboard_secondary_panel_chart_heights_match(self) -> None:
         """선택 종목 트렌드와 보유 종목 수익률 차트 높이는 같은 값을 사용한다."""
 
@@ -95,6 +124,46 @@ class ThemeStylesheetTests(unittest.TestCase):
             dashboard_app.DASHBOARD_DETAIL_CHART_HEIGHT,
             dashboard_app.DASHBOARD_HOLDINGS_COMPARE_CHART_HEIGHT,
         )
+
+    def test_dashboard_card_renderers_add_tone_and_delta_classes(self) -> None:
+        """KPI 카드 렌더러는 카드/tone/delta 클래스를 HTML에 포함한다."""
+
+        class FakeColumn:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, traceback) -> bool:
+                return False
+
+        class FakeStreamlit:
+            def __init__(self) -> None:
+                self.markdowns: list[str] = []
+
+            def markdown(self, body: str, **kwargs) -> None:
+                self.markdowns.append(body)
+
+            def columns(self, count: int, **kwargs) -> list[FakeColumn]:
+                return [FakeColumn() for _ in range(count)]
+
+        original_st = dashboard_app.st
+        fake_st = FakeStreamlit()
+        dashboard_app.st = fake_st
+        try:
+            dashboard_app.render_dashboard_summary_card("원금 대비 수익률", "+1.20%", tone="positive", delta="+120")
+            dashboard_app.render_dashboard_metric_strip(
+                [{"label": "평가손익", "value": "-10,000", "tone": "negative", "delta": "-10,000"}]
+            )
+        finally:
+            dashboard_app.st = original_st
+
+        summary_html = fake_st.markdowns[0]
+        metric_html = fake_st.markdowns[1]
+        self.assertIn("dashboard-summary-card dashboard-summary-card__field dashboard-summary-card--positive", summary_html)
+        self.assertIn("dashboard-summary-card__value dashboard-summary-card__value--positive", summary_html)
+        self.assertIn('dashboard-summary-card__delta">+120', summary_html)
+        self.assertIn('dashboard-metric-card dashboard-metric-card--negative', metric_html)
+        self.assertIn("dashboard-metric-card__value dashboard-metric-card__value--negative", metric_html)
+        self.assertIn('dashboard-metric-card__delta">-10,000', metric_html)
 
 
 class TradeFormResetTests(unittest.TestCase):
@@ -1035,6 +1104,42 @@ class DashboardAllocationStatusTests(unittest.TestCase):
             dashboard_app.get_realtime_worker_status = original_status
 
         self.assertIsNone(result)
+
+
+class RealtimeStatusFragmentTests(unittest.TestCase):
+    """실시간 상태 영역의 fragment 적용 범위를 검증한다."""
+
+    def test_realtime_status_fragments_use_fixed_poll_interval(self) -> None:
+        """실시간 상태 조각은 10초 주기로 독립 갱신한다."""
+
+        self.assertEqual(dashboard_app.REALTIME_STATUS_FRAGMENT_INTERVAL, "10s")
+        fragment_functions = (
+            dashboard_app.render_dashboard_reference_time_fragment,
+            dashboard_app.render_dashboard_allocation_status_header_fragment,
+            dashboard_app.render_realtime_worker_status_panel,
+        )
+
+        for fragment_function in fragment_functions:
+            source = inspect.getsource(fragment_function)
+            self.assertIn("@st.fragment(run_every=REALTIME_STATUS_FRAGMENT_INTERVAL)", source)
+
+    def test_dashboard_uses_status_fragments_without_page_fragment(self) -> None:
+        """대시보드 전체가 아니라 상태 표시 영역만 fragment로 갱신한다."""
+
+        navigation_source = inspect.getsource(dashboard_app.render_navigation_page)
+        dashboard_source = inspect.getsource(dashboard_app.dashboard_page)
+
+        self.assertNotIn("render_dashboard_fragment", navigation_source)
+        self.assertIn("render_dashboard_reference_time_fragment(account_id)", dashboard_source)
+        self.assertIn("render_dashboard_allocation_status_header_fragment(", dashboard_source)
+
+    def test_data_page_worker_status_uses_fragment(self) -> None:
+        """데이터 페이지 worker 상태 metric은 별도 fragment 함수로 분리한다."""
+
+        source = inspect.getsource(dashboard_app.data_page)
+
+        self.assertIn("render_realtime_worker_status_panel(account_id, market_status)", source)
+        self.assertNotIn("worker_status = get_realtime_worker_status(account_id)", source)
 
 
 class SelectedHoldingTrendFrameTests(unittest.TestCase):
