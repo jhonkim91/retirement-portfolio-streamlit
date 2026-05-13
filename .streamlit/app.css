@@ -1260,6 +1260,42 @@ h6 {
     box-shadow: none;
 }
 
+.st-key-dashboard-summary-primary {
+    margin-bottom: 0.85rem;
+}
+
+.st-key-dashboard-summary-secondary {
+    max-width: min(100%, 760px);
+}
+
+.st-key-dashboard-summary-primary [data-testid="stHorizontalBlock"],
+.st-key-dashboard-summary-secondary [data-testid="stHorizontalBlock"] {
+    align-items: stretch;
+}
+
+.st-key-dashboard-summary-primary [data-testid="column"] > div,
+.st-key-dashboard-summary-secondary [data-testid="column"] > div {
+    height: 100%;
+}
+
+.st-key-dashboard-card-total-value .dashboard-summary-card {
+    min-height: calc(var(--dashboard-summary-card-height) + 20px);
+}
+
+.st-key-dashboard-card-total-value .dashboard-summary-card__value {
+    font-size: clamp(1.45rem, 2.1vw, 1.95rem);
+}
+
+.st-key-dashboard-card-profit .dashboard-summary-card,
+.st-key-dashboard-card-profit-rate .dashboard-summary-card {
+    background:
+        linear-gradient(
+            180deg,
+            color-mix(in srgb, var(--surface-strong) 98%, transparent),
+            color-mix(in srgb, var(--brand-soft) 34%, var(--surface-strong))
+        );
+}
+
 .st-key-dashboard-secondary-grid [data-testid="column"] > div {
     height: 100%;
 }
@@ -1726,6 +1762,164 @@ h6 {
     font-weight: 800;
 }
 
+.st-key-trade-realized-summary [data-testid="stVerticalBlockBorderWrapper"],
+.st-key-trade-log-filter-panel [data-testid="stVerticalBlockBorderWrapper"],
+.st-key-trade-log-table [data-testid="stVerticalBlockBorderWrapper"] {
+    background:
+        linear-gradient(
+            180deg,
+            color-mix(in srgb, var(--surface-strong) 98%, transparent),
+            color-mix(in srgb, var(--surface) 94%, var(--theme-secondary-bg))
+        );
+    border: 1px solid var(--line-soft);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-soft);
+}
+
+.st-key-trade-realized-period-filter {
+    margin: -0.35rem 0 0.6rem;
+}
+
+.st-key-trade-realized-summary .dashboard-metric-strip {
+    margin: 0.2rem 0 1rem;
+}
+
+.st-key-trade-realized-summary .dashboard-metric-card {
+    min-height: 7.1rem;
+    padding: 0.92rem 1rem;
+}
+
+.st-key-trade-realized-summary .dashboard-metric-card__value {
+    font-size: 1.2rem;
+    margin-top: 0.75rem;
+}
+
+.realized-contribution {
+    display: grid;
+    gap: 0.62rem;
+    padding: 0.85rem 0.92rem;
+    border: 1px solid var(--line-soft);
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--surface-strong) 96%, transparent);
+}
+
+.realized-contribution__title {
+    color: var(--mid-text);
+    font-size: 0.78rem;
+    font-weight: 800;
+}
+
+.realized-contribution__row {
+    display: grid;
+    grid-template-columns: minmax(6.5rem, 1.2fr) minmax(5rem, 1fr) minmax(5.6rem, auto) minmax(4.2rem, auto);
+    align-items: center;
+    gap: 0.55rem;
+}
+
+.realized-contribution__name {
+    color: var(--brand-deep);
+    font-size: 0.84rem;
+    font-weight: 800;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.realized-contribution__bar-track {
+    height: 0.5rem;
+    overflow: hidden;
+    border-radius: 999px;
+    background: var(--line-soft);
+}
+
+.realized-contribution__bar {
+    height: 100%;
+    border-radius: 999px;
+}
+
+.realized-contribution__bar--positive {
+    background: var(--chart-up);
+}
+
+.realized-contribution__bar--negative {
+    background: var(--chart-down);
+}
+
+.realized-contribution__value,
+.realized-contribution__rate {
+    font-size: 0.78rem;
+    font-weight: 800;
+    text-align: right;
+    white-space: nowrap;
+}
+
+.realized-contribution__value--positive,
+.trade-log-profit-rate--positive,
+.trade-log-result-summary__buy {
+    color: var(--chart-up);
+}
+
+.realized-contribution__value--negative,
+.trade-log-profit-rate--negative,
+.trade-log-result-summary__sell {
+    color: var(--chart-down);
+}
+
+.trade-log-profit-rate--neutral,
+.trade-log-profit-rate--empty {
+    color: var(--text-muted);
+}
+
+.trade-log-profit-rate {
+    display: inline-flex;
+    align-items: center;
+    min-height: 1.8rem;
+    font-weight: 800;
+    white-space: nowrap;
+}
+
+.st-key-trade-log-filter-panel {
+    margin: 0.25rem 0 0.75rem;
+}
+
+.st-key-trade-log-filter-panel [data-testid="stTextInput"] input,
+.st-key-trade-log-filter-panel [data-baseweb="select"] > div {
+    min-height: 2.5rem;
+    border-radius: 6px;
+}
+
+.trade-log-result-summary,
+.trade-log-pagination {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.55rem 1rem;
+    color: var(--text-muted);
+    font-size: 0.82rem;
+    font-weight: 700;
+}
+
+.trade-log-result-summary {
+    margin-top: 0.3rem;
+}
+
+.trade-log-result-summary strong,
+.trade-log-pagination span:last-child {
+    color: var(--brand-deep);
+}
+
+.trade-log-pagination {
+    justify-content: space-between;
+    padding: 0.3rem 0 0.1rem;
+}
+
+.st-key-trade-log-table [data-testid="stButton"] > button {
+    min-height: 2.15rem;
+    border-radius: 6px;
+    font-weight: 800;
+}
+
 .st-key-trade-log-inline-editor-shell {
     margin: 0.45rem 0 0.2rem;
     padding: 0.55rem 0.6rem 0.15rem;
@@ -1897,6 +2091,20 @@ h6 {
         min-width: 100% !important;
         flex: 1 1 auto !important;
     }
+
+    .st-key-trade-realized-summary [data-testid="stHorizontalBlock"],
+    .st-key-trade-log-filter-panel [data-testid="stHorizontalBlock"] {
+        flex-direction: column;
+        flex-wrap: nowrap;
+        gap: 0.65rem;
+    }
+
+    .st-key-trade-realized-summary [data-testid="stHorizontalBlock"] > div,
+    .st-key-trade-log-filter-panel [data-testid="stHorizontalBlock"] > div {
+        width: 100% !important;
+        min-width: 100% !important;
+        flex: 1 1 auto !important;
+    }
 }
 
 @media (max-width: 640px) {
@@ -1916,6 +2124,27 @@ h6 {
     .st-key-sidebar-account-panel [data-testid="stHorizontalBlock"] {
         align-items: center;
         flex-wrap: nowrap;
+    }
+
+    .realized-contribution__row {
+        grid-template-columns: minmax(0, 1fr) minmax(5.4rem, auto);
+        gap: 0.34rem 0.55rem;
+    }
+
+    .realized-contribution__bar-track {
+        grid-column: 1 / -1;
+        order: 3;
+    }
+
+    .realized-contribution__rate {
+        display: none;
+    }
+
+    .trade-log-result-summary,
+    .trade-log-pagination {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 0.28rem;
     }
 }
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import inspect
 import importlib.util
+from datetime import date
 from pathlib import Path
 import sys
 import tempfile
@@ -82,6 +83,14 @@ class ThemeStylesheetTests(unittest.TestCase):
         self.assertIn(".trade-total-preview", stylesheet)
         self.assertIn(".cash-flow-preview", stylesheet)
         self.assertIn(".product-code-status-row", stylesheet)
+        self.assertIn(".st-key-dashboard-summary-primary", stylesheet)
+        self.assertIn(".st-key-dashboard-summary-secondary", stylesheet)
+        self.assertIn(".st-key-trade-realized-summary", stylesheet)
+        self.assertIn(".realized-contribution", stylesheet)
+        self.assertIn(".st-key-trade-log-filter-panel", stylesheet)
+        self.assertIn(".trade-log-result-summary", stylesheet)
+        self.assertIn(".trade-log-pagination", stylesheet)
+        self.assertIn(".trade-log-profit-rate--positive", stylesheet)
         self.assertIn("--radius-lg: 18px;", stylesheet)
         self.assertIn("--shadow-card: 0 14px 38px rgba(15, 23, 42, 0.08);", stylesheet)
         self.assertIn("--panel-radius: var(--radius-lg);", stylesheet)
@@ -299,6 +308,9 @@ class TradeFormResetTests(unittest.TestCase):
 
         self.assertNotIn("현금증감", dashboard_app.TRADE_LOG_TABLE_HEADER_LABELS)
         self.assertNotIn("cash_delta", dashboard_app.TRADE_LOG_TABLE_DISPLAY_FIELDS)
+        self.assertNotIn("코드", dashboard_app.TRADE_LOG_TABLE_HEADER_LABELS)
+        self.assertIn("실현수익률", dashboard_app.TRADE_LOG_TABLE_HEADER_LABELS)
+        self.assertIn("realized_profit_rate", dashboard_app.TRADE_LOG_TABLE_DISPLAY_FIELDS)
         self.assertEqual(
             len(dashboard_app.TRADE_LOG_TABLE_HEADER_LABELS),
             len(dashboard_app.TRADE_LOG_TABLE_COLUMN_WEIGHTS),
@@ -456,6 +468,71 @@ class TradeFormResetTests(unittest.TestCase):
                 self.assertIn(f"border:1px solid {expected['border']}", badge_html)
                 self.assertIn(f"color:{expected['color']}", badge_html)
                 self.assertIn(str(expected["label"]), badge_html)
+
+    def test_realized_period_filter_uses_sell_date_boundaries(self) -> None:
+        """실현손익 기간 필터는 매도일 기준으로 월/분기/연도 범위를 적용한다."""
+
+        positions = [
+            {"product_name": "이번 달", "sell_date": "2026-05-02", "profit_loss": 100},
+            {"product_name": "이번 분기", "sell_date": "2026-04-10", "profit_loss": 200},
+            {"product_name": "올해", "sell_date": "2026-01-15", "profit_loss": 300},
+            {"product_name": "작년", "sell_date": "2025-12-30", "profit_loss": 400},
+        ]
+        today = date(2026, 5, 13)
+
+        self.assertEqual(
+            [item["product_name"] for item in dashboard_app.filter_realized_positions_by_period(positions, "month", today=today)],
+            ["이번 달"],
+        )
+        self.assertEqual(
+            [item["product_name"] for item in dashboard_app.filter_realized_positions_by_period(positions, "quarter", today=today)],
+            ["이번 달", "이번 분기"],
+        )
+        self.assertEqual(
+            [item["product_name"] for item in dashboard_app.filter_realized_positions_by_period(positions, "year", today=today)],
+            ["이번 달", "이번 분기", "올해"],
+        )
+        self.assertEqual(len(dashboard_app.filter_realized_positions_by_period(positions, "all", today=today)), 4)
+
+    def test_trade_log_filters_and_pagination_apply_user_controls(self) -> None:
+        """거래 기록 필터는 검색/유형/자산/기간 조건을 함께 적용하고 페이지를 보정한다."""
+
+        logs = [
+            {"id": 1, "trade_date": "2026-05-11", "product_name": "삼성전자", "symbol": "005930", "trade_type": "buy", "asset_type": "risk"},
+            {"id": 2, "trade_date": "2026-05-12", "product_name": "삼성전자", "symbol": "005930", "trade_type": "sell", "asset_type": "risk"},
+            {"id": 3, "trade_date": "2026-02-01", "product_name": "회사 납입금", "symbol": "", "trade_type": "employer_deposit", "asset_type": "cash"},
+            {"id": 4, "trade_date": "2025-12-31", "product_name": "채권 ETF", "symbol": "BOND", "trade_type": "buy", "asset_type": "safe"},
+        ]
+
+        filtered = dashboard_app.filter_trade_logs(
+            logs,
+            search="삼성",
+            trade_type="sell",
+            asset_type="risk",
+            date_filter="month",
+            today=date(2026, 5, 13),
+        )
+        page_items, current_page, total_pages, page_start, page_end = dashboard_app.paginate_trade_logs(
+            filtered,
+            page=3,
+            page_size=1,
+        )
+
+        self.assertEqual([row["id"] for row in filtered], [2])
+        self.assertEqual([row["id"] for row in page_items], [2])
+        self.assertEqual((current_page, total_pages, page_start, page_end), (1, 1, 1, 1))
+
+    def test_trade_log_realized_profit_rate_cell_uses_sell_log_lookup(self) -> None:
+        """거래 기록의 실현수익률 컬럼은 매도 거래 ID lookup으로 표시한다."""
+
+        sell_log = {"id": 42, "trade_type": "sell"}
+        buy_log = {"id": 41, "trade_type": "buy"}
+        context = {"realized_profit_rate_by_sell_log_id": {42: 8.125}}
+
+        self.assertEqual(dashboard_app.format_trade_log_cell(sell_log, "realized_profit_rate", context), "+8.12%")
+        self.assertEqual(dashboard_app.format_trade_log_cell(buy_log, "realized_profit_rate", context), "-")
+        self.assertIn("trade-log-profit-rate--positive", dashboard_app.trade_log_realized_rate_html("+8.12%"))
+        self.assertIn("trade-log-profit-rate--empty", dashboard_app.trade_log_realized_rate_html("-"))
 
     def test_product_search_option_label_builds_two_line_summary(self) -> None:
         """자동완성 후보 라벨은 이름과 부가 정보를 두 줄로 묶는다."""
@@ -896,6 +973,42 @@ class RealizedProfitBarTests(unittest.TestCase):
         self.assertEqual(series_data[0]["itemStyle"]["borderRadius"], [10, 10, 0, 0])
         self.assertEqual(series_data[1]["itemStyle"]["borderRadius"], [0, 0, 10, 10])
         self.assertEqual(options["yAxis"]["name"], "실현손익")
+
+    def test_realized_monthly_profit_frame_and_options_group_by_sell_month(self) -> None:
+        """월별 실현손익 차트는 매도월 기준으로 손익과 포지션 수를 집계한다."""
+
+        positions = [
+            {"sell_date": "2026-05-01", "profit_loss": 100000},
+            {"sell_date": "2026-05-12", "profit_loss": -30000},
+            {"sell_date": "2026-04-20", "profit_loss": 50000},
+        ]
+
+        frame = dashboard_app.realized_monthly_profit_frame(positions)
+        options = dashboard_app.realized_monthly_profit_bar_options(frame)
+
+        self.assertEqual(frame["month"].tolist(), ["2026-04", "2026-05"])
+        self.assertEqual(frame["profit_loss"].tolist(), [50000.0, 70000.0])
+        self.assertEqual(frame["sold_count"].tolist(), [1, 2])
+        self.assertIsNotNone(options)
+        assert options is not None
+        self.assertEqual(options["yAxis"]["name"], "월별 실현손익")
+        self.assertEqual(options["series"][0]["data"][1]["value"], 70000.0)
+
+    def test_realized_contribution_html_marks_positive_and_negative_rows(self) -> None:
+        """상품별 기여 HTML은 수익/손실 tone과 폭 스타일을 포함한다."""
+
+        html = dashboard_app.build_realized_contribution_html(
+            [
+                {"product_name": "수익 ETF", "profit_loss": 200000, "profit_rate": 10.0},
+                {"product_name": "손실 ETF", "profit_loss": -50000, "profit_rate": -4.0},
+            ]
+        )
+
+        self.assertIn("상품별 손익 기여 Top 5", html)
+        self.assertIn("realized-contribution__bar--positive", html)
+        self.assertIn("realized-contribution__bar--negative", html)
+        self.assertIn("수익 ETF", html)
+        self.assertIn("손실 ETF", html)
 
 
 class AllocationTreemapVisualMapTests(unittest.TestCase):

@@ -11,12 +11,45 @@ from src.analytics import (
     holdings_overview_frame,
     infer_holding_sector_label,
     projected_today_interest,
+    realized_summary,
     snapshot_trend_frame,
 )
 
 
 class AccountSummaryTests(unittest.TestCase):
     """성과 계산 규칙을 검증한다."""
+
+    def test_realized_summary_keeps_sell_log_id_for_trade_table_link(self) -> None:
+        """실현손익 포지션은 원 매도 거래 ID를 보존한다."""
+
+        trade_logs = [
+            {
+                "id": 10,
+                "trade_type": "buy",
+                "trade_date": "2026-05-01",
+                "symbol": "005930",
+                "product_name": "삼성전자",
+                "asset_type": "risk",
+                "quantity": 10,
+                "total_amount": 700000,
+            },
+            {
+                "id": 11,
+                "trade_type": "sell",
+                "trade_date": "2026-05-12",
+                "symbol": "005930",
+                "product_name": "삼성전자",
+                "asset_type": "risk",
+                "quantity": 4,
+                "total_amount": 320000,
+            },
+        ]
+
+        summary = realized_summary(trade_logs)
+
+        self.assertEqual(summary["sold_count"], 1)
+        self.assertEqual(summary["positions"][0]["sell_log_id"], 11)
+        self.assertEqual(summary["positions"][0]["profit_rate"], 14.29)
 
     def test_account_summary_separates_principal_net_flow_and_actual_profit(self) -> None:
         account = {"cash_balance": 1_000_000}

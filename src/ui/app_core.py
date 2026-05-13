@@ -580,6 +580,11 @@ CASH_FLOW_TYPE_KEY = "cash_flow_type"
 CASH_FLOW_AMOUNT_KEY = "cash_flow_amount"
 CASH_FLOW_DATE_KEY = "cash_flow_date"
 CASH_FLOW_NOTES_KEY = "cash_flow_notes"
+TRADE_REALIZED_PERIOD_KEY = "trade_realized_period"
+TRADE_LOG_SEARCH_KEY = "trade_log_search"
+TRADE_LOG_TYPE_FILTER_KEY = "trade_log_type_filter"
+TRADE_LOG_ASSET_FILTER_KEY = "trade_log_asset_filter"
+TRADE_LOG_DATE_FILTER_KEY = "trade_log_date_filter"
 TRADE_FORM_RESET_PENDING_KEY = "trade_form_reset_pending"
 CASH_FLOW_FORM_RESET_PENDING_KEY = "cash_flow_form_reset_pending"
 TRADE_PAGE_SUCCESS_MESSAGE_KEY = "trade_page_success_message"
@@ -644,6 +649,23 @@ CASH_FLOW_QUICK_AMOUNTS = (
     ("100만", 1_000_000),
     ("500만", 5_000_000),
 )
+REALIZED_PERIOD_OPTIONS = ("month", "quarter", "year", "all")
+REALIZED_PERIOD_LABELS = {
+    "month": "이번 달",
+    "quarter": "분기",
+    "year": "올해",
+    "all": "전체",
+}
+TRADE_LOG_TYPE_FILTER_OPTIONS = ("all", "buy", "sell", "personal_deposit", "employer_deposit")
+TRADE_LOG_ASSET_FILTER_OPTIONS = ("all", "risk", "safe", "cash")
+TRADE_LOG_DATE_FILTER_OPTIONS = ("all", "month", "3mo", "year")
+TRADE_LOG_DATE_FILTER_LABELS = {
+    "all": "전체 기간",
+    "month": "이번 달",
+    "3mo": "3개월",
+    "year": "올해",
+}
+TRADE_LOG_PAGE_SIZE = 10
 TABLE_LABELS = {
     "accounts": "계좌",
     "holdings": "보유 종목",
@@ -651,26 +673,26 @@ TABLE_LABELS = {
     "daily_account_snapshot": "일별 자산 스냅샷",
 }
 VISIBLE_TRADE_LOG_TYPES = {"buy", "sell", "personal_deposit", "employer_deposit"}
-TRADE_LOG_TABLE_HEADER_LABELS = ["거래일", "종목명", "코드", "유형", "자산군", "수량", "단가", "총액", "관리"]
+TRADE_LOG_TABLE_HEADER_LABELS = ["거래일", "종목명", "유형", "자산군", "수량", "단가", "총액", "실현수익률", "관리"]
 TRADE_LOG_TABLE_DISPLAY_FIELDS = [
     "trade_date",
     "product_name",
-    "symbol",
     "trade_type",
     "asset_type",
     "quantity",
     "price",
     "total_amount",
+    "realized_profit_rate",
 ]
 TRADE_LOG_TABLE_COLUMN_WEIGHT_BY_LABEL = {
     "거래일": 1.05,
-    "종목명": 1.45,
-    "코드": 1.0,
+    "종목명": 1.65,
     "유형": 0.9,
     "자산군": 0.95,
     "수량": 0.9,
     "단가": 0.9,
     "총액": 1.0,
+    "실현수익률": 1.0,
     "관리": 1.3,
 }
 TRADE_LOG_TABLE_COLUMN_WEIGHTS = [
@@ -888,6 +910,32 @@ def label_transaction_type(value: Any) -> str:
     return TRADE_TYPE_LABELS.get(text, CASH_FLOW_TYPE_LABELS.get(text, text))
 
 
+def label_realized_period(value: Any) -> str:
+    """실현손익 요약 기간 필터 라벨을 반환한다."""
+
+    return REALIZED_PERIOD_LABELS.get(str(value), str(value))
+
+
+def label_trade_log_type_filter(value: Any) -> str:
+    """거래 기록 유형 필터 라벨을 반환한다."""
+
+    normalized = str(value or "").strip()
+    return "전체 유형" if normalized == "all" else label_transaction_type(normalized)
+
+
+def label_trade_log_asset_filter(value: Any) -> str:
+    """거래 기록 자산군 필터 라벨을 반환한다."""
+
+    normalized = str(value or "").strip()
+    return "전체 자산" if normalized == "all" else label_asset_type(normalized)
+
+
+def label_trade_log_date_filter(value: Any) -> str:
+    """거래 기록 날짜 빠른 필터 라벨을 반환한다."""
+
+    return TRADE_LOG_DATE_FILTER_LABELS.get(str(value), str(value))
+
+
 def trade_type_badge_html(value: Any) -> str:
     """거래유형을 컬러 배지 HTML로 반환한다."""
 
@@ -902,6 +950,18 @@ def trade_type_badge_html(value: Any) -> str:
         f'background:{style["background"]}; border:1px solid {style["border"]}; color:{style["color"]};">'
         f'{label}</span>'
     )
+
+
+def trade_log_realized_rate_html(value: Any) -> str:
+    """거래 기록 실현수익률 값을 tone class가 있는 HTML로 반환한다."""
+
+    raw_text = str(value or "-").strip() or "-"
+    normalized_value = raw_text.replace(",", "").replace("%", "").strip()
+    numeric = pd.to_numeric(normalized_value, errors="coerce")
+    if pd.isna(numeric):
+        return '<span class="trade-log-profit-rate trade-log-profit-rate--empty">-</span>'
+    tone = "positive" if float(numeric) > 0 else "negative" if float(numeric) < 0 else "neutral"
+    return f'<span class="trade-log-profit-rate trade-log-profit-rate--{tone}">{html.escape(raw_text)}</span>'
 
 
 def normalize_trade_log_type(value: Any) -> str:
@@ -1086,6 +1146,264 @@ def build_cash_flow_preview_html(current_principal: Any, flow_type: str, amount:
     )
 
 
+def parse_log_date(value: Any) -> date | None:
+    """거래/실현손익 날짜 값을 필터 비교용 날짜로 변환한다."""
+
+    raw_value = str(value or "").strip()
+    if not raw_value:
+        return None
+    try:
+        return date.fromisoformat(raw_value[:10])
+    except ValueError:
+        parsed_value = pd.to_datetime(raw_value, errors="coerce")
+        if pd.isna(parsed_value):
+            return None
+        return parsed_value.date()
+
+
+def realized_period_start(period: str, today: date | None = None) -> date | None:
+    """실현손익 기간 필터의 시작일을 반환한다."""
+
+    current_date = today or date.today()
+    normalized = str(period or "all").strip()
+    if normalized == "month":
+        return date(current_date.year, current_date.month, 1)
+    if normalized == "quarter":
+        start_month = ((current_date.month - 1) // 3) * 3 + 1
+        return date(current_date.year, start_month, 1)
+    if normalized == "year":
+        return date(current_date.year, 1, 1)
+    return None
+
+
+def trade_log_date_filter_start(date_filter: str, today: date | None = None) -> date | None:
+    """거래 기록 날짜 빠른 필터의 시작일을 반환한다."""
+
+    current_date = today or date.today()
+    normalized = str(date_filter or "all").strip()
+    if normalized == "month":
+        return date(current_date.year, current_date.month, 1)
+    if normalized == "3mo":
+        return current_date - relativedelta(months=3)
+    if normalized == "year":
+        return date(current_date.year, 1, 1)
+    return None
+
+
+def filter_realized_positions_by_period(
+    positions: list[dict[str, Any]],
+    period: str,
+    *,
+    today: date | None = None,
+) -> list[dict[str, Any]]:
+    """실현 포지션을 선택 기간의 매도일 기준으로 필터링한다."""
+
+    start_date = realized_period_start(period, today=today)
+    if start_date is None:
+        return list(positions)
+    current_date = today or date.today()
+    filtered_positions: list[dict[str, Any]] = []
+    for position in positions:
+        sell_date = parse_log_date(position.get("sell_date"))
+        if sell_date is None:
+            continue
+        if start_date <= sell_date <= current_date:
+            filtered_positions.append(position)
+    return filtered_positions
+
+
+def summarize_realized_positions(positions: list[dict[str, Any]]) -> dict[str, float | int]:
+    """필터링된 실현 포지션의 요약 값을 계산한다."""
+
+    total_buy = sum(float(position.get("buy_amount") or 0) for position in positions)
+    total_sell = sum(float(position.get("sell_amount") or 0) for position in positions)
+    total_profit = total_sell - total_buy
+    return {
+        "sold_count": len(positions),
+        "total_buy_amount": round(total_buy, 2),
+        "total_sell_amount": round(total_sell, 2),
+        "total_profit_loss": round(total_profit, 2),
+        "total_profit_rate": round((total_profit / total_buy * 100) if total_buy else 0.0, 2),
+    }
+
+
+def realized_profit_rate_by_sell_log_id(positions: list[dict[str, Any]]) -> dict[int, float]:
+    """매도 거래 ID별 실현수익률 lookup을 만든다."""
+
+    rates: dict[int, float] = {}
+    for position in positions:
+        raw_log_id = position.get("sell_log_id")
+        try:
+            log_id = int(raw_log_id)
+        except (TypeError, ValueError):
+            continue
+        rates[log_id] = float(position.get("profit_rate") or 0)
+    return rates
+
+
+def realized_monthly_profit_frame(positions: list[dict[str, Any]]) -> pd.DataFrame:
+    """실현 포지션을 월별 실현손익 차트용 프레임으로 집계한다."""
+
+    rows: list[dict[str, Any]] = []
+    for position in positions:
+        sell_date = parse_log_date(position.get("sell_date"))
+        if sell_date is None:
+            continue
+        rows.append(
+            {
+                "month": sell_date.strftime("%Y-%m"),
+                "display_month": sell_date.strftime("%y.%m"),
+                "profit_loss": float(position.get("profit_loss") or 0),
+                "sold_count": 1,
+            }
+        )
+    if not rows:
+        return pd.DataFrame(columns=["month", "display_month", "profit_loss", "sold_count"])
+    frame = pd.DataFrame(rows)
+    grouped = (
+        frame.groupby(["month", "display_month"], as_index=False)
+        .agg({"profit_loss": "sum", "sold_count": "sum"})
+        .sort_values("month")
+        .reset_index(drop=True)
+    )
+    grouped["profit_loss"] = grouped["profit_loss"].astype(float).round(2)
+    return grouped
+
+
+def build_realized_contribution_html(positions: list[dict[str, Any]], *, limit: int = 5) -> str:
+    """상품별 실현손익 기여 Top N HTML을 만든다."""
+
+    if not positions:
+        return ""
+    ranked_positions = sorted(
+        positions,
+        key=lambda position: abs(float(position.get("profit_loss") or 0)),
+        reverse=True,
+    )[: max(int(limit), 0)]
+    max_abs_profit = max((abs(float(position.get("profit_loss") or 0)) for position in ranked_positions), default=0.0)
+    rows: list[str] = []
+    for position in ranked_positions:
+        profit_loss = float(position.get("profit_loss") or 0)
+        profit_rate = float(position.get("profit_rate") or 0)
+        tone = "positive" if profit_loss >= 0 else "negative"
+        width = 0 if max_abs_profit <= 0 else max(4, min(100, abs(profit_loss) / max_abs_profit * 100))
+        product_name = str(position.get("product_name") or position.get("symbol") or "미지정").strip() or "미지정"
+        rows.append(
+            "".join(
+                [
+                    '<div class="realized-contribution__row">',
+                    f'<div class="realized-contribution__name" title="{html.escape(product_name)}">{html.escape(product_name)}</div>',
+                    '<div class="realized-contribution__bar-track">',
+                    f'<div class="realized-contribution__bar realized-contribution__bar--{tone}" style="width:{width:.2f}%"></div>',
+                    "</div>",
+                    f'<div class="realized-contribution__value realized-contribution__value--{tone}">{html.escape(format_won(profit_loss))}</div>',
+                    f'<div class="realized-contribution__rate realized-contribution__value--{tone}">{html.escape(format_pct(profit_rate))}</div>',
+                    "</div>",
+                ]
+            )
+        )
+    return "".join(
+        [
+            '<div class="realized-contribution">',
+            '<div class="realized-contribution__title">상품별 손익 기여 Top 5</div>',
+            "".join(rows),
+            "</div>",
+        ]
+    )
+
+
+def trade_log_filter_signature(search: str, trade_type: str, asset_type: str, date_filter: str) -> str:
+    """거래 기록 필터 변경 감지용 서명을 만든다."""
+
+    return "|".join(
+        [
+            str(search or "").strip().casefold(),
+            str(trade_type or "all").strip(),
+            str(asset_type or "all").strip(),
+            str(date_filter or "all").strip(),
+        ]
+    )
+
+
+def filter_trade_logs(
+    logs: list[dict[str, Any]],
+    *,
+    search: str = "",
+    trade_type: str = "all",
+    asset_type: str = "all",
+    date_filter: str = "all",
+    today: date | None = None,
+) -> list[dict[str, Any]]:
+    """거래 기록을 검색어/유형/자산군/기간 조건으로 필터링한다."""
+
+    normalized_search = str(search or "").strip().casefold()
+    normalized_type = normalize_trade_log_type(trade_type)
+    normalized_asset = str(asset_type or "all").strip()
+    start_date = trade_log_date_filter_start(date_filter, today=today)
+    current_date = today or date.today()
+
+    filtered_logs: list[dict[str, Any]] = []
+    for log in logs:
+        if normalized_search:
+            product_name = str(log.get("product_name") or "").casefold()
+            symbol = str(log.get("symbol") or "").casefold()
+            if normalized_search not in product_name and normalized_search not in symbol:
+                continue
+        if normalized_type != "all" and normalize_trade_log_type(log.get("trade_type")) != normalized_type:
+            continue
+        if normalized_asset != "all" and str(log.get("asset_type") or "").strip() != normalized_asset:
+            continue
+        if start_date is not None:
+            trade_date = parse_log_date(log.get("trade_date"))
+            if trade_date is None or trade_date < start_date or trade_date > current_date:
+                continue
+        filtered_logs.append(log)
+    return filtered_logs
+
+
+def paginate_trade_logs(
+    logs: list[dict[str, Any]],
+    *,
+    page: int = 1,
+    page_size: int = TRADE_LOG_PAGE_SIZE,
+) -> tuple[list[dict[str, Any]], int, int, int, int]:
+    """거래 기록 페이지 조각과 보정된 페이지 정보를 반환한다."""
+
+    safe_page_size = max(int(page_size or TRADE_LOG_PAGE_SIZE), 1)
+    total_count = len(logs)
+    total_pages = max((total_count + safe_page_size - 1) // safe_page_size, 1)
+    current_page = min(max(int(page or 1), 1), total_pages)
+    start_index = (current_page - 1) * safe_page_size
+    end_index = min(start_index + safe_page_size, total_count)
+    return logs[start_index:end_index], current_page, total_pages, start_index + 1 if total_count else 0, end_index
+
+
+def build_trade_log_export_frame(
+    logs: list[dict[str, Any]],
+    realized_rate_map: dict[int, float] | None = None,
+) -> pd.DataFrame:
+    """필터링된 거래 기록 CSV 다운로드용 프레임을 만든다."""
+
+    context: dict[Any, Any] = {"realized_profit_rate_by_sell_log_id": realized_rate_map or {}}
+    rows: list[dict[str, str]] = []
+    for log in logs:
+        rows.append(
+            {
+                "거래일": format_trade_log_cell(log, "trade_date", context),
+                "종목명": format_trade_log_cell(log, "product_name", context),
+                "코드": format_trade_log_cell(log, "symbol", context),
+                "유형": label_transaction_type(normalize_trade_log_type(log.get("trade_type"))),
+                "자산군": format_trade_log_cell(log, "asset_type", context),
+                "수량": format_trade_log_cell(log, "quantity", context),
+                "단가": format_trade_log_cell(log, "price", context),
+                "총액": format_trade_log_cell(log, "total_amount", context),
+                "실현수익률": format_trade_log_cell(log, "realized_profit_rate", context).replace("&minus;", "-"),
+                "메모": format_trade_log_cell(log, "notes", context),
+            }
+        )
+    return pd.DataFrame(rows)
+
+
 def set_session_value(key: str, value: Any) -> None:
     """위젯 콜백에서 세션 상태 값을 갱신한다."""
 
@@ -1112,7 +1430,7 @@ def prefill_latest_trade_price(symbol: str) -> bool:
     return True
 
 
-def format_trade_log_cell(log: dict[str, Any], field_name: str, account_name_map: dict[int, str]) -> str:
+def format_trade_log_cell(log: dict[str, Any], field_name: str, account_name_map: dict[Any, Any]) -> str:
     """거래 기록 행의 표시 문자열을 컬럼별로 반환한다."""
 
     if field_name == "trade_date":
@@ -1137,6 +1455,17 @@ def format_trade_log_cell(log: dict[str, Any], field_name: str, account_name_map
         return f"{float(log.get('quantity') or 0):,.4f}".rstrip("0").rstrip(".") or "0"
     if field_name in {"price", "total_amount", "cash_delta"}:
         return f"{float(log.get(field_name) or 0):,.0f}"
+    if field_name == "realized_profit_rate":
+        if normalize_trade_log_type(log.get("trade_type")) != "sell":
+            return "-"
+        realized_rate_map = account_name_map.get("realized_profit_rate_by_sell_log_id", {})
+        try:
+            log_id = int(log.get("id"))
+        except (TypeError, ValueError):
+            return "-"
+        if log_id not in realized_rate_map:
+            return "-"
+        return format_pct(realized_rate_map[log_id])
     if field_name == "notes":
         return str(log.get("notes") or "-").strip() or "-"
     return str(log.get(field_name) or "-").strip() or "-"
@@ -1992,7 +2321,7 @@ def render_dashboard_summary_card(
 
 
 @st.fragment
-def render_dashboard_cash_card(account_id: int, display_cash: float) -> None:
+def render_dashboard_cash_card(account_id: int, display_cash: float, display_total_value: float = 0.0) -> None:
     """보유 현금 카드 편집 UI를 부분 리런 단위로 렌더링한다."""
 
     cash_edit_state_key = f"dashboard-cash-editing:{account_id}"
@@ -2034,7 +2363,13 @@ def render_dashboard_cash_card(account_id: int, display_cash: float) -> None:
                     st.session_state[cash_edit_state_key] = False
                     st.rerun(scope="fragment")
         else:
-            render_dashboard_summary_card("보유 현금", format_won(display_cash), actionable=True)
+            cash_ratio = (float(display_cash or 0) / float(display_total_value or 0) * 100) if float(display_total_value or 0) else 0.0
+            render_dashboard_summary_card(
+                "보유 현금",
+                format_won(display_cash),
+                actionable=True,
+                delta=f"전체의 {cash_ratio:.1f}%" if display_total_value else "",
+            )
             with st.container(key="dashboard-cash-card-overlay"):
                 if st.button(
                     "수정",
@@ -3376,6 +3711,125 @@ def realized_profit_bar_options(frame: pd.DataFrame) -> dict[str, Any] | None:
     }
 
 
+def realized_monthly_profit_bar_options(frame: pd.DataFrame) -> dict[str, Any] | None:
+    """월별 실현손익 막대 차트 옵션을 만든다."""
+
+    get_jscode_runtime()
+    if frame.empty:
+        return None
+
+    chart_frame = frame.sort_values("month").copy()
+    data: list[dict[str, Any]] = []
+    values: list[float] = []
+    for row in chart_frame.to_dict(orient="records"):
+        profit_loss = float(row.get("profit_loss") or 0)
+        values.append(profit_loss)
+        data.append(
+            {
+                "value": round(profit_loss, 2),
+                "month": str(row.get("month") or ""),
+                "display_month": str(row.get("display_month") or row.get("month") or ""),
+                "sold_count": int(row.get("sold_count") or 0),
+                "itemStyle": {
+                    "color": FEARGREED_UP_COLOR if profit_loss >= 0 else FEARGREED_DOWN_COLOR,
+                    "borderRadius": [8, 8, 0, 0] if profit_loss >= 0 else [0, 0, 8, 8],
+                    "opacity": 0.94,
+                },
+                "label": {
+                    "show": True,
+                    "position": "top" if profit_loss >= 0 else "bottom",
+                    "distance": 7,
+                    "formatter": format_won(profit_loss),
+                    "color": FEARGREED_MID_TEXT_COLOR,
+                    "fontWeight": 700,
+                    "fontSize": 11,
+                },
+            }
+        )
+
+    if not data:
+        return None
+
+    minimum = min(values)
+    maximum = max(values)
+    tooltip_formatter = None
+    if JsCode is not None:
+        tooltip_formatter = JsCode(
+            """
+            function(params) {
+                var realizedAmount = Math.round(Number(params.data.value || 0)).toLocaleString('ko-KR');
+                return [
+                    '<strong>' + params.data.month + '</strong>',
+                    '실현손익: ₩' + realizedAmount,
+                    '실현 포지션: ' + params.data.sold_count + '건'
+                ].join('<br/>');
+            }
+            """
+        )
+
+    y_axis_label_config: dict[str, Any] = {"color": FEARGREED_MUTED_TEXT_COLOR}
+    if JsCode is not None:
+        y_axis_label_config["formatter"] = JsCode(
+            """
+            function(value) {
+                return '₩' + Math.round(Number(value || 0)).toLocaleString('ko-KR');
+            }
+            """
+        )
+    else:
+        y_axis_label_config["formatter"] = "₩{value}"
+
+    y_axis_config: dict[str, Any] = {
+        "type": "value",
+        "name": "월별 실현손익",
+        "nameTextStyle": {"color": FEARGREED_MID_TEXT_COLOR, "fontWeight": 700},
+        "axisLabel": y_axis_label_config,
+        "axisLine": {"show": False},
+        "splitLine": {"lineStyle": {"color": FEARGREED_BORDER_COLOR}},
+    }
+    if minimum >= 0:
+        y_axis_config["min"] = 0.0
+    elif maximum <= 0:
+        y_axis_config["max"] = 0.0
+
+    return {
+        "backgroundColor": "transparent",
+        "animationDuration": 260,
+        "animationDurationUpdate": 320,
+        "grid": {"top": 36, "right": 14, "bottom": 42, "left": 72},
+        "tooltip": {
+            "trigger": "item",
+            "backgroundColor": CHART_TOOLTIP_BG_COLOR,
+            "borderWidth": 0,
+            "textStyle": {"color": CHART_TOOLTIP_TEXT_COLOR, "fontSize": 12},
+            **({"formatter": tooltip_formatter} if tooltip_formatter is not None else {}),
+        },
+        "xAxis": {
+            "type": "category",
+            "data": [item["display_month"] for item in data],
+            "axisLabel": {"interval": 0, "color": FEARGREED_MUTED_TEXT_COLOR, "fontSize": 11},
+            "axisLine": {"lineStyle": {"color": FEARGREED_BORDER_COLOR}},
+            "axisTick": {"show": False},
+        },
+        "yAxis": y_axis_config,
+        "series": [
+            {
+                "name": "월별 실현손익",
+                "type": "bar",
+                "barWidth": "46%",
+                "data": data,
+                "emphasis": {
+                    "focus": "self",
+                    "itemStyle": {
+                        "shadowBlur": 18,
+                        "shadowColor": "rgba(15, 23, 42, 0.14)",
+                    },
+                },
+            }
+        ],
+    }
+
+
 def realized_profit_bar_fallback_chart(frame: pd.DataFrame) -> alt.Chart | None:
     """실현 손익 요약을 Altair 막대차트로 대체한다."""
 
@@ -3436,6 +3890,57 @@ def realized_profit_bar_fallback_chart(frame: pd.DataFrame) -> alt.Chart | None:
         )
     )
     return style_dashboard_altair_chart(bars + labels, height=DASHBOARD_HOLDINGS_CHART_HEIGHT)
+
+
+def realized_monthly_profit_fallback_chart(frame: pd.DataFrame) -> alt.Chart | None:
+    """월별 실현손익을 Altair 막대차트로 대체한다."""
+
+    if frame.empty:
+        return None
+    chart_frame = frame.copy().sort_values("month").reset_index(drop=True)
+    chart_frame["tone"] = chart_frame["profit_loss"].apply(lambda value: "수익" if float(value or 0) >= 0 else "손실")
+    chart_frame["profit_loss_label"] = chart_frame["profit_loss"].apply(format_won)
+    display_order = chart_frame["display_month"].tolist()
+    bars = (
+        alt.Chart(chart_frame)
+        .mark_bar(cornerRadiusEnd=8, size=42)
+        .encode(
+            x=alt.X(
+                "display_month:N",
+                sort=display_order,
+                title="월",
+                axis=alt.Axis(labelColor=FEARGREED_MUTED_TEXT_COLOR, titleColor=FEARGREED_MID_TEXT_COLOR),
+            ),
+            y=alt.Y(
+                "profit_loss:Q",
+                title="월별 실현손익",
+                axis=alt.Axis(
+                    format=",.0f",
+                    grid=True,
+                    gridColor=FEARGREED_BORDER_COLOR,
+                    tickCount=5,
+                    labelColor=FEARGREED_MUTED_TEXT_COLOR,
+                    titleColor=FEARGREED_MID_TEXT_COLOR,
+                ),
+            ),
+            color=alt.Color("tone:N", legend=None, scale=alt.Scale(domain=["수익", "손실"], range=[FEARGREED_UP_COLOR, FEARGREED_DOWN_COLOR])),
+            tooltip=[
+                alt.Tooltip("month:N", title="월"),
+                alt.Tooltip("profit_loss:Q", title="실현손익", format=",.0f"),
+                alt.Tooltip("sold_count:Q", title="실현 포지션", format=",.0f"),
+            ],
+        )
+    )
+    labels = (
+        alt.Chart(chart_frame)
+        .mark_text(dy=-8, fontSize=10, fontWeight="bold", color=CHART_TEXT_COLOR)
+        .encode(
+            x=alt.X("display_month:N", sort=display_order),
+            y=alt.Y("profit_loss:Q"),
+            text=alt.Text("profit_loss_label:N"),
+        )
+    )
+    return style_dashboard_altair_chart(bars + labels, height=260)
 
 
 def build_selected_holding_intraday_trend_frame(holding: dict[str, Any]) -> pd.DataFrame:
@@ -4616,25 +5121,29 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]], roll
     overview_frame = holdings_overview_frame(holdings, selected_symbol=selected_symbol or None, limit=10)
 
     with st.container(key="dashboard-summary-strip"):
-        summary_cols = st.columns(5, gap="small", vertical_alignment="top")
+        with st.container(key="dashboard-summary-primary"):
+            total_col, profit_col, rate_col = st.columns((2.0, 1.0, 1.0), gap="small", vertical_alignment="top")
 
-        with summary_cols[0]:
-            with st.container(border=True, key="dashboard-card-principal"):
-                render_dashboard_summary_card("입금 원금", format_won(summary["total_principal"]))
+            with total_col:
+                render_dashboard_total_value_card(account_id, display_total_value, holdings)
 
-        with summary_cols[1]:
-            render_dashboard_cash_card(int(account["id"]), display_cash)
+            with profit_col:
+                with st.container(border=True, key="dashboard-card-profit"):
+                    render_dashboard_summary_card("원금 대비 평가손익", format_won(display_principal_profit_loss), tone=profit_tone)
 
-        with summary_cols[2]:
-            render_dashboard_total_value_card(int(account["id"]), display_total_value, holdings)
+            with rate_col:
+                with st.container(border=True, key="dashboard-card-profit-rate"):
+                    render_dashboard_summary_card("원금 대비 수익률", format_pct(display_principal_profit_rate), tone=profit_rate_tone)
 
-        with summary_cols[3]:
-            with st.container(border=True, key="dashboard-card-profit"):
-                render_dashboard_summary_card("원금 대비 평가손익", format_won(display_principal_profit_loss), tone=profit_tone)
+        with st.container(key="dashboard-summary-secondary"):
+            principal_col, cash_col = st.columns((1.0, 1.0), gap="small", vertical_alignment="top")
 
-        with summary_cols[4]:
-            with st.container(border=True, key="dashboard-card-profit-rate"):
-                render_dashboard_summary_card("원금 대비 수익률", format_pct(display_principal_profit_rate), tone=profit_rate_tone)
+            with principal_col:
+                with st.container(border=True, key="dashboard-card-principal"):
+                    render_dashboard_summary_card("입금 원금", format_won(summary["total_principal"]))
+
+            with cash_col:
+                render_dashboard_cash_card(account_id, display_cash, display_total_value)
 
     render_dashboard_reference_time_fragment(account_id)
 
@@ -5037,99 +5546,281 @@ def trade_entry_page(account: dict[str, Any], holdings: list[dict[str, Any]], ac
 
     visible_logs = [row for row in logs if is_visible_trade_log(row)]
     realized = realized_summary(logs)
-
-    metric_1, metric_2, metric_3, metric_4 = st.columns(4)
-    metric_1.metric("실현 포지션 수", f"{int(realized['sold_count']):,}")
-    metric_2.metric("총 매수금액", format_won(realized["total_buy_amount"]))
-    metric_3.metric("총 매도금액", format_won(realized["total_sell_amount"]))
-    metric_4.metric("실현 수익률", format_pct(realized["total_profit_rate"]))
-
     realized_positions = realized.get("positions") or []
-    if realized_positions:
-        chart_frame = pd.DataFrame(realized_positions).sort_values("profit_loss", ascending=False).head(10).copy()
-        if echarts_available:
-            realized_options = realized_profit_bar_options(chart_frame)
-            if realized_options is None:
-                st.info("실현손익 차트를 만들 데이터가 아직 없습니다.")
-            else:
-                st_echarts(
-                    options=realized_options,
-                    height=f"{DASHBOARD_HOLDINGS_CHART_HEIGHT}px",
-                    key=f"realized-profit-bar:{account['id']}",
-                )
-        else:
-            realized_chart = realized_profit_bar_fallback_chart(chart_frame)
-            if realized_chart is None:
-                st.info("현재 환경에서는 실현손익 차트를 표시할 수 없습니다.")
-            else:
-                st.altair_chart(realized_chart, width="stretch")
+    realized_rate_map = realized_profit_rate_by_sell_log_id(realized_positions)
 
-        position_frame = pd.DataFrame(realized_positions)
-        position_frame = position_frame[["product_name", "symbol", "asset_type", "buy_amount", "sell_amount", "profit_loss", "profit_rate", "sell_date"]].copy()
-        position_frame.columns = ["상품명", "코드", "자산군", "매수금액", "매도금액", "실현손익", "실현수익률(%)", "매도일"]
-        position_frame["자산군"] = position_frame["자산군"].map(label_asset_type)
-        for column in ("매수금액", "매도금액", "실현손익"):
-            position_frame[column] = position_frame[column].map(lambda value: f"{float(value or 0):,.0f}")
-        position_frame["실현수익률(%)"] = position_frame["실현수익률(%)"].map(lambda value: f"{float(value or 0):+.2f}")
-        st.subheader("실현 손익 요약")
-        st.dataframe(
-            position_frame.style.map(_holding_value_tone_style, subset=["실현손익", "실현수익률(%)"]),
-            width="stretch",
-            hide_index=True,
-            height=280,
+    realized_period_key = f"{TRADE_REALIZED_PERIOD_KEY}:{account['id']}"
+    if st.session_state.get(realized_period_key) not in REALIZED_PERIOD_OPTIONS:
+        st.session_state[realized_period_key] = "month"
+
+    with st.container(border=True, key="trade-realized-summary"):
+        render_dashboard_section_header("실현손익 요약", "매도 완료된 포지션의 손익을 기간별로 확인합니다.", compact=True)
+        with st.container(key="trade-realized-period-filter"):
+            selected_realized_period = st.segmented_control(
+                "실현손익 기간",
+                options=list(REALIZED_PERIOD_OPTIONS),
+                format_func=label_realized_period,
+                key=realized_period_key,
+                label_visibility="collapsed",
+            )
+        realized_period = str(selected_realized_period or st.session_state.get(realized_period_key) or "month")
+        filtered_realized_positions = filter_realized_positions_by_period(realized_positions, realized_period)
+        filtered_realized_summary = summarize_realized_positions(filtered_realized_positions)
+        render_dashboard_metric_strip(
+            [
+                {
+                    "label": "총 실현손익",
+                    "value": format_won(filtered_realized_summary["total_profit_loss"]),
+                    "tone": dashboard_return_metric_tone(float(filtered_realized_summary["total_profit_loss"] or 0)),
+                    "delta": label_realized_period(realized_period),
+                },
+                {"label": "실현 포지션 수", "value": f"{int(filtered_realized_summary['sold_count']):,}건", "tone": "accent"},
+                {"label": "총 매도금액", "value": format_won(filtered_realized_summary["total_sell_amount"])},
+                {
+                    "label": "실현 수익률",
+                    "value": format_pct(filtered_realized_summary["total_profit_rate"]),
+                    "tone": dashboard_return_metric_tone(float(filtered_realized_summary["total_profit_rate"] or 0)),
+                },
+            ]
         )
+
+        if filtered_realized_positions:
+            monthly_frame = realized_monthly_profit_frame(filtered_realized_positions)
+            chart_col, contribution_col = st.columns((1.35, 1.0), gap="large", vertical_alignment="top")
+            with chart_col:
+                st.caption("월별 실현손익")
+                if echarts_available:
+                    monthly_options = realized_monthly_profit_bar_options(monthly_frame)
+                    if monthly_options is None:
+                        st.info("월별 실현손익 차트를 만들 데이터가 아직 없습니다.")
+                    else:
+                        st_echarts(
+                            options=monthly_options,
+                            height="280px",
+                            key=f"realized-monthly-profit-bar:{account['id']}:{realized_period}",
+                        )
+                else:
+                    monthly_chart = realized_monthly_profit_fallback_chart(monthly_frame)
+                    if monthly_chart is None:
+                        st.info("현재 환경에서는 월별 실현손익 차트를 표시할 수 없습니다.")
+                    else:
+                        st.altair_chart(monthly_chart, width="stretch")
+            with contribution_col:
+                contribution_html = build_realized_contribution_html(filtered_realized_positions, limit=5)
+                if contribution_html:
+                    st.markdown(contribution_html, unsafe_allow_html=True)
+                else:
+                    st.info("상품별 기여도를 만들 데이터가 아직 없습니다.")
+
+            chart_frame = pd.DataFrame(filtered_realized_positions).sort_values("profit_loss", ascending=False).head(10).copy()
+            if echarts_available:
+                realized_options = realized_profit_bar_options(chart_frame)
+                if realized_options is not None:
+                    st_echarts(
+                        options=realized_options,
+                        height=f"{DASHBOARD_HOLDINGS_CHART_HEIGHT}px",
+                        key=f"realized-profit-bar:{account['id']}:{realized_period}",
+                    )
+            else:
+                realized_chart = realized_profit_bar_fallback_chart(chart_frame)
+                if realized_chart is not None:
+                    st.altair_chart(realized_chart, width="stretch")
+
+            position_frame = pd.DataFrame(filtered_realized_positions)
+            position_frame = position_frame[["product_name", "symbol", "asset_type", "buy_amount", "sell_amount", "profit_loss", "profit_rate", "sell_date"]].copy()
+            position_frame.columns = ["상품명", "코드", "자산군", "매수금액", "매도금액", "실현손익", "실현수익률(%)", "매도일"]
+            position_frame["자산군"] = position_frame["자산군"].map(label_asset_type)
+            for column in ("매수금액", "매도금액", "실현손익"):
+                position_frame[column] = position_frame[column].map(lambda value: f"{float(value or 0):,.0f}")
+            position_frame["실현수익률(%)"] = position_frame["실현수익률(%)"].map(lambda value: f"{float(value or 0):+.2f}")
+            st.subheader("실현 손익 상세")
+            st.dataframe(
+                position_frame.style.map(_holding_value_tone_style, subset=["실현손익", "실현수익률(%)"]),
+                width="stretch",
+                hide_index=True,
+                height=280,
+            )
+        elif realized_positions:
+            st.info("선택한 기간에 실현된 매도 포지션이 없습니다.")
+        else:
+            st.info("아직 실현손익을 계산할 매도 거래가 없습니다.")
 
     if visible_logs:
         account_name_map = {int(item["id"]): account_label(item) for item in accounts}
+        table_context: dict[Any, Any] = {
+            **account_name_map,
+            "realized_profit_rate_by_sell_log_id": realized_rate_map,
+        }
         st.subheader("거래 기록")
+        filter_search_key = f"{TRADE_LOG_SEARCH_KEY}:{account['id']}"
+        filter_type_key = f"{TRADE_LOG_TYPE_FILTER_KEY}:{account['id']}"
+        filter_asset_key = f"{TRADE_LOG_ASSET_FILTER_KEY}:{account['id']}"
+        filter_date_key = f"{TRADE_LOG_DATE_FILTER_KEY}:{account['id']}"
+        filter_page_key = f"trade-log-page:{account['id']}"
+        filter_signature_key = f"trade-log-filter-signature:{account['id']}"
+        if st.session_state.get(filter_type_key) not in TRADE_LOG_TYPE_FILTER_OPTIONS:
+            st.session_state[filter_type_key] = "all"
+        if st.session_state.get(filter_asset_key) not in TRADE_LOG_ASSET_FILTER_OPTIONS:
+            st.session_state[filter_asset_key] = "all"
+        if st.session_state.get(filter_date_key) not in TRADE_LOG_DATE_FILTER_OPTIONS:
+            st.session_state[filter_date_key] = "all"
+
+        with st.container(border=True, key="trade-log-filter-panel"):
+            filter_cols = st.columns((2.2, 1.05, 1.05, 1.05, 0.9), gap="small", vertical_alignment="bottom")
+            with filter_cols[0]:
+                search_value = st.text_input(
+                    "상품 검색",
+                    key=filter_search_key,
+                    placeholder="상품명 또는 코드",
+                    label_visibility="collapsed",
+                )
+            with filter_cols[1]:
+                selected_trade_type = st.selectbox(
+                    "거래 유형",
+                    options=list(TRADE_LOG_TYPE_FILTER_OPTIONS),
+                    format_func=label_trade_log_type_filter,
+                    key=filter_type_key,
+                    label_visibility="collapsed",
+                )
+            with filter_cols[2]:
+                selected_asset_type = st.selectbox(
+                    "자산 구분",
+                    options=list(TRADE_LOG_ASSET_FILTER_OPTIONS),
+                    format_func=label_trade_log_asset_filter,
+                    key=filter_asset_key,
+                    label_visibility="collapsed",
+                )
+            with filter_cols[3]:
+                selected_date_filter = st.selectbox(
+                    "날짜 범위",
+                    options=list(TRADE_LOG_DATE_FILTER_OPTIONS),
+                    format_func=label_trade_log_date_filter,
+                    key=filter_date_key,
+                    label_visibility="collapsed",
+                )
+
+            current_signature = trade_log_filter_signature(
+                str(search_value or ""),
+                str(selected_trade_type or "all"),
+                str(selected_asset_type or "all"),
+                str(selected_date_filter or "all"),
+            )
+            if st.session_state.get(filter_signature_key) != current_signature:
+                st.session_state[filter_signature_key] = current_signature
+                st.session_state[filter_page_key] = 1
+
+            filtered_logs = filter_trade_logs(
+                visible_logs,
+                search=str(search_value or ""),
+                trade_type=str(selected_trade_type or "all"),
+                asset_type=str(selected_asset_type or "all"),
+                date_filter=str(selected_date_filter or "all"),
+            )
+            export_frame = build_trade_log_export_frame(filtered_logs, realized_rate_map)
+            with filter_cols[4]:
+                st.download_button(
+                    "CSV",
+                    data=export_frame.to_csv(index=False).encode("utf-8-sig"),
+                    file_name=f"trade_logs_{account['id']}.csv",
+                    mime="text/csv",
+                    width="stretch",
+                )
+
+            total_buy_count = sum(1 for row in visible_logs if normalize_trade_log_type(row.get("trade_type")) == "buy")
+            total_sell_count = sum(1 for row in visible_logs if normalize_trade_log_type(row.get("trade_type")) == "sell")
+            st.markdown(
+                (
+                    '<div class="trade-log-result-summary">'
+                    f"<span>전체 <strong>{len(visible_logs):,}건</strong></span>"
+                    f"<span>매수 <strong class=\"trade-log-result-summary__buy\">{total_buy_count:,}건</strong></span>"
+                    f"<span>매도 <strong class=\"trade-log-result-summary__sell\">{total_sell_count:,}건</strong></span>"
+                    f"<span>필터 결과 <strong>{len(filtered_logs):,}건</strong></span>"
+                    "</div>"
+                ),
+                unsafe_allow_html=True,
+            )
+
+        page_logs, current_page, total_pages, page_start, page_end = paginate_trade_logs(
+            filtered_logs,
+            page=int(st.session_state.get(filter_page_key, 1) or 1),
+            page_size=TRADE_LOG_PAGE_SIZE,
+        )
+        st.session_state[filter_page_key] = current_page
         edit_state_key = f"trade-log-editing:{account['id']}"
         delete_state_key = f"trade-log-delete-pending:{account['id']}"
-        log_by_id = {int(row["id"]): row for row in visible_logs if row.get("id") is not None}
+        log_by_id = {int(row["id"]): row for row in filtered_logs if row.get("id") is not None}
         editing_log_id = _optional_int(st.session_state.get(edit_state_key))
         delete_log_id = _optional_int(st.session_state.get(delete_state_key))
         if editing_log_id is None and edit_state_key in st.session_state:
             st.session_state.pop(edit_state_key, None)
         if delete_log_id is None and delete_state_key in st.session_state:
             st.session_state.pop(delete_state_key, None)
-        with st.container(border=True):
-            header_columns = st.columns(TRADE_LOG_TABLE_COLUMN_WEIGHTS, gap="small")
-            for column, label in zip(header_columns, TRADE_LOG_TABLE_HEADER_LABELS):
-                with column:
-                    st.caption(label)
 
-            for row in visible_logs:
-                log_id = int(row["id"])
-                row_columns = st.columns(TRADE_LOG_TABLE_COLUMN_WEIGHTS, gap="small")
-                for column, field_name in zip(row_columns[:-1], TRADE_LOG_TABLE_DISPLAY_FIELDS):
+        if page_logs:
+            with st.container(border=True, key="trade-log-table"):
+                header_columns = st.columns(TRADE_LOG_TABLE_COLUMN_WEIGHTS, gap="small")
+                for column, label in zip(header_columns, TRADE_LOG_TABLE_HEADER_LABELS):
                     with column:
-                        cell_value = format_trade_log_cell(row, field_name, account_name_map)
-                        if field_name == "trade_type":
-                            st.markdown(cell_value, unsafe_allow_html=True)
+                        st.caption(label)
+
+                for row in page_logs:
+                    log_id = int(row["id"])
+                    row_columns = st.columns(TRADE_LOG_TABLE_COLUMN_WEIGHTS, gap="small")
+                    for column, field_name in zip(row_columns[:-1], TRADE_LOG_TABLE_DISPLAY_FIELDS):
+                        with column:
+                            cell_value = format_trade_log_cell(row, field_name, table_context)
+                            if field_name == "trade_type":
+                                st.markdown(cell_value, unsafe_allow_html=True)
+                            elif field_name == "realized_profit_rate":
+                                st.markdown(trade_log_realized_rate_html(cell_value), unsafe_allow_html=True)
+                            else:
+                                st.write(cell_value)
+                    with row_columns[-1]:
+                        if is_trade_log_editable(row):
+                            action_col_1, action_col_2 = st.columns(2, gap="small")
+                            with action_col_1:
+                                if st.button("수정", key=f"trade-log-edit-button:{account['id']}:{log_id}", width="stretch"):
+                                    st.session_state[edit_state_key] = log_id
+                                    st.session_state.pop(delete_state_key, None)
+                                    st.rerun()
+                            with action_col_2:
+                                if st.button("삭제", key=f"trade-log-delete-button:{account['id']}:{log_id}", width="stretch"):
+                                    st.session_state[delete_state_key] = log_id
+                                    st.session_state.pop(edit_state_key, None)
+                                    st.rerun()
                         else:
-                            st.write(cell_value)
-                with row_columns[-1]:
-                    if is_trade_log_editable(row):
-                        action_col_1, action_col_2 = st.columns(2, gap="small")
-                        with action_col_1:
-                            if st.button("수정", key=f"trade-log-edit-button:{account['id']}:{log_id}", width="stretch"):
-                                st.session_state[edit_state_key] = log_id
-                                st.session_state.pop(delete_state_key, None)
-                                st.rerun()
-                        with action_col_2:
-                            if st.button("삭제", key=f"trade-log-delete-button:{account['id']}:{log_id}", width="stretch"):
-                                st.session_state[delete_state_key] = log_id
-                                st.session_state.pop(edit_state_key, None)
-                                st.rerun()
-                    else:
-                        st.caption("-")
-                if editing_log_id == log_id:
-                    render_trade_log_edit_form(
-                        account,
-                        row,
-                        edit_state_key=edit_state_key,
-                        editing_log_id=log_id,
-                    )
-                st.divider()
+                            st.caption("-")
+                    if editing_log_id == log_id:
+                        render_trade_log_edit_form(
+                            account,
+                            row,
+                            edit_state_key=edit_state_key,
+                            editing_log_id=log_id,
+                        )
+                    st.divider()
+
+                st.markdown(
+                    (
+                        '<div class="trade-log-pagination">'
+                        f"<span>전체 {len(filtered_logs):,}건 중 {page_start:,}-{page_end:,}</span>"
+                        f"<span>{current_page:,} / {total_pages:,} 페이지</span>"
+                        "</div>"
+                    ),
+                    unsafe_allow_html=True,
+                )
+                pager_prev_col, pager_spacer_col, pager_next_col = st.columns((1, 4, 1), gap="small")
+                with pager_prev_col:
+                    if st.button("이전", key=f"trade-log-page-prev:{account['id']}", width="stretch", disabled=current_page <= 1):
+                        st.session_state[filter_page_key] = max(current_page - 1, 1)
+                        st.rerun()
+                with pager_spacer_col:
+                    st.caption(f"페이지당 {TRADE_LOG_PAGE_SIZE}건")
+                with pager_next_col:
+                    if st.button("다음", key=f"trade-log-page-next:{account['id']}", width="stretch", disabled=current_page >= total_pages):
+                        st.session_state[filter_page_key] = min(current_page + 1, total_pages)
+                        st.rerun()
+        else:
+            st.info("선택한 필터 조건에 맞는 거래 기록이 없습니다.")
 
         if editing_log_id is not None and editing_log_id not in log_by_id:
             st.session_state.pop(edit_state_key, None)

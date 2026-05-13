@@ -417,6 +417,7 @@ def realized_summary(trade_logs: list[dict[str, Any]]) -> dict[str, Any]:
         profit_loss = total_amount - matched_cost
         realized.append(
             {
+                "sell_log_id": log.get("id"),
                 "symbol": display_symbol,
                 "product_name": log.get("product_name"),
                 "asset_type": log.get("asset_type"),

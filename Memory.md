@@ -25,6 +25,7 @@
 - [x] 모바일 보유 종목 영역을 640px 이하 카드형 리스트로 전환
 - [x] PC 보유 종목 테이블 아래 모바일 카드 텍스트 노출 hotfix 반영
 - [x] `docs/report.md` 기준 거래 UI/UX 단계별+화면 목업 보정 패치 반영
+- [x] `ui 개선/report2.md` 기준 대시보드 KPI/실현손익/거래 기록 UI 개선 반영
 - [ ] KIS WebSocket worker 장시간 실행 중 재연결/상태 복구를 장중 운영 로그 기준으로 추가 점검
 - [ ] 모바일 viewport에서 대시보드 트리맵/보유 종목 표 가독성 확인
 - [ ] 스냅샷 저장, CSV export, 운영 정리 작업의 로딩 상태 표시 누락 여부 점검
@@ -88,6 +89,7 @@ python scripts/verify_streamlit_deployment.py --page data --expect-backend supab
 - PC 보유 종목 모바일 카드 노출 hotfix 배포 커밋 `199c853`을 `origin/main`에 push했고 Streamlit Cloud 운영 dashboard 검증이 성공했다.
 - 검증 완료 패치 묶음 배포 커밋 `d4e9813`을 `origin/main`에 push했고 Streamlit Cloud 운영 dashboard 검증이 성공했다.
 - BUG-02 배포 커밋 `21df7c6`을 `origin/main`에 push했고 Streamlit Cloud 운영 dashboard 검증이 성공했다.
+- 거래 UI/UX 단계별+화면 목업 보정 배포 커밋 `3e023e0`을 `origin/main`에 push했고, 수동 재배포 후 Streamlit Cloud 운영 trades 검증이 성공했다.
 - 배포 앱은 `Supabase` backend를 사용 중인 것으로 최근 검증에 기록됨.
 - 운영 Supabase realtime 테이블 노출 상태는 최근 기록 기준 `accounts`, `realtime_worker_status`, `realtime_price_ticks` 모두 HTTP `200`.
 - GitHub Actions `KIS Realtime Worker` manual run `25771266167`은 job `success`로 기록됨.
@@ -97,6 +99,7 @@ python scripts/verify_streamlit_deployment.py --page data --expect-backend supab
 - 계좌 `23`은 tick 이력이 없어 `last_quote_at=null` 유지.
 - `setup_supabase.sql` 정책 재실행 안정화는 로컬 문법/테스트/배포 데이터 페이지 검증까지 완료.
 - 원격 SQL Editor에서 정책 블록 직접 재실행 검증은 아직 남아 있음.
+- `ui 개선/report2.md` 기반 대시보드 KPI/실현손익/거래 기록 개선은 로컬 SQLite 기준 구현/검증 완료 상태이며 아직 커밋/원격 배포는 하지 않았다.
 
 ## 핵심 설계 결정 요약
 - Supabase를 기본 저장소로 사용하고, 로컬/개발 fallback은 SQLite로 유지한다.
@@ -118,40 +121,12 @@ python scripts/verify_streamlit_deployment.py --page data --expect-backend supab
 
 ## 최신 검증 결과
 - 상세 검증 이력은 `docs/VALIDATION.md`에 정리했다.
-- 거래 UI/UX 단계별+화면 목업 보정 패치: `python -m compileall app.py src scripts tests pages` 성공.
-- 거래 UI/UX 단계별+화면 목업 보정 패치: `python -m unittest discover -s tests -p "test_*.py"` 성공, 173 tests.
-- 거래 UI/UX 단계별+화면 목업 보정 패치 로컬 브라우저 검증: 임시 SQLite DB 기반 Streamlit `http://127.0.0.1:8545` 거래 페이지 1440px/700px/390px Playwright 검증 성공. `상품 등록`, `상품명 또는 코드 검색`, `예상 매입금액`, `개인 입금`, `+50만`, `✓ 입금 기록`, `거래 기록` 표시와 `horizontal_overflow=false` 확인.
-- 거래 UI/UX 단계별+화면 목업 보정 패치 배포 검증 스크립트 로컬 확인: `python scripts/verify_streamlit_deployment.py --url http://127.0.0.1:8545 --page trades --expect-backend sqlite --wait-ms 15000 --click-demo --debug-dir /tmp/retirement-portfolio-verify-debug` 성공, `ok=true`, backend `SQLite`.
-- BUG-02 CSS surface 토큰 교체: `python -m unittest tests.test_app_dashboard.ThemeStylesheetTests` 성공, 8 tests.
-- UG-01 CSS 누락 안전장치: `python -m compileall src/ui/app_core.py tests/test_app_dashboard.py` 성공.
-- UG-01 CSS 누락 안전장치: `python -m unittest tests.test_app_dashboard.ThemeStylesheetTests` 성공, 7 tests.
-- 최신 전체 검증: `python -m compileall app.py src scripts tests pages` 성공.
-- 최신 전체 검증: `python -m unittest discover -s tests -p "test_*.py"` 성공, 157 tests.
-- GitHub Actions cache/concurrency 패치 검증: `git diff --check -- .github/workflows/kis-realtime-worker.yml .github/workflows/daily-rollup.yml Memory.md docs/VALIDATION.md` 성공.
-- GitHub Actions cache/concurrency 패치 검증: `python -m compileall app.py src scripts tests pages` 성공.
-- GitHub Actions cache/concurrency 패치 검증: `python -m unittest discover -s tests -p "test_*.py"` 성공, 157 tests.
-- 자산배분 당일 추세 패치 검증: `python -m unittest tests.test_market tests.test_app_dashboard.AllocationTreemapVisualMapTests tests.test_app_dashboard.SelectedHoldingTrendFrameTests` 성공, 27 tests.
-- 자산배분 당일 추세 패치 검증: `python -m compileall app.py src scripts tests pages` 성공.
-- 자산배분 당일 추세 패치 검증: `python -m unittest discover -s tests -p "test_*.py"` 성공, 163 tests.
-- 직접 조회 확인: `005930`, `396500`, `0113D0`, `0015S0` 모두 Naver source와 당일 timeline 생성 확인.
-- 모바일 보유 종목 카드 패치 검증: `python -m unittest tests.test_app_dashboard.HoldingsTableDisplayTests tests.test_app_dashboard.ThemeStylesheetTests` 성공, 16 tests.
-- 모바일 보유 종목 카드 패치 검증: `python -m compileall app.py src scripts tests pages` 성공.
-- 모바일 보유 종목 카드 패치 검증: `python -m unittest discover -s tests -p "test_*.py"` 성공, 164 tests.
-- 로컬 Streamlit `http://127.0.0.1:8542` 데모 대시보드 1280px/390px 브라우저 검증 성공. 390px에서 table `none`, mobile cards `grid`, overflow 없음.
-- PC 보유 종목 모바일 카드 노출 hotfix 검증: `python -m unittest tests.test_app_dashboard.HoldingsTableDisplayTests tests.test_app_dashboard.ThemeStylesheetTests` 성공, 16 tests.
-- PC 보유 종목 모바일 카드 노출 hotfix 검증: `python -m compileall app.py src scripts tests pages` 성공.
-- PC 보유 종목 모바일 카드 노출 hotfix 검증: `python -m unittest discover -s tests -p "test_*.py"` 성공, 164 tests.
-- 로컬 Streamlit `http://127.0.0.1:8543` 데모 대시보드 브라우저 검증 성공. 1280px에서 table `block`, cards `none`; 390px에서 table `none`, cards `grid`; overflow 없음.
-- PC 보유 종목 모바일 카드 노출 hotfix 배포 검증: 커밋 `199c853` push 후 `python scripts/verify_streamlit_deployment.py --page dashboard --expect-backend supabase --wait-ms 15000` 성공, backend `Supabase`, `allocation_status=지연 데이터 표시 중`, `ok=true`.
-- 배포 검증: 커밋 `d4e9813` push 후 `python scripts/verify_streamlit_deployment.py --page dashboard --expect-backend supabase --wait-ms 15000` 성공, backend `Supabase`, `allocation_status=지연 데이터 표시 중`, `ok=true`.
-- 대표 배포 검증 기록:
-  - `2026-05-13` PC 보유 종목 모바일 카드 노출 hotfix 배포 검증 성공: 커밋 `199c853`, 운영 앱 dashboard, backend `Supabase`, `allocation_status=지연 데이터 표시 중`, `ok=true`
-  - `2026-05-13` 검증 완료 패치 묶음 배포 검증 성공: 커밋 `d4e9813`, 운영 앱 dashboard, backend `Supabase`, `allocation_status=지연 데이터 표시 중`, `ok=true`
-  - `2026-05-13` BUG-02 CSS surface 토큰 배포 검증 성공: 커밋 `21df7c6`, 운영 앱 dashboard, backend `Supabase`, `allocation_status=지연 데이터 표시 중`, `ok=true`
-  - `2026-05-13` DESIGN-04 KPI 반응형 배포 검증 성공: 운영 앱 dashboard, backend `Supabase`, allocation status `실시간 반영 중`, `ok=true`
-  - `python3 scripts/verify_streamlit_deployment.py --page data --expect-backend supabase --wait-ms 12000` 성공
-  - Streamlit Cloud 대시보드/거래/데이터 페이지 검증 성공 기록 존재
-- 이번 UG-01/BUG-02 패치는 로컬 코드/단위 테스트/전체 테스트로 검증했고, BUG-02 커밋 `21df7c6` 원격 배포와 운영 dashboard 검증까지 완료했다.
+- `ui 개선/report2.md` 기반 UI 개선: `python -m compileall app.py src scripts tests pages` 성공.
+- `ui 개선/report2.md` 기반 UI 개선: `python -m unittest discover -s tests -p "test_*.py"` 성공, 179 tests.
+- 로컬 SQLite Streamlit 검증: `scripts/verify_streamlit_deployment.py`로 dashboard/trades 각각 backend `SQLite`, `ok=true` 확인.
+- `agent-browser` CLI 설치 검증: `agent-browser 0.27.0`, `agent-browser doctor` 기준 8 pass, 0 fail, headless launch 성공.
+- `agent-browser` UI 검증: `http://127.0.0.1:8546` 데모 대시보드 1440px, 거래 페이지 820px/390px에서 핵심 문구 노출과 `scrollWidth == clientWidth` 확인.
+- 최신 diff 검사: `git diff --check -- src/analytics.py src/ui/app_core.py .streamlit/app.css tests/test_analytics.py tests/test_app_dashboard.py Memory.md docs/VALIDATION.md docs/CHANGELOG.md` 성공.
 
 ## 문서 분리 결과
 - 날짜별 상세 로그:
@@ -179,6 +154,7 @@ python scripts/verify_streamlit_deployment.py --page data --expect-backend supab
 - 배포 커밋: `199c853` `Hide mobile holdings cards on desktop` (`origin/main` push 완료, Streamlit Cloud dashboard 운영 검증 성공)
 - 배포 커밋: `d4e9813` `Improve realtime workflows and mobile holdings` (`origin/main` push 완료, Streamlit Cloud dashboard 운영 검증 성공)
 - 배포 커밋: `5ad9936` `Improve dashboard KPI responsive cards` (`origin/main` push 완료)
+- 배포 커밋: `3e023e0` `Improve trade entry and cash flow UX` (`origin/main` push 완료, Streamlit Cloud trades 수동 재배포 운영 검증 성공)
 - 커밋 시 이번 요청 관련 파일만 선별하고 `data/portfolio.db`, `.local/`, `artifacts/`, `.playtools*/`, `.playwright-browsers/`, `.vscode/`, `data/kis_cache/` 등은 제외한다.
 
 ## 운영 runbook 요약

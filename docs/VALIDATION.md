@@ -7,10 +7,18 @@
 - 최신 검증 결과는 각 작업 완료 시 대표 명령만 갱신한다.
 
 ## 최신 대표 검증 결과
+- `ui 개선/report2.md` 기반 대시보드 KPI/실현손익/거래 기록 UI 개선: `python -m compileall app.py src scripts tests pages` 성공.
+- `ui 개선/report2.md` 기반 대시보드 KPI/실현손익/거래 기록 UI 개선: `python -m unittest discover -s tests -p "test_*.py"` 성공, 179 tests.
+- 대상 단위 검증: `python -m unittest tests.test_analytics.AccountSummaryTests.test_realized_summary_keeps_sell_log_id_for_trade_table_link tests.test_app_dashboard.TradeFormResetTests tests.test_app_dashboard.RealizedProfitBarTests tests.test_app_dashboard.ThemeStylesheetTests` 성공, 31 tests.
+- 로컬 Streamlit 검증: `PORTFOLIO_BACKEND=sqlite RETIREMENT_DB_PATH=/tmp/retirement-portfolio-ui-impl-check.db streamlit run app.py --server.port 8546 --server.address 127.0.0.1 --server.headless true` 실행 후 `scripts/verify_streamlit_deployment.py`로 dashboard/trades 각각 backend `SQLite`, `ok=true` 확인.
+- `agent-browser` 설치 검증: `sudo npm install -g agent-browser` 후 `/usr/local/bin/agent-browser`, `agent-browser 0.27.0`, `agent-browser doctor` 기준 8 pass, 0 fail, headless launch 성공.
+- `agent-browser` UI 검증: 로컬 데모 작업공간에서 dashboard 1440px, trades 820px/390px 스크린샷 확인. 거래 페이지에서 `실현손익 요약`, `CSV`, `실현수익률`, `1 / 3 페이지` 노출과 820px/390px `documentElement.scrollWidth == clientWidth` 확인.
+- diff whitespace 검사: `git diff --check -- src/analytics.py src/ui/app_core.py .streamlit/app.css tests/test_analytics.py tests/test_app_dashboard.py Memory.md docs/VALIDATION.md docs/CHANGELOG.md` 성공.
 - 거래 UI/UX 단계별+화면 목업 보정 패치: `python -m compileall app.py src scripts tests pages` 성공.
 - 거래 UI/UX 단계별+화면 목업 보정 패치: `python -m unittest discover -s tests -p "test_*.py"` 성공, 173 tests.
 - 거래 UI/UX 단계별+화면 목업 보정 패치 로컬 브라우저 검증: `PORTFOLIO_BACKEND=sqlite RETIREMENT_DB_PATH=/tmp/retirement-portfolio-ui-check-3.db streamlit run app.py --server.port 8545 --server.address 127.0.0.1 --server.headless true` 실행 후 Playwright 거래 페이지 1440px/700px/390px에서 `상품 등록`, `상품명 또는 코드 검색`, `예상 매입금액`, `개인 입금`, `+50만`, `✓ 입금 기록`, `거래 기록` 표시와 `horizontal_overflow=false` 확인.
 - 거래 UI/UX 단계별+화면 목업 보정 패치 배포 검증 스크립트 로컬 확인: `python scripts/verify_streamlit_deployment.py --url http://127.0.0.1:8545 --page trades --expect-backend sqlite --wait-ms 15000 --click-demo --debug-dir /tmp/retirement-portfolio-verify-debug` 성공, `ok=true`, backend `SQLite`.
+- 거래 UI/UX 단계별+화면 목업 보정 운영 검증: 커밋 `3e023e0` push 및 수동 재배포 후 `python scripts/verify_streamlit_deployment.py --page trades --expect-backend supabase --wait-ms 15000 --debug-dir artifacts/deploy-verify-trades-3e023e0-manual-redeploy` 성공, `ok=true`, backend `Supabase`.
 - PC 보유 종목 모바일 카드 노출 hotfix: `python -m compileall src/ui/app_core.py tests/test_app_dashboard.py` 성공.
 - PC 보유 종목 모바일 카드 노출 hotfix: `python -m unittest tests.test_app_dashboard.HoldingsTableDisplayTests tests.test_app_dashboard.ThemeStylesheetTests` 성공, 16 tests.
 - PC 보유 종목 모바일 카드 노출 hotfix: `python -m compileall app.py src scripts tests pages` 성공.
