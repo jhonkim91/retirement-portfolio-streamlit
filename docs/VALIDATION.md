@@ -7,6 +7,22 @@
 - 최신 검증 결과는 각 작업 완료 시 대표 명령만 갱신한다.
 
 ## 최신 대표 검증 결과
+- BUG-02 CSS surface 토큰 교체: `python -m unittest tests.test_app_dashboard.ThemeStylesheetTests` 성공, 8 tests.
+- BUG-02 CSS surface 토큰 교체: `python -m compileall app.py src scripts tests pages` 성공.
+- BUG-02 CSS surface 토큰 교체: `python -m unittest discover -s tests -p "test_*.py"` 성공, 157 tests.
+- UG-01 CSS 누락 안전장치: `python -m compileall src/ui/app_core.py tests/test_app_dashboard.py` 성공.
+- UG-01 CSS 누락 안전장치: `python -m unittest tests.test_app_dashboard.ThemeStylesheetTests` 성공, 7 tests.
+- UG-01 CSS 누락 안전장치: `python -m compileall app.py src scripts tests pages` 성공.
+- UG-01 CSS 누락 안전장치: `python -m unittest discover -s tests -p "test_*.py"` 성공, 156 tests.
+- DESIGN-05 팔레트 패치: `python -m compileall src/ui/app_core.py tests/test_app_dashboard.py` 성공.
+- DESIGN-05 팔레트 패치: `python -m unittest tests.test_app_dashboard.ThemeStylesheetTests` 성공, 6 tests.
+- DESIGN-05 팔레트 패치: `python -m compileall app.py src scripts tests pages` 성공.
+- DESIGN-05 팔레트 패치: `python -m unittest discover -s tests -p "test_*.py"` 성공, 155 tests.
+- DESIGN-03 차트 패널 카드감 패치: `python -m compileall tests/test_app_dashboard.py` 성공.
+- DESIGN-03 차트 패널 카드감 패치: `python -m unittest tests.test_app_dashboard.ThemeStylesheetTests` 성공, 6 tests.
+- DESIGN-03 차트 패널 카드감 패치: `python -m compileall app.py src scripts tests pages` 성공.
+- DESIGN-03 차트 패널 카드감 패치: `python -m unittest discover -s tests -p "test_*.py"` 성공, 155 tests.
+- DESIGN-03 로컬 브라우저 부분 검증: 로컬 Streamlit `http://127.0.0.1:8535`에서 allocation 패널 `borderRadius=24px`, `shadow-card`, `overflow=hidden`, `bodyOverflows=false` 확인. Chromium headless shell 1회 SIGSEGV와 데모 진입 timeout으로 전체 차트 패널 DOM 확인은 완료하지 못함.
 - DESIGN-04 KPI 반응형 배포 검증: `git push origin main`으로 커밋 `5ad9936` 배포 트리거 후 `python scripts/verify_streamlit_deployment.py --page dashboard --expect-backend supabase --wait-ms 15000` 성공.
 - DESIGN-04 KPI 반응형 grid 패치: `python -m compileall src/ui/app_core.py tests/test_app_dashboard.py` 성공.
 - DESIGN-04 KPI 반응형 grid 패치: `python -m unittest tests.test_app_dashboard.ThemeStylesheetTests` 성공, 6 tests.
@@ -68,6 +84,21 @@
 - Streamlit Cloud 대시보드/거래/데이터 페이지 원격 검증 성공 기록 있음.
 
 ## 2026-05-13 검증 요약
+- BUG-02 CSS surface 토큰 교체 검증.
+  - 우선 교체 대상 selector와 주요 카드/표면 배경의 `#ffffff`, `rgba(255, 255, 255, ...)` 하드코딩을 `var(--surface-strong)` 또는 `color-mix(...)`로 전환.
+  - 우선 교체 대상 블록에 흰색 배경 하드코딩이 남지 않는 회귀 테스트 추가.
+  - 스타일시트 테스트, 전체 compileall, 전체 unittest discover 성공.
+- UG-01 CSS 누락 안전장치 검증.
+  - `.streamlit/app.css`가 누락되거나 읽기 실패해도 `render_app_stylesheet()`가 빈 문자열을 반환해 앱 렌더링을 중단하지 않도록 보강.
+  - CSS 누락 회귀 테스트, 변경 파일 compileall, 전체 compileall/unittest discover 성공.
+- DESIGN-05 은퇴/포트폴리오 팔레트 고급화 검증.
+  - `.streamlit/config.toml` theme와 `DEFAULT_THEME_SETTINGS` fallback을 새 indigo/navy 팔레트로 동기화.
+  - `load_design_tokens()` brand/hero/status/chart 파생 색상이 새 토큰으로 렌더링되는지 스타일시트 테스트로 확인.
+  - 전체 compileall과 unittest discover 성공.
+- DESIGN-03 차트 패널 카드감 보강 검증.
+  - 네 차트 패널과 내부 Streamlit border wrapper 스타일을 스타일시트 회귀 테스트로 확인.
+  - 전체 compileall과 unittest discover 성공.
+  - 로컬 브라우저에서는 allocation 패널 스타일과 가로 overflow 없음은 확인했으나, Playwright/Chromium headless 불안정으로 전체 차트 패널 DOM 검증은 부분 완료 상태.
 - DESIGN-04 KPI 반응형 배포 검증.
   - 커밋 `5ad9936` `Improve dashboard KPI responsive cards`를 `origin/main`에 push해 Streamlit Cloud 자동 배포를 트리거.
   - 운영 앱 `https://retirement-portfolio-app-nh2vq9ferqnpehsslbykbe.streamlit.app/` 대시보드 검증 성공.

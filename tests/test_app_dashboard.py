@@ -4,6 +4,7 @@ import inspect
 import importlib.util
 from pathlib import Path
 import sys
+import tempfile
 import types
 import unittest
 
@@ -45,20 +46,30 @@ class ThemeStylesheetTests(unittest.TestCase):
 
         tokens = dashboard_app.load_design_tokens()
 
-        self.assertEqual(tokens["theme_primary_color"], "#33658A")
-        self.assertEqual(tokens["theme_background_color"], "#F8FAFC")
-        self.assertEqual(tokens["theme_secondary_background_color"], "#F0F4F8")
-        self.assertEqual(tokens["theme_text_color"], "#102A43")
-        self.assertEqual(tokens["chart_up_color"], "#256F68")
-        self.assertEqual(tokens["chart_down_color"], "#D94841")
-        self.assertEqual(tokens["chart_line_color"], "#17324D")
+        self.assertEqual(tokens["theme_primary_color"], "#3B5BDB")
+        self.assertEqual(tokens["theme_background_color"], "#F6F8FB")
+        self.assertEqual(tokens["theme_secondary_background_color"], "#EEF2F7")
+        self.assertEqual(tokens["theme_text_color"], "#0F172A")
+        self.assertEqual(tokens["brand_deep_color"], "#0F172A")
+        self.assertEqual(tokens["brand_accent_color"], "#3B5BDB")
+        self.assertEqual(tokens["brand_hover_color"], "#2F47B8")
+        self.assertEqual(tokens["status_good_color"], "#0F766E")
+        self.assertEqual(tokens["chart_up_color"], "#0F766E")
+        self.assertEqual(tokens["chart_down_color"], "#DC2626")
+        self.assertEqual(tokens["chart_line_color"], "#1E3A8A")
+        self.assertEqual(tokens["chart_accent_color"], "#3B5BDB")
+        self.assertEqual(tokens["chart_accent_strong_color"], "#2F47B8")
 
     def test_render_app_stylesheet_substitutes_theme_variables(self) -> None:
         """외부 CSS 템플릿의 플레이스홀더가 실제 토큰 값으로 치환된다."""
 
         stylesheet = dashboard_app.render_app_stylesheet()
 
-        self.assertIn("--theme-primary: #33658A;", stylesheet)
+        self.assertIn("--theme-primary: #3B5BDB;", stylesheet)
+        self.assertIn("--brand-deep: #0F172A;", stylesheet)
+        self.assertIn("--chart-up: #0F766E;", stylesheet)
+        self.assertIn("--chart-down: #DC2626;", stylesheet)
+        self.assertIn("--chart-line: #1E3A8A;", stylesheet)
         self.assertIn(".dashboard-metric-card", stylesheet)
         self.assertIn(".dashboard-reference-time", stylesheet)
         self.assertIn(".holdings-table-shell", stylesheet)
@@ -70,9 +81,17 @@ class ThemeStylesheetTests(unittest.TestCase):
         self.assertIn("--dashboard-summary-card-height: 128px;", stylesheet)
         self.assertIn("--dashboard-secondary-panel-min-height: 560px;", stylesheet)
         self.assertNotIn("--card-shadow:", stylesheet)
+        self.assertIn(
+            '[data-testid="stSidebar"] {\n    background: linear-gradient(180deg, var(--surface-strong) 0%, var(--theme-secondary-bg) 100%);',
+            stylesheet,
+        )
+        self.assertIn('[data-testid="stVerticalBlockBorderWrapper"] {\n    background: var(--surface-strong);', stylesheet)
+        self.assertIn('[data-testid="stMetric"] {\n    background: var(--surface-strong);', stylesheet)
         self.assertIn(".dashboard-summary-card,\n.dashboard-metric-card", stylesheet)
         self.assertIn("border-radius: var(--radius-xl);", stylesheet)
         self.assertIn("box-shadow: var(--shadow-card);", stylesheet)
+        self.assertIn("color-mix(in srgb, var(--surface-strong) 98%, transparent)", stylesheet)
+        self.assertIn("color-mix(in srgb, var(--surface) 94%, var(--theme-secondary-bg))", stylesheet)
         self.assertIn(".dashboard-summary-card::before,\n.dashboard-metric-card::before", stylesheet)
         self.assertIn("box-shadow: var(--shadow-hover);", stylesheet)
         self.assertIn(".dashboard-summary-card--positive .dashboard-summary-card__delta", stylesheet)
@@ -87,6 +106,13 @@ class ThemeStylesheetTests(unittest.TestCase):
         self.assertIn(".block-container {\n        padding-left: 0.9rem;\n        padding-right: 0.9rem;", stylesheet)
         self.assertIn(".st-key-dashboard-card-principal,\n.st-key-dashboard-card-cash", stylesheet)
         self.assertIn(".st-key-dashboard-panel-selected-trend,\n.st-key-dashboard-panel-holdings {\n    min-height", stylesheet)
+        self.assertIn(".st-key-dashboard-panel-allocation,\n.st-key-dashboard-panel-selected-trend,\n.st-key-dashboard-panel-holdings,\n.st-key-dashboard-panel-holdings-table {\n    background:", stylesheet)
+        self.assertIn("border-radius: var(--radius-xl) !important;\n    box-shadow: var(--shadow-card) !important;", stylesheet)
+        self.assertIn(".st-key-dashboard-panel-allocation [data-testid=\"stVerticalBlockBorderWrapper\"],\n.st-key-dashboard-panel-selected-trend [data-testid=\"stVerticalBlockBorderWrapper\"],\n.st-key-dashboard-panel-holdings [data-testid=\"stVerticalBlockBorderWrapper\"],\n.st-key-dashboard-panel-holdings-table [data-testid=\"stVerticalBlockBorderWrapper\"]", stylesheet)
+        self.assertIn("box-shadow: none !important;\n    border: none !important;\n    background: transparent !important;", stylesheet)
+        self.assertIn(".dashboard-section-header {\n    display: flex;\n    flex-direction: column;\n    gap: 0.28rem;\n    margin-bottom: var(--section-gap);\n    padding: 0.15rem 0.1rem 0.25rem;", stylesheet)
+        self.assertIn(".dashboard-section-header__title {\n    color: var(--brand-deep);\n    font-size: 1.22rem;\n    font-weight: 900;\n    line-height: 1.1;\n    letter-spacing: 0;", stylesheet)
+        self.assertIn(".dashboard-section-header__caption {\n    color: var(--text-muted);\n    font-size: 0.88rem;", stylesheet)
         self.assertIn(".st-key-dashboard-summary-strip .dashboard-summary-card__value", stylesheet)
         self.assertIn(".st-key-dashboard-card-principal .dashboard-summary-card__action--ghost", stylesheet)
         self.assertIn('.st-key-dashboard-secondary-grid [data-testid="stHorizontalBlock"]', stylesheet)
@@ -101,6 +127,29 @@ class ThemeStylesheetTests(unittest.TestCase):
         self.assertIn(".st-key-trade-log-inline-editor-shell", stylesheet)
         self.assertNotIn("${theme_primary_color}", stylesheet)
 
+    def test_priority_surface_blocks_do_not_hardcode_white_backgrounds(self) -> None:
+        """우선 교체 대상 CSS 블록은 흰색 배경 하드코딩 대신 surface 토큰을 사용한다."""
+
+        stylesheet = dashboard_app.render_app_stylesheet()
+        ranges = [
+            ('[data-testid="stSidebar"] {', '[data-testid="stVerticalBlockBorderWrapper"] {'),
+            ('[data-testid="stVerticalBlockBorderWrapper"] {', '[data-testid="stSidebar"] [data-testid="stVerticalBlock"]'),
+            ('[data-testid="stMetric"] {', '[data-testid="stMetricLabel"]'),
+            ('.auth-feature-card {', '.auth-feature-card__index'),
+            ('.st-key-auth-card-shell {', '.st-key-auth-card-shell [data-testid="stTextInput"] [data-baseweb="input"]:focus-within'),
+            ('.st-key-dashboard-panel-allocation,\n.st-key-dashboard-panel-selected-trend,', '.st-key-dashboard-panel-allocation [data-testid="stVerticalBlockBorderWrapper"],'),
+            ('.dashboard-summary-card,\n.dashboard-metric-card {', '.dashboard-summary-card {'),
+        ]
+
+        for start_marker, end_marker in ranges:
+            with self.subTest(start_marker=start_marker):
+                start = stylesheet.index(start_marker)
+                end = stylesheet.index(end_marker, start + len(start_marker))
+                block = stylesheet[start:end].lower()
+
+                self.assertNotIn("#ffffff", block)
+                self.assertNotIn("rgba(255, 255, 255", block)
+
     def test_render_app_stylesheet_uses_local_system_font_stack(self) -> None:
         """초기 렌더 지연을 줄이기 위해 외부 CDN 폰트 import 없이 시스템 폰트를 사용한다."""
 
@@ -109,6 +158,21 @@ class ThemeStylesheetTests(unittest.TestCase):
         self.assertNotIn("cdn.jsdelivr.net", stylesheet)
         self.assertNotIn("Pretendard", stylesheet)
         self.assertIn('font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI"', stylesheet)
+
+    def test_render_app_stylesheet_returns_empty_string_when_css_missing(self) -> None:
+        """CSS 템플릿 파일이 없어도 앱 렌더링을 중단하지 않는다."""
+
+        original_css_path = dashboard_app.APP_CSS_PATH
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            dashboard_app.render_app_stylesheet.clear()
+            dashboard_app.APP_CSS_PATH = Path(temp_dir) / "missing-app.css"
+
+            try:
+                self.assertEqual(dashboard_app.render_app_stylesheet(), "")
+            finally:
+                dashboard_app.APP_CSS_PATH = original_css_path
+                dashboard_app.render_app_stylesheet.clear()
 
     def test_trade_page_wraps_form_columns_for_mobile_styles(self) -> None:
         """거래 페이지 상단 2열 입력 영역은 모바일 CSS 적용용 key 컨테이너로 감싼다."""

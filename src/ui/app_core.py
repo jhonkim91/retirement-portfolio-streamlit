@@ -198,10 +198,10 @@ APP_ROOT = Path(__file__).resolve().parents[2]
 STREAMLIT_CONFIG_PATH = APP_ROOT / ".streamlit" / "config.toml"
 APP_CSS_PATH = APP_ROOT / ".streamlit" / "app.css"
 DEFAULT_THEME_SETTINGS = {
-    "primaryColor": "#33658A",
-    "backgroundColor": "#F8FAFC",
-    "secondaryBackgroundColor": "#F0F4F8",
-    "textColor": "#102A43",
+    "primaryColor": "#3B5BDB",
+    "backgroundColor": "#F6F8FB",
+    "secondaryBackgroundColor": "#EEF2F7",
+    "textColor": "#0F172A",
 }
 
 
@@ -269,34 +269,34 @@ def load_design_tokens() -> dict[str, str | list[str]]:
     secondary_background_color = str(theme_settings["secondaryBackgroundColor"])
     text_color = str(theme_settings["textColor"])
 
-    brand_deep_color = "#17324D"
-    brand_accent_color = "#33658A"
-    brand_hover_color = "#2B5677"
+    brand_deep_color = "#0F172A"
+    brand_accent_color = primary_color
+    brand_hover_color = "#2F47B8"
     brand_soft_color = _rgba_from_hex(brand_accent_color, 0.12)
     border_soft_color = "#D9E2EC"
     border_emphasis_color = "#CBD5E1"
     text_muted_color = "#697586"
     text_mid_color = "#486581"
     text_dim_color = "#829AB1"
-    status_good_color = "#256F68"
+    status_good_color = "#0F766E"
     status_warn_color = "#D97706"
-    auth_background_start_color = "#17324D"
-    auth_background_end_color = "#102A43"
-    hero_start_color = "#17324D"
-    hero_mid_color = "#1F4667"
-    hero_end_color = "#102A43"
+    auth_background_start_color = "#0F172A"
+    auth_background_end_color = "#0B1120"
+    hero_start_color = "#0F172A"
+    hero_mid_color = "#1E3A8A"
+    hero_end_color = "#0B1120"
     hero_glow_color = _rgba_from_hex("#8ECAE6", 0.16)
     card_shadow_color = "rgba(15, 23, 42, 0.05)"
-    chart_line_color = "#17324D"
-    chart_accent_color = "#33658A"
-    chart_accent_strong_color = "#2B5677"
-    chart_up_color = "#256F68"
-    chart_up_strong_color = "#0F766E"
-    chart_down_color = "#D94841"
-    chart_down_strong_color = "#B93833"
+    chart_line_color = "#1E3A8A"
+    chart_accent_color = brand_accent_color
+    chart_accent_strong_color = "#2F47B8"
+    chart_up_color = "#0F766E"
+    chart_up_strong_color = "#047857"
+    chart_down_color = "#DC2626"
+    chart_down_strong_color = "#B91C1C"
     chart_band_upper_color = "#D97706"
     chart_band_lower_color = "#0F766E"
-    tooltip_background_color = _rgba_from_hex("#17324D", 0.96)
+    tooltip_background_color = _rgba_from_hex(brand_deep_color, 0.96)
     treemap_palette = [
         chart_down_strong_color,
         chart_down_color,
@@ -373,7 +373,13 @@ def load_design_tokens() -> dict[str, str | list[str]]:
 def render_app_stylesheet() -> str:
     """디자인 토큰을 외부 CSS 템플릿에 주입한 결과를 반환한다."""
 
-    css_template = APP_CSS_PATH.read_text(encoding="utf-8")
+    try:
+        css_template = APP_CSS_PATH.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return ""
+    except OSError:
+        return ""
+
     css_variables = {key: str(value) for key, value in DESIGN_TOKENS.items() if isinstance(value, str)}
     return Template(css_template).safe_substitute(css_variables)
 

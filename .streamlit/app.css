@@ -128,12 +128,12 @@ h6 {
 
 /* Streamlit 기본 컴포넌트 브리지 */
 [data-testid="stSidebar"] {
-    background: linear-gradient(180deg, #ffffff 0%, var(--theme-secondary-bg) 100%);
+    background: linear-gradient(180deg, var(--surface-strong) 0%, var(--theme-secondary-bg) 100%);
     border-right: 1px solid var(--line-soft);
 }
 
 [data-testid="stVerticalBlockBorderWrapper"] {
-    background: #ffffff;
+    background: var(--surface-strong);
     border: 1px solid var(--line-soft);
     border-radius: var(--panel-radius);
     box-shadow: var(--shadow-soft);
@@ -164,7 +164,7 @@ h6 {
 [data-testid="stDownloadButton"] > button {
     border-radius: 6px;
     border: 1px solid var(--border-emphasis);
-    background: rgba(255, 255, 255, 0.98);
+    background: color-mix(in srgb, var(--surface-strong) 98%, transparent);
     color: var(--brand-deep);
     box-shadow: none;
 }
@@ -173,7 +173,7 @@ h6 {
 [data-testid="stDownloadButton"] > button:hover {
     border-color: color-mix(in srgb, var(--theme-primary) 55%, var(--theme-text));
     color: var(--brand-deep);
-    background: #ffffff;
+    background: var(--surface-strong);
 }
 
 [data-testid="stForm"] {
@@ -183,7 +183,7 @@ h6 {
 [data-testid="stTabs"] [data-baseweb="tab-list"] {
     gap: 0.45rem;
     padding: 0.2rem;
-    background: rgba(255, 255, 255, 0.36);
+    background: color-mix(in srgb, var(--surface-strong) 36%, transparent);
     border: 1px solid var(--line-soft);
     border-radius: 18px;
 }
@@ -309,7 +309,12 @@ h6 {
     height: 100%;
     padding: 1.2rem 1.15rem 1.15rem;
     border-radius: 22px;
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 251, 249, 0.94));
+    background:
+        linear-gradient(
+            180deg,
+            color-mix(in srgb, var(--surface-strong) 98%, transparent),
+            color-mix(in srgb, var(--surface) 94%, var(--theme-secondary-bg))
+        );
     border: 1px solid var(--border-emphasis);
     box-shadow: var(--shadow-card);
 }
@@ -468,7 +473,7 @@ h6 {
     height: 100%;
     padding: 0.9rem 0.95rem;
     border-radius: 16px;
-    background: rgba(255, 255, 255, 0.72);
+    background: color-mix(in srgb, var(--surface-strong) 72%, transparent);
     border: 1px solid var(--line-soft);
 }
 
@@ -480,7 +485,7 @@ h6 {
 .st-key-auth-panel-login,
 .st-key-auth-panel-sign-up,
 .st-key-auth-demo-panel {
-    background: #ffffff;
+    background: var(--surface-strong);
     border-radius: var(--panel-radius);
     box-shadow: var(--shadow-soft);
 }
@@ -490,7 +495,7 @@ h6 {
     margin: 0 auto;
     padding: 2rem;
     border-radius: var(--panel-radius);
-    background: #ffffff;
+    background: var(--surface-strong);
     border: 1px solid var(--line-soft);
     box-shadow: var(--shadow-soft);
 }
@@ -499,7 +504,7 @@ h6 {
     max-width: 500px;
     margin: 0 auto 1rem;
     border-radius: 16px;
-    background: rgba(255, 255, 255, 0.96);
+    background: color-mix(in srgb, var(--surface-strong) 96%, transparent);
     box-shadow: 0 16px 44px rgba(17, 87, 78, 0.14);
 }
 
@@ -511,7 +516,7 @@ h6 {
 .st-key-auth-card-shell [data-testid="stTextInput"] [data-baseweb="input"] {
     border-radius: 6px;
     border: 1px solid var(--border-emphasis);
-    background: #ffffff;
+    background: var(--surface-strong);
     overflow: hidden;
     box-shadow: none;
 }
@@ -519,7 +524,7 @@ h6 {
 .st-key-auth-card-shell [data-testid="stTextInput"] input,
 .st-key-auth-card-shell [data-testid="stTextInput"] [data-baseweb="input"] button {
     min-height: 2.85rem;
-    background: #ffffff;
+    background: var(--surface-strong);
     color: var(--brand-deep);
     box-shadow: none;
 }
@@ -606,6 +611,7 @@ h6 {
     flex-direction: column;
     gap: 0.28rem;
     margin-bottom: var(--section-gap);
+    padding: 0.15rem 0.1rem 0.25rem;
 }
 
 .dashboard-section-header__top {
@@ -629,20 +635,20 @@ h6 {
 
 .dashboard-section-header__title {
     color: var(--brand-deep);
-    font-size: clamp(1.28rem, 1.55vw, 1.9rem);
-    font-weight: 800;
+    font-size: 1.22rem;
+    font-weight: 900;
     line-height: 1.1;
-    letter-spacing: -0.03em;
+    letter-spacing: 0;
     margin: 0;
 }
 
 .dashboard-section-header__title--compact {
-    font-size: clamp(1.12rem, 1.35vw, 1.45rem);
+    font-size: 1.12rem;
 }
 
 .dashboard-section-header__caption {
     color: var(--text-muted);
-    font-size: 0.94rem;
+    font-size: 0.88rem;
     line-height: 1.45;
     margin: 0;
 }
@@ -675,7 +681,7 @@ h6 {
     min-height: 30px;
     border-radius: 999px;
     border: 1px solid var(--line-soft);
-    background: rgba(255, 255, 255, 0.96);
+    background: color-mix(in srgb, var(--surface-strong) 96%, transparent);
     box-sizing: border-box;
 }
 
@@ -739,9 +745,28 @@ h6 {
 
 .st-key-dashboard-panel-allocation,
 .st-key-dashboard-panel-selected-trend,
-.st-key-dashboard-panel-holdings {
-    background: #ffffff;
+.st-key-dashboard-panel-holdings,
+.st-key-dashboard-panel-holdings-table {
+    background:
+        linear-gradient(
+            180deg,
+            color-mix(in srgb, var(--surface-strong) 98%, transparent),
+            color-mix(in srgb, var(--surface) 94%, var(--theme-secondary-bg))
+        ) !important;
+    border: 1px solid rgba(203, 213, 225, 0.72) !important;
+    border-radius: var(--radius-xl) !important;
+    box-shadow: var(--shadow-card) !important;
     overflow: hidden;
+}
+
+.st-key-dashboard-panel-allocation [data-testid="stVerticalBlockBorderWrapper"],
+.st-key-dashboard-panel-selected-trend [data-testid="stVerticalBlockBorderWrapper"],
+.st-key-dashboard-panel-holdings [data-testid="stVerticalBlockBorderWrapper"],
+.st-key-dashboard-panel-holdings-table [data-testid="stVerticalBlockBorderWrapper"] {
+    border-radius: var(--radius-xl) !important;
+    box-shadow: none !important;
+    border: none !important;
+    background: transparent !important;
 }
 
 .st-key-dashboard-summary-strip,
@@ -826,7 +851,7 @@ h6 {
     height: 14px;
     border-radius: 999px;
     border: 1px solid var(--line-soft);
-    background: rgba(255, 255, 255, 0.22);
+    background: color-mix(in srgb, var(--surface-strong) 22%, transparent);
     overflow: hidden;
 }
 
@@ -908,7 +933,11 @@ h6 {
     overflow: hidden;
     isolation: isolate;
     background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.94));
+        linear-gradient(
+            180deg,
+            color-mix(in srgb, var(--surface-strong) 98%, transparent),
+            color-mix(in srgb, var(--surface) 94%, var(--theme-secondary-bg))
+        );
     border: 1px solid rgba(203, 213, 225, 0.78);
     border-radius: var(--radius-xl);
     box-shadow: var(--shadow-card);
@@ -975,7 +1004,7 @@ h6 {
 .st-key-dashboard-cash-card-overlay button,
 .st-key-dashboard-total-value-refresh-overlay button {
     border: 1px solid var(--border-emphasis);
-    background: rgba(255, 255, 255, 0.96);
+    background: color-mix(in srgb, var(--surface-strong) 96%, transparent);
     color: var(--brand-deep);
     font-weight: 700;
 }
@@ -1174,18 +1203,20 @@ h6 {
 .st-key-dashboard-card-total-value,
 .st-key-dashboard-card-profit,
 .st-key-dashboard-card-profit-rate,
+.st-key-dashboard-panel-allocation,
 .st-key-dashboard-panel-selected-trend,
 .st-key-dashboard-panel-holdings,
 .st-key-dashboard-panel-holdings-table {
-    background: #ffffff;
     height: 100%;
 }
 
+.st-key-dashboard-panel-allocation,
 .st-key-dashboard-panel-selected-trend,
 .st-key-dashboard-panel-holdings {
     min-height: var(--dashboard-secondary-panel-min-height);
 }
 
+.st-key-dashboard-panel-allocation [data-testid="stVerticalBlockBorderWrapper"],
 .st-key-dashboard-panel-selected-trend [data-testid="stVerticalBlockBorderWrapper"],
 .st-key-dashboard-panel-holdings [data-testid="stVerticalBlockBorderWrapper"] {
     min-height: var(--dashboard-secondary-panel-min-height);
@@ -1203,12 +1234,12 @@ h6 {
 .st-key-dashboard-panel-holdings-table [data-testid="stDataFrame"],
 .st-key-dashboard-panel-holdings-table [data-testid="stDataFrame"] > div,
 .st-key-dashboard-panel-holdings-table [data-testid="stElementContainer"]:has([data-testid="stDataFrame"]) {
-    background: #ffffff;
+    background: var(--surface-strong);
     border-radius: var(--panel-radius);
 }
 
 .st-key-dashboard-panel-holdings-table canvas {
-    background: #ffffff;
+    background: var(--surface-strong);
 }
 
 .holdings-table-shell {
@@ -1216,7 +1247,7 @@ h6 {
     overflow: auto;
     border: 1px solid var(--line-soft);
     border-radius: var(--panel-radius);
-    background: #ffffff;
+    background: var(--surface-strong);
 }
 
 .holdings-table {
@@ -1224,7 +1255,7 @@ h6 {
     border-collapse: separate;
     border-spacing: 0;
     table-layout: fixed;
-    background: #ffffff;
+    background: var(--surface-strong);
 }
 
 .holdings-table__head,
@@ -1254,7 +1285,7 @@ h6 {
 }
 
 .holdings-table__cell {
-    background: #ffffff;
+    background: var(--surface-strong);
     color: var(--brand-deep);
     font-size: 0.9rem;
     font-weight: 500;
@@ -1335,7 +1366,7 @@ h6 {
 .st-key-dashboard-total-value-refresh-overlay button:focus,
 .st-key-dashboard-total-value-refresh-overlay button:focus-visible {
     border-color: color-mix(in srgb, var(--theme-primary) 56%, var(--theme-text));
-    background: rgba(255, 255, 255, 1);
+    background: var(--surface-strong);
     outline: none;
     box-shadow: none;
 }
@@ -1385,7 +1416,7 @@ h6 {
     font-weight: 700;
     border-radius: 0.58rem;
     border: 1px solid var(--border-emphasis);
-    background: #ffffff;
+    background: var(--surface-strong);
     color: var(--brand-deep);
     box-shadow: none;
     font-size: 0.74rem;
@@ -1396,7 +1427,7 @@ h6 {
 .st-key-dashboard-trend-controls [data-testid="stButton"] > button:focus,
 .st-key-dashboard-trend-controls [data-testid="stButton"] > button:focus-visible {
     border-color: color-mix(in srgb, var(--theme-primary) 56%, var(--theme-text));
-    background: #ffffff;
+    background: var(--surface-strong);
     color: var(--brand-deep);
     outline: none;
     box-shadow: none;
@@ -1463,7 +1494,7 @@ h6 {
     min-height: 2.6rem;
     border-radius: 6px;
     border: 1px solid var(--border-emphasis);
-    background: #ffffff;
+    background: var(--surface-strong);
     color: var(--brand-deep);
     box-shadow: none;
 }

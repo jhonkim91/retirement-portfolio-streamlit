@@ -9,6 +9,21 @@
 ## 최근 완료 변경 요약
 
 ### 2026-05-13
+- BUG-02 CSS surface 토큰 교체.
+  - 우선 교체 대상 selector의 흰색 배경 하드코딩을 `var(--surface-strong)`과 `color-mix(...)` 기반으로 전환.
+  - 인증 카드, 대시보드 패널, KPI 카드, holdings table, 주요 버튼/탭 surface 배경도 토큰 기반으로 정리.
+  - 회귀 테스트와 전체 compileall/unittest discover 검증 완료.
+- UG-01 CSS 파일 누락 안전장치.
+  - `render_app_stylesheet()`가 `.streamlit/app.css` 읽기 실패 시 빈 문자열을 반환하도록 보강.
+  - CSS 템플릿 누락 회귀 테스트를 추가하고 전체 compileall/unittest discover 검증 완료.
+- DESIGN-05 은퇴/포트폴리오 팔레트 고급화.
+  - Streamlit theme를 indigo/navy 기반 `#3B5BDB`, `#F6F8FB`, `#EEF2F7`, `#0F172A`로 변경.
+  - `load_design_tokens()`의 brand/hero/status/chart 색상을 새 팔레트 기준으로 조정하고 fallback theme도 동기화.
+  - 디자인 토큰/스타일시트 회귀 테스트와 전체 unittest discover 검증 완료.
+- DESIGN-03 차트 패널 카드감 보강.
+  - 자산 배분/선택 종목 트렌드/보유 종목/보유 종목 표 패널에 gradient surface, `--radius-xl`, `--shadow-card`, hidden overflow를 적용.
+  - 각 패널 내부 Streamlit border wrapper는 transparent/no-border/no-shadow로 초기화해 카드 안 차트 느낌을 강화.
+  - 대시보드 섹션 헤더 padding, title weight/size, caption size를 조정.
 - DESIGN-04 KPI 카드 반응형 grid 보강.
   - `.dashboard-metric-strip`를 `1180px` 이하 3열, `820px` 이하 2열, `560px` 이하 1열로 전환.
   - 좁은 화면에서 대시보드 섹션 헤더 상태 영역을 세로 정렬하고, 모바일 카드 높이와 본문 좌우 padding을 보정.
