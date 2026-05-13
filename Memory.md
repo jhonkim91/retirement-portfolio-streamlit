@@ -84,6 +84,7 @@ python scripts/verify_streamlit_deployment.py --page data --expect-backend supab
 
 ## 현재 운영 상태
 - 기준일: `2026-05-13`
+- 검증 완료 패치 묶음 배포 커밋 `d4e9813`을 `origin/main`에 push했고 Streamlit Cloud 운영 dashboard 검증이 성공했다.
 - BUG-02 배포 커밋 `21df7c6`을 `origin/main`에 push했고 Streamlit Cloud 운영 dashboard 검증이 성공했다.
 - 배포 앱은 `Supabase` backend를 사용 중인 것으로 최근 검증에 기록됨.
 - 운영 Supabase realtime 테이블 노출 상태는 최근 기록 기준 `accounts`, `realtime_worker_status`, `realtime_price_ticks` 모두 HTTP `200`.
@@ -129,7 +130,9 @@ python scripts/verify_streamlit_deployment.py --page data --expect-backend supab
 - 모바일 보유 종목 카드 패치 검증: `python -m compileall app.py src scripts tests pages` 성공.
 - 모바일 보유 종목 카드 패치 검증: `python -m unittest discover -s tests -p "test_*.py"` 성공, 164 tests.
 - 로컬 Streamlit `http://127.0.0.1:8542` 데모 대시보드 1280px/390px 브라우저 검증 성공. 390px에서 table `none`, mobile cards `grid`, overflow 없음.
+- 배포 검증: 커밋 `d4e9813` push 후 `python scripts/verify_streamlit_deployment.py --page dashboard --expect-backend supabase --wait-ms 15000` 성공, backend `Supabase`, `allocation_status=지연 데이터 표시 중`, `ok=true`.
 - 대표 배포 검증 기록:
+  - `2026-05-13` 검증 완료 패치 묶음 배포 검증 성공: 커밋 `d4e9813`, 운영 앱 dashboard, backend `Supabase`, `allocation_status=지연 데이터 표시 중`, `ok=true`
   - `2026-05-13` BUG-02 CSS surface 토큰 배포 검증 성공: 커밋 `21df7c6`, 운영 앱 dashboard, backend `Supabase`, `allocation_status=지연 데이터 표시 중`, `ok=true`
   - `2026-05-13` DESIGN-04 KPI 반응형 배포 검증 성공: 운영 앱 dashboard, backend `Supabase`, allocation status `실시간 반영 중`, `ok=true`
   - `python3 scripts/verify_streamlit_deployment.py --page data --expect-backend supabase --wait-ms 12000` 성공
@@ -157,6 +160,7 @@ python scripts/verify_streamlit_deployment.py --page data --expect-backend supab
 - 이번 GitHub Actions cache/concurrency 패치 대상 파일은 `.github/workflows/kis-realtime-worker.yml`, `.github/workflows/daily-rollup.yml`, `Memory.md`, `docs/VALIDATION.md`다.
 - 이번 자산배분 당일 추세 패치 대상 파일은 `src/market.py`, `src/kis.py`, `tests/test_market.py`, `README.md`, `docs/DECISIONS.md`, `docs/VALIDATION.md`, `docs/CHANGELOG.md`, `Memory.md`다.
 - 이번 모바일 보유 종목 카드 패치 대상 파일은 `src/ui/app_core.py`, `.streamlit/app.css`, `tests/test_app_dashboard.py`, `docs/VALIDATION.md`, `docs/CHANGELOG.md`, `Memory.md`다.
+- 배포 커밋: `d4e9813` `Improve realtime workflows and mobile holdings` (`origin/main` push 완료, Streamlit Cloud dashboard 운영 검증 성공)
 - 배포 커밋: `5ad9936` `Improve dashboard KPI responsive cards` (`origin/main` push 완료)
 - 커밋 시 이번 요청 관련 파일만 선별하고 `data/portfolio.db`, `.local/`, `artifacts/`, `.playtools*/`, `.playwright-browsers/`, `.vscode/`, `data/kis_cache/` 등은 제외한다.
 

@@ -7,6 +7,7 @@
 - 최신 검증 결과는 각 작업 완료 시 대표 명령만 갱신한다.
 
 ## 최신 대표 검증 결과
+- 검증 완료 패치 묶음 원격 배포 검증: `git push origin main`으로 커밋 `d4e9813` 배포 트리거 후 `python scripts/verify_streamlit_deployment.py --page dashboard --expect-backend supabase --wait-ms 15000` 성공.
 - 모바일 보유 종목 카드 패치: `python -m compileall src/ui/app_core.py tests/test_app_dashboard.py` 성공.
 - 모바일 보유 종목 카드 패치: `python -m unittest tests.test_app_dashboard.HoldingsTableDisplayTests tests.test_app_dashboard.ThemeStylesheetTests` 성공, 16 tests.
 - 모바일 보유 종목 카드 패치: `python -m compileall app.py src scripts tests pages` 성공.
@@ -97,6 +98,9 @@
 - Streamlit Cloud 대시보드/거래/데이터 페이지 원격 검증 성공 기록 있음.
 
 ## 2026-05-13 검증 요약
+- 검증 완료 패치 묶음 원격 배포 검증.
+  - 커밋 `d4e9813` `Improve realtime workflows and mobile holdings`를 `origin/main`에 push해 Streamlit Cloud 자동 배포를 트리거.
+  - 운영 앱 dashboard 검증 성공: 로그인 성공, workspace 표시, backend `Supabase`, allocation status `지연 데이터 표시 중`, `ok=true`.
 - 모바일 보유 종목 카드 패치 검증.
   - 대시보드 현재 보유 종목 패널에서 데스크톱은 기존 11컬럼 테이블을 유지하고, `640px` 이하에서는 테이블을 숨기고 카드 리스트를 표시하도록 보강.
   - 카드에는 상품명, 코드, 자산군, 평가금액, 손익, 수익률, 수량, 현재가, 평단가를 표시하고 손익/수익률은 기존 tone class를 재사용.

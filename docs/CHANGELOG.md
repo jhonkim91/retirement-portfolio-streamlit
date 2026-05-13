@@ -9,6 +9,9 @@
 ## 최근 완료 변경 요약
 
 ### 2026-05-13
+- 검증 완료 패치 묶음 배포.
+  - 커밋 `d4e9813` `Improve realtime workflows and mobile holdings`를 `origin/main`에 push.
+  - Streamlit Cloud 운영 dashboard 검증 성공: backend `Supabase`, `allocation_status=지연 데이터 표시 중`, `ok=true`.
 - 모바일 보유 종목 카드 표시 보강.
   - 대시보드 현재 보유 종목 패널에서 데스크톱 11컬럼 테이블은 유지하고, `640px` 이하 모바일에서는 카드 리스트를 표시.
   - 카드 필드는 상품명, 코드, 자산군, 평가금액, 손익, 수익률, 수량, 현재가, 평단가로 제한하고 손익/수익률 색상은 기존 positive/negative class를 재사용.
