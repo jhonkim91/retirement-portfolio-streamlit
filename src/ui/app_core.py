@@ -583,6 +583,7 @@ CASH_FLOW_NOTES_KEY = "cash_flow_notes"
 TRADE_FORM_RESET_PENDING_KEY = "trade_form_reset_pending"
 CASH_FLOW_FORM_RESET_PENDING_KEY = "cash_flow_form_reset_pending"
 TRADE_PAGE_SUCCESS_MESSAGE_KEY = "trade_page_success_message"
+SIDEBAR_DELETE_ACCOUNT_ID_KEY = "sidebar_delete_account_id"
 PAGE_LABELS = {
     "Dashboard": "대시보드",
     "Trades": "거래",
@@ -637,6 +638,12 @@ CASH_FLOW_TYPE_LABELS = {
     "transfer_in": "계좌 이체 입금",
     "cash_adjustment": "현금 조정",
 }
+CASH_FLOW_TYPES = ("personal_deposit", "employer_deposit", "withdraw")
+CASH_FLOW_QUICK_AMOUNTS = (
+    ("50만", 500_000),
+    ("100만", 1_000_000),
+    ("500만", 5_000_000),
+)
 TABLE_LABELS = {
     "accounts": "계좌",
     "holdings": "보유 종목",
@@ -929,7 +936,7 @@ def trade_log_editor_option_label(log: dict[str, Any]) -> str:
 def trade_submit_button_label(trade_type: str) -> str:
     """거래 저장 버튼 문구를 반환한다."""
 
-    return "상품 추가" if str(trade_type or "").strip().lower() == "buy" else "상품 저장"
+    return "+ 상품 추가" if str(trade_type or "").strip().lower() == "buy" else "상품 저장"
 
 
 def trade_price_label(trade_type: str) -> str:
@@ -970,7 +977,139 @@ def cash_flow_submit_label(flow_type: str) -> str:
     """현금 흐름 저장 버튼 문구를 반환한다."""
 
     normalized = normalize_trade_log_type(flow_type)
-    return "출금 기록" if normalized == "withdraw" else "입금 기록"
+    return "✓ 출금 기록" if normalized == "withdraw" else "✓ 입금 기록"
+
+
+def cash_flow_tab_label(flow_type: str) -> str:
+    """현금 흐름 탭에 표시할 아이콘 포함 라벨을 반환한다."""
+
+    normalized = normalize_trade_log_type(flow_type)
+    return {
+        "personal_deposit": "💰 개인 입금",
+        "employer_deposit": "🏢 회사 납입금",
+        "withdraw": "💸 출금",
+    }.get(normalized, label_cash_flow_type(normalized))
+
+
+def cash_flow_quick_button_label(flow_type: str, label: str) -> str:
+    """현금 흐름 빠른 금액 버튼 라벨을 반환한다."""
+
+    prefix = "-" if normalize_trade_log_type(flow_type) == "withdraw" else "+"
+    return f"{prefix}{label}"
+
+
+def cash_flow_amount_label(flow_type: str) -> str:
+    """현금 흐름 유형에 맞는 금액 입력 필드명을 반환한다."""
+
+    normalized = normalize_trade_log_type(flow_type)
+    return "출금액 (₩)" if normalized == "withdraw" else "입금액 (₩)"
+
+
+def cash_flow_widget_key(base_key: str, flow_type: str) -> str:
+    """현금 흐름 탭별 Streamlit 위젯 key를 만든다."""
+
+    normalized = normalize_trade_log_type(flow_type)
+    return f"{base_key}:{normalized}"
+
+
+def cash_flow_reset_values() -> dict[str, Any]:
+    """현금 흐름 입력 폼 초기화 대상 key와 기본값을 반환한다."""
+
+    values: dict[str, Any] = {
+        CASH_FLOW_AMOUNT_KEY: 0,
+        CASH_FLOW_NOTES_KEY: "",
+    }
+    for flow_type in CASH_FLOW_TYPES:
+        values[cash_flow_widget_key(CASH_FLOW_AMOUNT_KEY, flow_type)] = 0
+        values[cash_flow_widget_key(CASH_FLOW_NOTES_KEY, flow_type)] = ""
+    return values
+
+
+def calculate_trade_total(price: Any, quantity: Any) -> float:
+    """거래 단가와 수량으로 예상 거래 금액을 계산한다."""
+
+    return max(float(price or 0), 0.0) * max(float(quantity or 0), 0.0)
+
+
+def is_trade_submit_disabled(price: Any, quantity: Any) -> bool:
+    """거래 저장 버튼 비활성화 여부를 반환한다."""
+
+    return calculate_trade_total(price, quantity) <= 0
+
+
+def build_trade_total_preview_html(total_amount: Any) -> str:
+    """상품 등록 폼의 예상 매입금액 미리보기 HTML을 만든다."""
+
+    return (
+        '<div class="trade-total-preview">'
+        '<span class="trade-total-preview__label">💰 예상 매입금액</span>'
+        f'<span class="trade-total-preview__value">{html.escape(format_won(total_amount))}</span>'
+        "</div>"
+    )
+
+
+def build_product_code_status_html(symbol: Any) -> str:
+    """상품 코드 입력 상태 라벨 HTML을 만든다."""
+
+    has_symbol = bool(str(symbol or "").strip())
+    status_class = "product-code-status product-code-status--ok" if has_symbol else "product-code-status"
+    status_text = "✓ 확인됨" if has_symbol else "자동 입력 대기"
+    return (
+        '<div class="product-code-status-row">'
+        '<span class="product-code-status-row__label">상품 코드 (자동 입력)</span>'
+        f'<span class="{status_class}">{html.escape(status_text)}</span>'
+        "</div>"
+    )
+
+
+def cash_flow_balance_preview(current_principal: Any, flow_type: str, amount: Any) -> tuple[float, float]:
+    """현금 흐름 저장 전후 예상 원금 잔액을 계산한다."""
+
+    before = float(current_principal or 0)
+    delta = max(float(amount or 0), 0.0)
+    if normalize_trade_log_type(flow_type) == "withdraw":
+        delta *= -1
+    return before, before + delta
+
+
+def build_cash_flow_preview_html(current_principal: Any, flow_type: str, amount: Any) -> str:
+    """현금 흐름 탭의 예상 원금 잔액 미리보기 HTML을 만든다."""
+
+    before, after = cash_flow_balance_preview(current_principal, flow_type, amount)
+    return (
+        '<div class="cash-flow-preview">'
+        '<span class="cash-flow-preview__label">예상 원금 잔액</span>'
+        '<span class="cash-flow-preview__value">'
+        f"{html.escape(format_won(before))} → {html.escape(format_won(after))}"
+        "</span>"
+        "</div>"
+    )
+
+
+def set_session_value(key: str, value: Any) -> None:
+    """위젯 콜백에서 세션 상태 값을 갱신한다."""
+
+    st.session_state[key] = value
+
+
+def prefill_latest_trade_price(symbol: str) -> bool:
+    """상품 후보 선택 시 가능한 경우 최신 가격을 거래 단가에 채운다."""
+
+    normalized_symbol = str(symbol or "").strip()
+    if not normalized_symbol:
+        return False
+    try:
+        quote = fetch_latest_price(normalized_symbol)
+    except Exception:
+        return False
+    try:
+        price = float(quote.get("price") or quote.get("current_price") or 0)
+    except (TypeError, ValueError):
+        return False
+    if price <= 0:
+        return False
+    st.session_state[TRADE_PRICE_KEY] = price
+    return True
 
 
 def format_trade_log_cell(log: dict[str, Any], field_name: str, account_name_map: dict[int, str]) -> str:
@@ -1314,6 +1453,7 @@ def apply_search_product(product: dict[str, Any]) -> None:
     st.session_state[TRADE_SEARCH_QUERY_KEY] = str(product.get("name") or "").strip()
     st.session_state[TRADE_PRODUCT_NAME_KEY] = str(product.get("name") or "").strip()
     st.session_state[TRADE_SYMBOL_KEY] = str(product.get("symbol") or product.get("code") or "").strip()
+    prefill_latest_trade_price(str(st.session_state.get(TRADE_SYMBOL_KEY) or ""))
     selected_type = str(product.get("type") or "").strip().lower()
     selected_exchange = str(product.get("exchange") or "").strip()
     if selected_type in {"fund", "mutualfund"} or selected_exchange == "Fund":
@@ -1355,9 +1495,14 @@ def init_state() -> None:
     st.session_state.setdefault(CASH_FLOW_AMOUNT_KEY, 0)
     st.session_state.setdefault(CASH_FLOW_DATE_KEY, date.today())
     st.session_state.setdefault(CASH_FLOW_NOTES_KEY, "")
+    for flow_type in CASH_FLOW_TYPES:
+        st.session_state.setdefault(cash_flow_widget_key(CASH_FLOW_AMOUNT_KEY, flow_type), 0)
+        st.session_state.setdefault(cash_flow_widget_key(CASH_FLOW_DATE_KEY, flow_type), date.today())
+        st.session_state.setdefault(cash_flow_widget_key(CASH_FLOW_NOTES_KEY, flow_type), "")
     st.session_state.setdefault(TRADE_FORM_RESET_PENDING_KEY, False)
     st.session_state.setdefault(CASH_FLOW_FORM_RESET_PENDING_KEY, False)
     st.session_state.setdefault(TRADE_PAGE_SUCCESS_MESSAGE_KEY, "")
+    st.session_state.setdefault(SIDEBAR_DELETE_ACCOUNT_ID_KEY, None)
 
 
 def apply_pending_form_reset(
@@ -1744,6 +1889,27 @@ def handle_auth_callback() -> bool:
 def account_label(account: dict[str, Any]) -> str:
     account_type = label_account_type(account.get("account_type") or "retirement")
     return f"{account['name']} | {account_type}"
+
+
+def account_type_badge_html(account: dict[str, Any]) -> str:
+    """사이드바 선택 계좌 유형 배지 HTML을 만든다."""
+
+    account_type = html.escape(label_account_type(account.get("account_type") or "retirement"))
+    return (
+        '<div class="sidebar-account-badge-row">'
+        f'<span class="sidebar-account-badge">{account_type}</span>'
+        "</div>"
+    )
+
+
+def render_sidebar_navigation() -> None:
+    """사이드바 상단에 브랜드와 페이지 링크를 렌더링한다."""
+
+    st.markdown('<div class="sidebar-brand">💼 RetirementPort</div>', unsafe_allow_html=True)
+    with st.container(key="sidebar-page-links"):
+        st.page_link("pages/dashboard.py", label=PAGE_LABELS["Dashboard"], icon="📊", width="stretch")
+        st.page_link("pages/trades.py", label=PAGE_LABELS["Trades"], icon="🔄", width="stretch")
+        st.page_link("pages/data.py", label=PAGE_LABELS["Data"], icon="📁", width="stretch")
 
 
 def render_dashboard_metric_strip(cards: list[dict[str, str]]) -> None:
@@ -4288,6 +4454,61 @@ def empty_state() -> None:
                 st.rerun()
 
 
+def render_new_account_form() -> None:
+    """사이드바의 신규 계좌 생성 폼을 렌더링한다."""
+
+    with st.form("new-account-form", clear_on_submit=True):
+        name = st.text_input("계좌 이름")
+        account_type = st.selectbox("유형", ["retirement", "brokerage"], format_func=label_account_type, key="new-account-type")
+        opening_cash = st.number_input("시작 현금", min_value=0, value=0, step=100000, key="new-account-cash")
+        submitted = st.form_submit_button("계좌 추가", width="stretch")
+    if submitted:
+        try:
+            create_account(name=name, account_type=account_type, opening_cash=opening_cash)
+        except Exception as exc:  # noqa: BLE001
+            render_operation_error(exc)
+        else:
+            mark_rollup_dirty()
+            st.success("계좌를 추가했습니다.")
+            st.rerun()
+
+
+@st.dialog("계좌 삭제 확인")
+def render_account_delete_dialog(selected_account: dict[str, Any], account_ids: list[int]) -> None:
+    """선택 계좌 삭제를 최종 확인하는 다이얼로그를 렌더링한다."""
+
+    selected_account_id = int(selected_account["id"])
+    account_name = str(selected_account.get("name") or "선택 계좌")
+    st.warning(f"'{account_name}' 계좌를 삭제하면 보유 종목, 거래 기록, 자산 스냅샷도 함께 삭제됩니다.")
+    confirm_delete_account = st.checkbox(
+        "삭제 내용을 확인했습니다.",
+        key=f"confirm-delete-account:{selected_account_id}",
+    )
+    action_col, cancel_col = st.columns(2, gap="small")
+    with action_col:
+        if st.button(
+            "삭제 확인",
+            key=f"delete-account:{selected_account_id}",
+            width="stretch",
+            type="primary",
+            disabled=not confirm_delete_account,
+        ):
+            try:
+                delete_account(selected_account_id)
+            except Exception as exc:  # noqa: BLE001
+                render_operation_error(exc)
+            else:
+                remaining_account_ids = [account_id for account_id in account_ids if account_id != selected_account_id]
+                st.session_state["selected_account_id"] = remaining_account_ids[0] if remaining_account_ids else None
+                st.session_state[SIDEBAR_DELETE_ACCOUNT_ID_KEY] = None
+                mark_rollup_dirty()
+                st.rerun()
+    with cancel_col:
+        if st.button("취소", key=f"cancel-delete-account:{selected_account_id}", width="stretch"):
+            st.session_state[SIDEBAR_DELETE_ACCOUNT_ID_KEY] = None
+            st.rerun()
+
+
 def sidebar(accounts: list[dict[str, Any]], selected_account_id: int | None, user: dict[str, Any]) -> int:
     """공통 사이드바를 렌더링하고 선택 계좌 id를 반환한다."""
 
@@ -4297,70 +4518,58 @@ def sidebar(accounts: list[dict[str, Any]], selected_account_id: int | None, use
         st.session_state["selected_account_id"] = selected_account_id
 
     with st.sidebar:
-        st.title("내 작업공간")
+        render_sidebar_navigation()
         user_label = user.get("email") or user.get("id") or "로그인 사용자"
-        st.caption("계좌 맥락과 이동 흐름을 한 곳에서 관리합니다.")
+        st.divider()
 
-        with st.container(border=True):
-            st.caption("로그인 계정")
-            st.write(f"`{user_label}`")
-            st.caption("페이지는 좌측 내비게이션에서 전환합니다.")
-            if st.button("로그아웃", width="stretch"):
-                app_auth.sign_out()
-                st.session_state["selected_account_id"] = None
-                st.rerun()
+        with st.container(border=True, key="sidebar-account-panel"):
+            header_col, add_col = st.columns((3.0, 0.72), gap="small", vertical_alignment="center")
+            with header_col:
+                st.caption("내 계좌")
+            with add_col:
+                popover = getattr(st, "popover", None)
+                if callable(popover):
+                    with popover("＋", help="새 계좌 만들기"):
+                        render_new_account_form()
+                elif st.button("＋", key="sidebar-new-account-toggle", help="새 계좌 만들기", width="stretch"):
+                    st.session_state["sidebar_show_new_account_form"] = not bool(
+                        st.session_state.get("sidebar_show_new_account_form")
+                    )
 
-        with st.container(border=True):
-            st.caption("보고 있는 계좌")
             selected_account_id = st.selectbox(
                 "계좌",
                 options=account_ids,
                 index=account_ids.index(selected_account_id),
-                format_func=lambda account_id: account_label(next(account for account in accounts if int(account["id"]) == account_id)),
+                format_func=lambda account_id: str(
+                    next(account for account in accounts if int(account["id"]) == account_id).get("name") or account_id
+                ),
+                label_visibility="collapsed",
             )
             st.session_state["selected_account_id"] = selected_account_id
             selected_account = next(account for account in accounts if int(account["id"]) == int(selected_account_id))
-            st.caption(f"선택 계좌: `{selected_account['name']}`")
-            st.caption(f"계좌 유형: `{label_account_type(selected_account['account_type'])}`")
-            with st.expander("현재 계좌 삭제", expanded=False):
-                st.warning("이 계좌를 삭제하면 보유 종목, 거래 기록, 자산 스냅샷도 함께 삭제됩니다.")
-                confirm_delete_account = st.checkbox(
-                    "삭제 내용을 확인했습니다.",
-                    key=f"confirm-delete-account:{selected_account_id}",
-                )
-                if st.button(
-                    "선택 계좌 삭제",
-                    key=f"delete-account:{selected_account_id}",
-                    width="stretch",
-                    disabled=not confirm_delete_account,
-                ):
-                    try:
-                        delete_account(int(selected_account_id))
-                    except Exception as exc:  # noqa: BLE001
-                        render_operation_error(exc)
-                    else:
-                        remaining_account_ids = [account_id for account_id in account_ids if account_id != int(selected_account_id)]
-                        st.session_state["selected_account_id"] = remaining_account_ids[0] if remaining_account_ids else None
-                        mark_rollup_dirty()
-                        st.rerun()
+            st.markdown(account_type_badge_html(selected_account), unsafe_allow_html=True)
 
-        with st.container(border=True):
-            st.caption("새 계좌 만들기")
-            with st.expander("입력 열기", expanded=False):
-                with st.form("new-account-form", clear_on_submit=True):
-                    name = st.text_input("계좌 이름")
-                    account_type = st.selectbox("유형", ["retirement", "brokerage"], format_func=label_account_type, key="new-account-type")
-                    opening_cash = st.number_input("시작 현금", min_value=0, value=0, step=100000, key="new-account-cash")
-                    submitted = st.form_submit_button("계좌 추가", width="stretch")
-                if submitted:
-                    try:
-                        create_account(name=name, account_type=account_type, opening_cash=opening_cash)
-                    except Exception as exc:  # noqa: BLE001
-                        render_operation_error(exc)
-                    else:
-                        mark_rollup_dirty()
-                        st.success("계좌를 추가했습니다.")
-                        st.rerun()
+            if st.button(
+                "⚙ 계좌 설정",
+                key=f"open-delete-account-dialog:{selected_account_id}",
+                width="stretch",
+                type="secondary",
+            ):
+                st.session_state[SIDEBAR_DELETE_ACCOUNT_ID_KEY] = int(selected_account_id)
+                render_account_delete_dialog(selected_account, account_ids)
+
+            if not callable(getattr(st, "popover", None)) and st.session_state.get("sidebar_show_new_account_form"):
+                with st.expander("새 계좌 만들기", expanded=True):
+                    render_new_account_form()
+
+        st.divider()
+        with st.container(key="sidebar-user-panel"):
+            st.caption("로그인 계정")
+            st.write(f"`{user_label}`")
+            if st.button("로그아웃", width="stretch"):
+                app_auth.sign_out()
+                st.session_state["selected_account_id"] = None
+                st.rerun()
 
     return int(selected_account_id)
 
@@ -4606,10 +4815,7 @@ def trade_entry_page(account: dict[str, Any], holdings: list[dict[str, Any]], ac
     apply_pending_form_reset(
         st.session_state,
         pending_key=CASH_FLOW_FORM_RESET_PENDING_KEY,
-        reset_values={
-            CASH_FLOW_AMOUNT_KEY: 0,
-            CASH_FLOW_NOTES_KEY: "",
-        },
+        reset_values=cash_flow_reset_values(),
     )
 
     st.title("거래")
@@ -4623,24 +4829,22 @@ def trade_entry_page(account: dict[str, Any], holdings: list[dict[str, Any]], ac
     feedback_message = consume_session_message(st.session_state, TRADE_PAGE_SUCCESS_MESSAGE_KEY)
     if feedback_message:
         st.success(feedback_message)
+    logs = list_trade_logs(int(account["id"]))
+    summary = account_summary(account, holdings, trade_logs=logs)
+    current_principal = float(summary["total_principal"] or 0)
     with st.container(key="trade-form-cols"):
         trade_col, cash_flow_col = st.columns((1.45, 1.0), gap="large", vertical_alignment="top")
 
     with trade_col:
-        with st.container(border=True):
+        with st.container(border=True, key="trade-product-entry"):
             st.subheader("상품 등록")
-            st.caption("매입가, 수량/좌수, 매입일을 입력하면 현황과 매매일지에 반영합니다.")
+            st.caption("상품을 검색해 등록하고 예상 매입금액을 확인한 뒤 저장합니다.")
             holding_options = {holding["product_name"]: holding for holding in holdings}
-            trade_type = st.radio(
-                "거래 유형",
-                ["buy", "sell"],
-                format_func=label_trade_type,
-                key=TRADE_TYPE_KEY,
-                horizontal=True,
-                label_visibility="collapsed",
-            )
+            current_trade_type = str(st.session_state.get(TRADE_TYPE_KEY) or "buy")
+            if current_trade_type not in TRADE_TYPE_LABELS:
+                current_trade_type = "buy"
 
-            if holding_options and trade_type == "sell":
+            if holding_options and current_trade_type == "sell":
                 selected_holding_name = st.selectbox(
                     "보유 상품",
                     options=list(holding_options),
@@ -4653,14 +4857,18 @@ def trade_entry_page(account: dict[str, Any], holdings: list[dict[str, Any]], ac
             else:
                 st.session_state[TRADE_PREFILL_MARKER_KEY] = "buy"
 
+            st.markdown(
+                '<div class="trade-search-label">상품명 또는 코드 검색 <span>자동완성</span></div>',
+                unsafe_allow_html=True,
+            )
             keyup_input = load_keyup_runtime()
             search_query = keyup_input(
-                    "상품명 또는 코드",
-                    value=str(st.session_state.get(TRADE_SEARCH_QUERY_KEY) or ""),
-                    key=TRADE_SEARCH_QUERY_KEY,
-                    debounce=150,
-                    placeholder="예: K55207BU0715, 0177N0, 파인인덱스",
-                )
+                "상품명 또는 코드 검색",
+                value=str(st.session_state.get(TRADE_SEARCH_QUERY_KEY) or ""),
+                key=TRADE_SEARCH_QUERY_KEY,
+                debounce=150,
+                placeholder="예: K55207BU0715, 0177N0, 파인인덱스",
+            )
 
             cleaned_search_query = str(search_query or "").strip()
             if cleaned_search_query and cleaned_search_query != str(st.session_state.get(TRADE_PRODUCT_NAME_KEY) or "").strip():
@@ -4680,24 +4888,38 @@ def trade_entry_page(account: dict[str, Any], holdings: list[dict[str, Any]], ac
                     else:
                         st.caption("검색 결과가 없습니다.")
 
+            st.markdown(build_product_code_status_html(st.session_state.get(TRADE_SYMBOL_KEY)), unsafe_allow_html=True)
             symbol = st.text_input(
                 "상품 코드",
                 key=TRADE_SYMBOL_KEY,
                 help="예: 0177N0, 005930, AAPL, K55207BU0715",
+                label_visibility="collapsed",
             )
             st.caption("ETF는 공개 코드, 펀드는 표준코드로 등록하면 자동 가격 조회를 시도합니다.")
 
-            trade_value_col, quantity_col = st.columns(2, gap="medium")
+            trade_value_col, quantity_unit_col = st.columns(2, gap="medium")
             with trade_value_col:
-                price = st.number_input(trade_price_label(trade_type), min_value=0.0, step=100.0, key=TRADE_PRICE_KEY)
-            with quantity_col:
-                quantity = st.number_input("수량/좌수", min_value=0.0, step=1.0, key=TRADE_QUANTITY_KEY)
+                price = st.number_input(trade_price_label(current_trade_type), min_value=0.0, step=100.0, key=TRADE_PRICE_KEY)
+            with quantity_unit_col:
+                quantity_col, unit_col = st.columns((2.2, 0.8), gap="small", vertical_alignment="bottom")
+                with quantity_col:
+                    quantity = st.number_input("수량/좌수", min_value=0.0, step=1.0, key=TRADE_QUANTITY_KEY)
+                with unit_col:
+                    st.selectbox("단위", ["주"], index=0, key=f"trade-unit:{account['id']}", label_visibility="collapsed")
 
-            unit_col, trade_date_col = st.columns(2, gap="medium")
-            with unit_col:
-                st.selectbox("단위", ["주"], index=0, key=f"trade-unit:{account['id']}")
-            with trade_date_col:
-                trade_date = st.date_input(trade_date_label(trade_type), key=TRADE_DATE_KEY)
+            trade_total = calculate_trade_total(price, quantity)
+            st.markdown(build_trade_total_preview_html(trade_total), unsafe_allow_html=True)
+            trade_disabled = is_trade_submit_disabled(price, quantity)
+            if trade_disabled:
+                st.caption("가격과 수량을 0보다 크게 입력하면 저장할 수 있습니다.")
+
+            trade_type = st.radio(
+                "거래 유형",
+                ["buy", "sell"],
+                format_func=label_trade_type,
+                key=TRADE_TYPE_KEY,
+                horizontal=True,
+            )
 
             asset_col, notes_col = st.columns(2, gap="medium")
             with asset_col:
@@ -4710,11 +4932,14 @@ def trade_entry_page(account: dict[str, Any], holdings: list[dict[str, Any]], ac
             with notes_col:
                 notes = st.text_input("메모", key=TRADE_NOTES_KEY, placeholder="선택 입력")
 
+            trade_date = st.date_input(trade_date_label(trade_type), key=TRADE_DATE_KEY)
+
             submitted = st.button(
                 trade_submit_button_label(trade_type),
                 width="stretch",
                 key=f"trade-save:{account['id']}",
                 type="primary",
+                disabled=trade_disabled,
             )
             if submitted:
                 resolved_product_name = str(
@@ -4744,48 +4969,72 @@ def trade_entry_page(account: dict[str, Any], holdings: list[dict[str, Any]], ac
                     st.rerun()
 
     with cash_flow_col:
-        with st.container(border=True):
-            flow_type = st.radio(
-                "현금 흐름 구분",
-                ["personal_deposit", "employer_deposit", "withdraw"],
-                format_func=label_cash_flow_type,
-                key=CASH_FLOW_TYPE_KEY,
-                horizontal=True,
-                label_visibility="collapsed",
-            )
-            st.subheader(cash_flow_panel_title(flow_type))
-            st.caption(cash_flow_panel_caption(flow_type))
-            date_col, amount_col, action_col = st.columns((1.15, 2.6, 0.95), gap="small")
-            with date_col:
-                trade_date = st.date_input("처리일", key=CASH_FLOW_DATE_KEY, label_visibility="collapsed")
-            with amount_col:
-                amount = st.number_input("금액", min_value=0, step=100000, key=CASH_FLOW_AMOUNT_KEY, label_visibility="collapsed")
-            with action_col:
-                submitted = st.button(
-                    cash_flow_submit_label(flow_type),
-                    width="stretch",
-                    key=f"cash-flow-save:{account['id']}",
-                    type="primary",
-                )
-            notes = st.text_area("메모", height=90, key=CASH_FLOW_NOTES_KEY, placeholder="메모 선택 입력", label_visibility="collapsed")
-            if submitted:
-                try:
-                    record_cash_flow(
-                        int(account["id"]),
-                        flow_type=flow_type,
-                        amount=amount,
-                        trade_date=trade_date.isoformat(),
-                        notes=notes,
-                    )
-                except ValueError as exc:
-                    st.error(str(exc))
-                else:
-                    mark_rollup_dirty()
-                    st.session_state[CASH_FLOW_FORM_RESET_PENDING_KEY] = True
-                    st.session_state[TRADE_PAGE_SUCCESS_MESSAGE_KEY] = "현금 흐름을 기록했습니다."
-                    st.rerun()
+        with st.container(border=True, key="trade-cash-flow-entry"):
+            st.subheader("현금 흐름")
+            cash_flow_tabs = st.tabs([cash_flow_tab_label(flow_type) for flow_type in CASH_FLOW_TYPES])
+            for tab, flow_type in zip(cash_flow_tabs, CASH_FLOW_TYPES):
+                with tab:
+                    st.subheader(cash_flow_panel_title(flow_type))
+                    st.caption(cash_flow_panel_caption(flow_type))
+                    date_key = cash_flow_widget_key(CASH_FLOW_DATE_KEY, flow_type)
+                    amount_key = cash_flow_widget_key(CASH_FLOW_AMOUNT_KEY, flow_type)
+                    notes_key = cash_flow_widget_key(CASH_FLOW_NOTES_KEY, flow_type)
 
-    logs = list_trade_logs(int(account["id"]))
+                    date_col, amount_col = st.columns((1.0, 1.25), gap="medium")
+                    with date_col:
+                        trade_date = st.date_input("처리일", key=date_key)
+                    with amount_col:
+                        amount = st.number_input(
+                            cash_flow_amount_label(flow_type),
+                            min_value=0,
+                            step=100000,
+                            key=amount_key,
+                        )
+
+                    st.caption("빠른 선택")
+                    quick_cols = st.columns(len(CASH_FLOW_QUICK_AMOUNTS), gap="small")
+                    for quick_col, (label, quick_amount) in zip(quick_cols, CASH_FLOW_QUICK_AMOUNTS):
+                        with quick_col:
+                            st.button(
+                                cash_flow_quick_button_label(flow_type, label),
+                                key=f"cash-flow-quick:{account['id']}:{flow_type}:{quick_amount}",
+                                width="stretch",
+                                on_click=set_session_value,
+                                args=(amount_key, quick_amount),
+                            )
+
+                    st.markdown(
+                        build_cash_flow_preview_html(current_principal, flow_type, amount),
+                        unsafe_allow_html=True,
+                    )
+                    notes = st.text_area("메모 (선택)", height=90, key=notes_key, placeholder="메모 선택 입력")
+                    cash_flow_disabled = float(amount or 0) <= 0
+                    if cash_flow_disabled:
+                        st.caption("금액을 0보다 크게 입력하면 기록할 수 있습니다.")
+                    submitted = st.button(
+                        cash_flow_submit_label(flow_type),
+                        width="stretch",
+                        key=f"cash-flow-save:{account['id']}:{flow_type}",
+                        type="primary",
+                        disabled=cash_flow_disabled,
+                    )
+                    if submitted:
+                        try:
+                            record_cash_flow(
+                                int(account["id"]),
+                                flow_type=flow_type,
+                                amount=amount,
+                                trade_date=trade_date.isoformat(),
+                                notes=notes,
+                            )
+                        except ValueError as exc:
+                            st.error(str(exc))
+                        else:
+                            mark_rollup_dirty()
+                            st.session_state[CASH_FLOW_FORM_RESET_PENDING_KEY] = True
+                            st.session_state[TRADE_PAGE_SUCCESS_MESSAGE_KEY] = "현금 흐름을 기록했습니다."
+                            st.rerun()
+
     visible_logs = [row for row in logs if is_visible_trade_log(row)]
     realized = realized_summary(logs)
 

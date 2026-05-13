@@ -33,7 +33,7 @@ PAGE_LABEL_INDEX = {
 }
 PAGE_READY_MARKERS = {
     "dashboard": ("자산 배분", "선택 종목 트렌드"),
-    "trades": ("거래 기록",),
+    "trades": ("상품 등록", "예상 매입금액", "거래 기록"),
     "data": ("운영 상태", "데이터 저장소"),
 }
 LOCAL_SECRETS_PATH = Path(".streamlit/secrets.toml")
@@ -206,6 +206,27 @@ def find_prefixed_value(lines: list[str], prefix: str) -> str:
     return ""
 
 
+def infer_backend_storage(lines: list[str]) -> str:
+    """화면 문구에서 저장소 종류를 추정한다."""
+
+    backend_storage = find_value_after_label(lines, "데이터 저장소")
+    if backend_storage:
+        return backend_storage
+
+    backend_storage = find_prefixed_value(lines, "현재 저장소:")
+    if backend_storage:
+        return backend_storage
+
+    for line in lines:
+        if not line.startswith("현재 저장소는"):
+            continue
+        if "Supabase" in line:
+            return "Supabase"
+        if "SQLite" in line:
+            return "SQLite"
+    return ""
+
+
 def find_config_source(lines: list[str], prefix: str) -> str:
     """설정 표시 줄에서 실제 값 출처만 추출한다."""
 
@@ -237,7 +258,7 @@ def select_app_frame(page: Page) -> Frame:
     for frame in page.frames:
         if "/~/+/" in frame.url:
             return frame
-    raise RuntimeError("Streamlit 앱 프레임을 찾지 못했습니다.")
+    return page.main_frame
 
 
 def body_text(frame: Frame, timeout_ms: int) -> str:
@@ -250,7 +271,7 @@ def has_workspace_context(text: str) -> bool:
     """본문 텍스트에 작업공간 문맥이 보이는지 판별한다."""
 
     normalized = " ".join(extract_lines(text))
-    markers = ("내 작업공간", "WORKSPACE CONTEXT", "로그인 계정")
+    markers = ("내 작업공간", "WORKSPACE CONTEXT", "로그인 계정", "RetirementPort", "내 계좌")
     return any(marker in normalized for marker in markers) and "로그아웃" in normalized
 
 
@@ -258,8 +279,9 @@ def has_onboarding_context(text: str) -> bool:
     """로그인 후 첫 계좌 생성 전 온보딩 화면인지 판별한다."""
 
     normalized = " ".join(extract_lines(text))
-    required_markers = ("현재 저장소:", "첫 계좌 만들기", "계좌 이름", "시작 현금")
-    return all(marker in normalized for marker in required_markers)
+    has_storage_marker = "현재 저장소:" in normalized or "현재 저장소는" in normalized
+    required_markers = ("첫 계좌 만들기", "계좌 이름", "시작 현금")
+    return has_storage_marker and all(marker in normalized for marker in required_markers)
 
 
 def has_authenticated_context(text: str) -> bool:
@@ -387,7 +409,7 @@ def choose_page_label(frame: Frame, page_name: str) -> Locator:
 
     target_text = PAGE_LABELS[page_name]
 
-    nav_links = frame.locator('a[data-testid="stSidebarNavLink"]')
+    nav_links = frame.locator('a[data-testid="stSidebarNavLink"], [data-testid="stPageLink"] a')
     for index in range(nav_links.count()):
         link = nav_links.nth(index)
         try:
@@ -505,11 +527,14 @@ def build_summary(url: str, target_page: str, text: str) -> DeploymentSummary:
     """본문 텍스트에서 배포 상태 요약을 생성한다."""
 
     lines = extract_lines(text)
-    backend_storage = find_value_after_label(lines, "데이터 저장소")
-    if not backend_storage:
-        backend_storage = find_prefixed_value(lines, "현재 저장소:")
-    trade_log_count, latest_trade_date = find_values_after_label(lines, "거래 기록")
-    snapshot_count, latest_snapshot_date = find_values_after_label(lines, "자산 스냅샷")
+    backend_storage = infer_backend_storage(lines)
+    status_panel_visible = "운영 상태" in text
+    if status_panel_visible:
+        trade_log_count, latest_trade_date = find_values_after_label(lines, "거래 기록")
+        snapshot_count, latest_snapshot_date = find_values_after_label(lines, "자산 스냅샷")
+    else:
+        trade_log_count, latest_trade_date = "", ""
+        snapshot_count, latest_snapshot_date = "", ""
     onboarding_visible = has_onboarding_context(text)
     onboarding_error = extract_onboarding_error(lines)
     hotfix_required = "owner_user_id" in onboarding_error.lower() or "row-level security" in onboarding_error.lower()
@@ -530,7 +555,7 @@ def build_summary(url: str, target_page: str, text: str) -> DeploymentSummary:
         target_page=target_page,
         logged_in=has_authenticated_context(text),
         workspace_visible=has_workspace_context(text),
-        status_panel_visible="운영 상태" in text,
+        status_panel_visible=status_panel_visible,
         backend_storage=backend_storage,
         backend_storage_code=normalize_backend_code(backend_storage),
         trade_log_count=trade_log_count,

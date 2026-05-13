@@ -24,10 +24,10 @@
 - [x] 자산배분 당일 추세를 KRX 전 종목 Naver full-day 분봉 우선으로 보강
 - [x] 모바일 보유 종목 영역을 640px 이하 카드형 리스트로 전환
 - [x] PC 보유 종목 테이블 아래 모바일 카드 텍스트 노출 hotfix 반영
+- [x] `docs/report.md` 기준 거래 UI/UX 단계별+화면 목업 보정 패치 반영
 - [ ] KIS WebSocket worker 장시간 실행 중 재연결/상태 복구를 장중 운영 로그 기준으로 추가 점검
-- [ ] 모바일 viewport에서 대시보드 트리맵/보유 종목 표/거래 입력 폼 가독성 확인
+- [ ] 모바일 viewport에서 대시보드 트리맵/보유 종목 표 가독성 확인
 - [ ] 스냅샷 저장, CSV export, 운영 정리 작업의 로딩 상태 표시 누락 여부 점검
-- [ ] `scripts/verify_streamlit_deployment.py`의 거래/데이터 요약 추출값 정밀화
 - [ ] Supabase SQL Editor에서 `setup_supabase.sql` 전체 또는 문제 정책 블록 재실행 확인
 
 ## 프로젝트 개요
@@ -104,6 +104,8 @@ python scripts/verify_streamlit_deployment.py --page data --expect-backend supab
 - 기존 테스트와 monkey patch 호환을 위해 `app.py` 공개 함수/상수 접근은 앱 코어로 위임한다.
 - 보유현금은 거래 저장과 자동 연동하지 않고 사용자가 직접 수정한 현재 잔액으로 관리한다.
 - 매수는 현재 보유현금 부족 여부와 무관하게 저장을 허용한다.
+- 거래 상품 등록은 예상 매입금액 미리보기와 0원 저장 방지를 적용한다.
+- 현금 흐름 입력은 개인 입금/회사 납입금/출금 탭별 위젯 key로 분리한다.
 - 레거시 `cash_adjustment` 거래는 거래 화면과 원금/순유입 계산에서 제외한다.
 - 보유현금은 자산 비중 표시에서 안전자산에 포함한다.
 - 계좌 간 이체 UI와 데모 seed 이체 예시는 제거된 상태다.
@@ -116,6 +118,10 @@ python scripts/verify_streamlit_deployment.py --page data --expect-backend supab
 
 ## 최신 검증 결과
 - 상세 검증 이력은 `docs/VALIDATION.md`에 정리했다.
+- 거래 UI/UX 단계별+화면 목업 보정 패치: `python -m compileall app.py src scripts tests pages` 성공.
+- 거래 UI/UX 단계별+화면 목업 보정 패치: `python -m unittest discover -s tests -p "test_*.py"` 성공, 173 tests.
+- 거래 UI/UX 단계별+화면 목업 보정 패치 로컬 브라우저 검증: 임시 SQLite DB 기반 Streamlit `http://127.0.0.1:8545` 거래 페이지 1440px/700px/390px Playwright 검증 성공. `상품 등록`, `상품명 또는 코드 검색`, `예상 매입금액`, `개인 입금`, `+50만`, `✓ 입금 기록`, `거래 기록` 표시와 `horizontal_overflow=false` 확인.
+- 거래 UI/UX 단계별+화면 목업 보정 패치 배포 검증 스크립트 로컬 확인: `python scripts/verify_streamlit_deployment.py --url http://127.0.0.1:8545 --page trades --expect-backend sqlite --wait-ms 15000 --click-demo --debug-dir /tmp/retirement-portfolio-verify-debug` 성공, `ok=true`, backend `SQLite`.
 - BUG-02 CSS surface 토큰 교체: `python -m unittest tests.test_app_dashboard.ThemeStylesheetTests` 성공, 8 tests.
 - UG-01 CSS 누락 안전장치: `python -m compileall src/ui/app_core.py tests/test_app_dashboard.py` 성공.
 - UG-01 CSS 누락 안전장치: `python -m unittest tests.test_app_dashboard.ThemeStylesheetTests` 성공, 7 tests.
@@ -169,6 +175,7 @@ python scripts/verify_streamlit_deployment.py --page data --expect-backend supab
 - 이번 자산배분 당일 추세 패치 대상 파일은 `src/market.py`, `src/kis.py`, `tests/test_market.py`, `README.md`, `docs/DECISIONS.md`, `docs/VALIDATION.md`, `docs/CHANGELOG.md`, `Memory.md`다.
 - 이번 모바일 보유 종목 카드 패치 대상 파일은 `src/ui/app_core.py`, `.streamlit/app.css`, `tests/test_app_dashboard.py`, `docs/VALIDATION.md`, `docs/CHANGELOG.md`, `Memory.md`다.
 - 이번 PC 보유 종목 모바일 카드 노출 hotfix 대상 파일은 `src/ui/app_core.py`, `.streamlit/app.css`, `tests/test_app_dashboard.py`, `docs/VALIDATION.md`, `docs/CHANGELOG.md`, `Memory.md`다.
+- 이번 거래 UI/UX 단계별 패치 대상 파일은 `src/ui/app_core.py`, `.streamlit/app.css`, `scripts/verify_streamlit_deployment.py`, `tests/test_app_dashboard.py`, `tests/test_verify_streamlit_deployment.py`, `docs/VALIDATION.md`, `docs/CHANGELOG.md`, `Memory.md`다.
 - 배포 커밋: `199c853` `Hide mobile holdings cards on desktop` (`origin/main` push 완료, Streamlit Cloud dashboard 운영 검증 성공)
 - 배포 커밋: `d4e9813` `Improve realtime workflows and mobile holdings` (`origin/main` push 완료, Streamlit Cloud dashboard 운영 검증 성공)
 - 배포 커밋: `5ad9936` `Improve dashboard KPI responsive cards` (`origin/main` push 완료)
@@ -195,7 +202,6 @@ python scripts/verify_streamlit_deployment.py --page data --expect-backend supab
 ## 남은 작업
 1. KIS WebSocket worker 장시간 실행 중 재연결/상태 복구 로직을 장중 운영 로그로 추가 확인한다.
 2. 계좌 `23`처럼 tick 이력이 없는 계좌의 `last_quote_at=null` 유지가 운영 요구와 맞는지 확인한다.
-3. 모바일 viewport에서 대시보드 트리맵, 보유 종목 표, 거래 입력 폼 가독성을 실제 스크린샷으로 확인한다.
+3. 모바일 viewport에서 대시보드 트리맵, 보유 종목 표 가독성을 실제 스크린샷으로 확인한다.
 4. 장시간 작업의 `st.spinner`/`st.status` 적용 누락 여부를 점검한다.
-5. `scripts/verify_streamlit_deployment.py`의 거래/데이터 페이지 요약 추출값을 새 화면 구조에 맞게 정밀화한다.
-6. Supabase SQL Editor에서 `setup_supabase.sql` 전체 또는 문제 정책 블록 재실행 결과를 확인한다.
+5. Supabase SQL Editor에서 `setup_supabase.sql` 전체 또는 문제 정책 블록 재실행 결과를 확인한다.

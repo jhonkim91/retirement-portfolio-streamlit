@@ -143,6 +143,72 @@ h6 {
     gap: 0.35rem;
 }
 
+.sidebar-brand {
+    color: var(--brand-deep);
+    font-size: 1.02rem;
+    font-weight: 900;
+    line-height: 1.2;
+    margin: 0.25rem 0 0.8rem;
+}
+
+.st-key-sidebar-page-links {
+    margin-bottom: 0.45rem;
+}
+
+[data-testid="stSidebarNav"] {
+    display: none;
+}
+
+.st-key-sidebar-page-links [data-testid="stPageLink"] a {
+    border-radius: 6px;
+    color: var(--brand-deep);
+    min-height: 2.35rem;
+    padding: 0.45rem 0.55rem;
+}
+
+.st-key-sidebar-page-links [data-testid="stPageLink"] a:hover {
+    background: color-mix(in srgb, var(--theme-primary) 10%, var(--surface-strong));
+}
+
+.st-key-sidebar-account-panel [data-testid="stVerticalBlockBorderWrapper"] {
+    background: color-mix(in srgb, var(--surface-strong) 96%, transparent);
+    border: 1px solid var(--line-soft);
+    border-radius: var(--panel-radius);
+    box-shadow: var(--shadow-soft);
+}
+
+.st-key-sidebar-account-panel [data-testid="stButton"] > button,
+.st-key-sidebar-user-panel [data-testid="stButton"] > button {
+    min-height: 2.35rem;
+    font-weight: 800;
+}
+
+.sidebar-account-badge-row {
+    align-items: center;
+    display: flex;
+    justify-content: flex-end;
+    margin: -2.65rem 0 0.8rem;
+    pointer-events: none;
+}
+
+.sidebar-account-badge {
+    background: var(--brand-soft);
+    border: 1px solid color-mix(in srgb, var(--theme-primary) 28%, var(--line-soft));
+    border-radius: 999px;
+    color: var(--brand-deep);
+    font-size: 0.72rem;
+    font-weight: 800;
+    line-height: 1;
+    padding: 0.32rem 0.54rem;
+}
+
+.sidebar-account-name {
+    color: var(--mid-text);
+    font-size: 0.78rem;
+    font-weight: 800;
+    overflow-wrap: anywhere;
+}
+
 [data-testid="stMetric"] {
     background: var(--surface-strong);
     border: 1px solid var(--line-soft);
@@ -1529,6 +1595,101 @@ h6 {
     font-weight: 700;
 }
 
+.st-key-trade-product-entry [data-testid="stVerticalBlockBorderWrapper"],
+.st-key-trade-cash-flow-entry [data-testid="stVerticalBlockBorderWrapper"] {
+    background:
+        linear-gradient(
+            180deg,
+            color-mix(in srgb, var(--surface-strong) 98%, transparent),
+            color-mix(in srgb, var(--surface) 94%, var(--theme-secondary-bg))
+        );
+    border: 1px solid var(--line-soft);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-soft);
+}
+
+.st-key-trade-product-entry [data-testid="stNumberInput"] input,
+.st-key-trade-product-entry [data-testid="stTextInput"] input,
+.st-key-trade-product-entry [data-testid="stDateInput"] [data-baseweb="input"],
+.st-key-trade-cash-flow-entry [data-testid="stNumberInput"] input,
+.st-key-trade-cash-flow-entry [data-testid="stDateInput"] [data-baseweb="input"],
+.st-key-trade-cash-flow-entry textarea {
+    min-height: 2.65rem;
+    border-radius: 6px;
+}
+
+.trade-total-preview,
+.cash-flow-preview {
+    align-items: center;
+    display: flex;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin: 0.35rem 0 0.75rem;
+    padding: 0.82rem 0.92rem;
+    border: 1px solid var(--line-soft);
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--brand-soft) 58%, var(--surface-strong));
+}
+
+.trade-total-preview__label,
+.cash-flow-preview__label {
+    color: var(--mid-text);
+    font-size: 0.82rem;
+    font-weight: 800;
+}
+
+.trade-total-preview__value,
+.cash-flow-preview__value {
+    color: var(--brand-deep);
+    font-size: 1.04rem;
+    font-weight: 900;
+    line-height: 1.2;
+    text-align: right;
+    white-space: nowrap;
+}
+
+.st-key-trade-cash-flow-entry [data-testid="stTabs"] [data-baseweb="tab-list"] {
+    margin-bottom: 0.85rem;
+}
+
+.st-key-trade-cash-flow-entry [data-testid="stButton"] > button,
+.st-key-trade-product-entry [data-testid="stButton"] > button {
+    min-height: 2.65rem;
+    font-weight: 800;
+}
+
+.trade-search-label,
+.product-code-status-row {
+    align-items: center;
+    color: var(--brand-deep);
+    display: flex;
+    gap: 0.55rem;
+    font-size: 0.96rem;
+    font-weight: 800;
+    margin: 0.35rem 0 0.25rem;
+}
+
+.trade-search-label span,
+.product-code-status,
+.product-code-status--ok {
+    border-radius: 7px;
+    font-size: 0.78rem;
+    font-weight: 800;
+    line-height: 1;
+    padding: 0.34rem 0.52rem;
+}
+
+.trade-search-label span,
+.product-code-status--ok {
+    background: color-mix(in srgb, var(--status-good) 12%, var(--surface-strong));
+    color: var(--status-good);
+}
+
+.product-code-status {
+    background: color-mix(in srgb, var(--status-warn) 12%, var(--surface-strong));
+    color: var(--status-warn);
+}
+
 .st-key-trade-panel-transfer [data-baseweb="select"] > div,
 .st-key-trade-panel-transfer [data-baseweb="input"] > div {
     min-height: 2.65rem;
@@ -1722,6 +1883,39 @@ h6 {
         width: 100% !important;
         min-width: 100% !important;
         flex: 1 1 auto !important;
+    }
+
+    .st-key-trade-product-entry [data-testid="stHorizontalBlock"],
+    .st-key-trade-cash-flow-entry [data-testid="stHorizontalBlock"] {
+        flex-direction: column;
+        flex-wrap: nowrap;
+    }
+
+    .st-key-trade-product-entry [data-testid="stHorizontalBlock"] > div,
+    .st-key-trade-cash-flow-entry [data-testid="stHorizontalBlock"] > div {
+        width: 100% !important;
+        min-width: 100% !important;
+        flex: 1 1 auto !important;
+    }
+}
+
+@media (max-width: 640px) {
+    .trade-total-preview,
+    .cash-flow-preview {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 0.28rem;
+    }
+
+    .trade-total-preview__value,
+    .cash-flow-preview__value {
+        text-align: left;
+        white-space: normal;
+    }
+
+    .st-key-sidebar-account-panel [data-testid="stHorizontalBlock"] {
+        align-items: center;
+        flex-wrap: nowrap;
     }
 }
 

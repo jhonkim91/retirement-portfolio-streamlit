@@ -76,6 +76,12 @@ class ThemeStylesheetTests(unittest.TestCase):
         self.assertIn(".holdings-mobile-card-list", stylesheet)
         self.assertIn(".st-key-dashboard-panel-allocation", stylesheet)
         self.assertIn(".st-key-dashboard-panel-holdings-table", stylesheet)
+        self.assertIn(".st-key-sidebar-account-panel", stylesheet)
+        self.assertIn(".sidebar-brand", stylesheet)
+        self.assertIn(".st-key-trade-product-entry", stylesheet)
+        self.assertIn(".trade-total-preview", stylesheet)
+        self.assertIn(".cash-flow-preview", stylesheet)
+        self.assertIn(".product-code-status-row", stylesheet)
         self.assertIn("--radius-lg: 18px;", stylesheet)
         self.assertIn("--shadow-card: 0 14px 38px rgba(15, 23, 42, 0.08);", stylesheet)
         self.assertIn("--panel-radius: var(--radius-lg);", stylesheet)
@@ -125,6 +131,7 @@ class ThemeStylesheetTests(unittest.TestCase):
         self.assertIn('.st-key-dashboard-trend-controls [data-baseweb="select"] > div {\n    min-width: 0;', stylesheet)
         self.assertIn('@media (max-width: 768px) {\n    .st-key-trade-form-cols [data-testid="stHorizontalBlock"]', stylesheet)
         self.assertIn('.st-key-trade-form-cols [data-testid="stHorizontalBlock"] > div,\n    .st-key-trade-form-cols [data-testid="column"] {\n        width: 100% !important;', stylesheet)
+        self.assertIn('.st-key-trade-product-entry [data-testid="stHorizontalBlock"],\n    .st-key-trade-cash-flow-entry [data-testid="stHorizontalBlock"]', stylesheet)
         self.assertIn('@media (max-width: 640px) {\n    .st-key-dashboard-panel-holdings-table .holdings-table-shell--desktop', stylesheet)
         self.assertIn(".st-key-dashboard-panel-holdings-table .holdings-mobile-card-list {\n        display: grid !important;", stylesheet)
         self.assertIn(".st-key-trade-log-inline-editor-shell", stylesheet)
@@ -183,6 +190,8 @@ class ThemeStylesheetTests(unittest.TestCase):
         source = inspect.getsource(dashboard_app.trade_entry_page)
 
         self.assertIn('st.container(key="trade-form-cols")', source)
+        self.assertIn('st.container(border=True, key="trade-product-entry")', source)
+        self.assertIn('st.container(border=True, key="trade-cash-flow-entry")', source)
 
     def test_dashboard_secondary_panel_chart_heights_match(self) -> None:
         """선택 종목 트렌드와 보유 종목 수익률 차트 높이는 같은 값을 사용한다."""
@@ -313,13 +322,83 @@ class TradeFormResetTests(unittest.TestCase):
     def test_trade_and_cash_flow_copy_helpers_match_requested_labels(self) -> None:
         """거래/현금흐름 카드 문구 헬퍼가 현재 화면 표기를 유지한다."""
 
-        self.assertEqual(dashboard_app.trade_submit_button_label("buy"), "상품 추가")
+        self.assertEqual(dashboard_app.trade_submit_button_label("buy"), "+ 상품 추가")
         self.assertEqual(dashboard_app.trade_submit_button_label("sell"), "상품 저장")
         self.assertEqual(dashboard_app.trade_price_label("buy"), "매입가/기준가")
         self.assertEqual(dashboard_app.trade_date_label("sell"), "매매일")
         self.assertEqual(dashboard_app.cash_flow_panel_title("employer_deposit"), "회사 현금입금")
         self.assertIn("퇴직금 원금", dashboard_app.cash_flow_panel_caption("employer_deposit"))
-        self.assertEqual(dashboard_app.cash_flow_submit_label("withdraw"), "출금 기록")
+        self.assertEqual(dashboard_app.cash_flow_submit_label("withdraw"), "✓ 출금 기록")
+        self.assertEqual(dashboard_app.cash_flow_amount_label("personal_deposit"), "입금액 (₩)")
+        self.assertEqual(dashboard_app.cash_flow_amount_label("withdraw"), "출금액 (₩)")
+        self.assertEqual(dashboard_app.cash_flow_tab_label("personal_deposit"), "💰 개인 입금")
+        self.assertEqual(dashboard_app.cash_flow_quick_button_label("withdraw", "50만"), "-50만")
+
+    def test_trade_total_and_cash_flow_preview_helpers(self) -> None:
+        """거래 총액과 현금 흐름 미리보기 헬퍼는 0 입력 방지 기준을 제공한다."""
+
+        self.assertEqual(dashboard_app.calculate_trade_total(15000, 3), 45000)
+        self.assertTrue(dashboard_app.is_trade_submit_disabled(0, 3))
+        self.assertTrue(dashboard_app.is_trade_submit_disabled(15000, 0))
+        self.assertFalse(dashboard_app.is_trade_submit_disabled(15000, 3))
+        self.assertEqual(
+            dashboard_app.cash_flow_balance_preview(1_000_000, "personal_deposit", 500_000),
+            (1_000_000.0, 1_500_000.0),
+        )
+        self.assertEqual(
+            dashboard_app.cash_flow_balance_preview(1_000_000, "withdraw", 200_000),
+            (1_000_000.0, 800_000.0),
+        )
+        self.assertIn("예상 매입금액", dashboard_app.build_trade_total_preview_html(45000))
+        self.assertIn("예상 원금 잔액", dashboard_app.build_cash_flow_preview_html(1_000_000, "withdraw", 200_000))
+
+    def test_cash_flow_tab_keys_are_scoped_by_flow_type(self) -> None:
+        """현금 흐름 탭 위젯 key는 유형별로 분리된다."""
+
+        self.assertEqual(
+            dashboard_app.cash_flow_widget_key(dashboard_app.CASH_FLOW_AMOUNT_KEY, "personal_deposit"),
+            "cash_flow_amount:personal_deposit",
+        )
+        reset_values = dashboard_app.cash_flow_reset_values()
+
+        self.assertIn("cash_flow_amount:personal_deposit", reset_values)
+        self.assertIn("cash_flow_amount:employer_deposit", reset_values)
+        self.assertIn("cash_flow_amount:withdraw", reset_values)
+
+    def test_trade_page_source_uses_new_trade_and_cash_flow_layout(self) -> None:
+        """거래 페이지는 총액 미리보기, 탭형 현금 흐름, 비활성화 조건을 사용한다."""
+
+        source = inspect.getsource(dashboard_app.trade_entry_page)
+
+        self.assertIn("build_trade_total_preview_html(trade_total)", source)
+        self.assertIn("build_product_code_status_html(st.session_state.get(TRADE_SYMBOL_KEY))", source)
+        self.assertIn("trade_disabled = is_trade_submit_disabled(price, quantity)", source)
+        self.assertIn("disabled=trade_disabled", source)
+        self.assertIn("st.tabs([cash_flow_tab_label(flow_type) for flow_type in CASH_FLOW_TYPES])", source)
+        self.assertIn("cash_flow_widget_key(CASH_FLOW_AMOUNT_KEY, flow_type)", source)
+        self.assertIn("build_cash_flow_preview_html(current_principal, flow_type, amount)", source)
+
+    def test_sidebar_source_uses_account_popover_and_delete_dialog(self) -> None:
+        """사이드바 계좌 영역은 새 계좌 popover와 삭제 확인 다이얼로그를 사용한다."""
+
+        sidebar_source = inspect.getsource(dashboard_app.sidebar)
+        dialog_source = inspect.getsource(dashboard_app.render_account_delete_dialog)
+
+        self.assertIn("render_sidebar_navigation()", sidebar_source)
+        self.assertIn("render_new_account_form()", sidebar_source)
+        self.assertIn("render_account_delete_dialog(selected_account, account_ids)", sidebar_source)
+        self.assertIn('@st.dialog("계좌 삭제 확인")', dialog_source)
+
+    def test_navigation_uses_custom_sidebar_links(self) -> None:
+        """기본 내비게이션은 생성하되 CSS로 숨기고 커스텀 링크를 사용한다."""
+
+        main_source = inspect.getsource(dashboard_app._load_app_core().main)
+        sidebar_nav_source = inspect.getsource(dashboard_app.render_sidebar_navigation)
+        stylesheet = dashboard_app.render_app_stylesheet()
+
+        self.assertIn("st.navigation(build_navigation_pages(), expanded=True)", main_source)
+        self.assertIn('[data-testid="stSidebarNav"] {\n    display: none;', stylesheet)
+        self.assertIn('st.page_link("pages/trades.py"', sidebar_nav_source)
 
     def test_dashboard_selected_trend_period_options_exclude_today(self) -> None:
         """대시보드 선택 종목 트렌드 기간에서는 당일 옵션을 숨긴다."""

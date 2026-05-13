@@ -7,6 +7,10 @@
 - 최신 검증 결과는 각 작업 완료 시 대표 명령만 갱신한다.
 
 ## 최신 대표 검증 결과
+- 거래 UI/UX 단계별+화면 목업 보정 패치: `python -m compileall app.py src scripts tests pages` 성공.
+- 거래 UI/UX 단계별+화면 목업 보정 패치: `python -m unittest discover -s tests -p "test_*.py"` 성공, 173 tests.
+- 거래 UI/UX 단계별+화면 목업 보정 패치 로컬 브라우저 검증: `PORTFOLIO_BACKEND=sqlite RETIREMENT_DB_PATH=/tmp/retirement-portfolio-ui-check-3.db streamlit run app.py --server.port 8545 --server.address 127.0.0.1 --server.headless true` 실행 후 Playwright 거래 페이지 1440px/700px/390px에서 `상품 등록`, `상품명 또는 코드 검색`, `예상 매입금액`, `개인 입금`, `+50만`, `✓ 입금 기록`, `거래 기록` 표시와 `horizontal_overflow=false` 확인.
+- 거래 UI/UX 단계별+화면 목업 보정 패치 배포 검증 스크립트 로컬 확인: `python scripts/verify_streamlit_deployment.py --url http://127.0.0.1:8545 --page trades --expect-backend sqlite --wait-ms 15000 --click-demo --debug-dir /tmp/retirement-portfolio-verify-debug` 성공, `ok=true`, backend `SQLite`.
 - PC 보유 종목 모바일 카드 노출 hotfix: `python -m compileall src/ui/app_core.py tests/test_app_dashboard.py` 성공.
 - PC 보유 종목 모바일 카드 노출 hotfix: `python -m unittest tests.test_app_dashboard.HoldingsTableDisplayTests tests.test_app_dashboard.ThemeStylesheetTests` 성공, 16 tests.
 - PC 보유 종목 모바일 카드 노출 hotfix: `python -m compileall app.py src scripts tests pages` 성공.
@@ -104,6 +108,12 @@
 - Streamlit Cloud 대시보드/거래/데이터 페이지 원격 검증 성공 기록 있음.
 
 ## 2026-05-13 검증 요약
+- 거래 페이지 UI/UX 단계별 패치 검증.
+  - 상품 등록 폼에 예상 매입금액 미리보기, 0원 저장 방지, 수량/단위 인라인 배치, 후보 선택 시 최신가 자동 채움을 추가.
+  - 현금 흐름 입력을 `st.tabs()` 기반 개인 입금/회사 납입금/출금 탭으로 전환하고 빠른 금액 선택과 예상 원금 잔액 미리보기를 추가.
+  - 사이드바 계좌 영역을 `내 계좌` 중심으로 재배치하고 새 계좌 popover, 계좌 삭제 확인 dialog를 적용.
+  - 거래 페이지 ready marker를 `상품 등록`, `예상 매입금액`, `거래 기록` 기준으로 보강.
+  - 집중 테스트, 전체 compileall, 전체 unittest discover, 로컬 Streamlit 1280px 거래 페이지 Playwright 검증 성공.
 - PC 보유 종목 모바일 카드 노출 hotfix 검증.
   - 모바일 카드 wrapper에 inline `display:none` 기본값을 추가하고, `640px` 이하 media query에서만 `display:grid !important`로 표시되도록 보강.
   - CSS 숨김 규칙이 늦게 적용되거나 누락되어도 PC에서는 카드 본문이 테이블 아래에 노출되지 않도록 처리.

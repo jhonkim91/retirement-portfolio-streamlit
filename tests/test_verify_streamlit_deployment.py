@@ -39,6 +39,27 @@ class DeploymentSummaryParserTests(unittest.TestCase):
         self.assertFalse(summary.hotfix_required)
         self.assertFalse(summary.demo_seeded)
 
+    def test_build_summary_detects_onboarding_with_inline_storage_message(self) -> None:
+        """새 저장소 안내 문구에서도 온보딩 화면을 판별한다."""
+
+        text = textwrap.dedent(
+            """
+            현재 저장소는 로컬 SQLite 임시 저장소입니다.
+            은퇴 포트폴리오
+            첫 계좌 만들기
+            계좌 이름
+            시작 현금
+            데모 데이터 불러오기
+            """
+        ).strip()
+
+        summary = build_summary("http://127.0.0.1:8545", "data", text)
+
+        self.assertTrue(summary.logged_in)
+        self.assertTrue(summary.onboarding_visible)
+        self.assertFalse(summary.workspace_visible)
+        self.assertEqual(summary.backend_storage_code, "sqlite")
+
     def test_build_summary_extracts_rls_hotfix_error_from_onboarding(self) -> None:
         """온보딩 화면의 RLS 403 오류를 핫픽스 필요 상태로 판별한다."""
 
@@ -110,6 +131,32 @@ class DeploymentSummaryParserTests(unittest.TestCase):
         self.assertEqual(summary.reason, "secrets configured")
         self.assertEqual(summary.status_message, "현재 배포본은 Supabase를 사용 중입니다.")
         self.assertEqual(summary.allocation_status, "")
+        self.assertTrue(summary.demo_seeded)
+
+    def test_build_summary_detects_workspace_with_compact_sidebar_copy(self) -> None:
+        """새 사이드바 문구에서도 작업공간 진입 상태를 판별한다."""
+
+        text = textwrap.dedent(
+            """
+            RetirementPort
+            대시보드
+            거래
+            데이터
+            내 계좌
+            데모 일반계좌
+            일반
+            test
+            로그아웃
+            상품 등록
+            예상 매입금액
+            거래 기록
+            """
+        ).strip()
+
+        summary = build_summary("https://example.streamlit.app", "trades", text)
+
+        self.assertTrue(summary.logged_in)
+        self.assertTrue(summary.workspace_visible)
         self.assertTrue(summary.demo_seeded)
 
     def test_build_summary_extracts_dashboard_allocation_status(self) -> None:
@@ -187,6 +234,20 @@ class PageMarkerTests(unittest.TestCase):
         text = "자산관리 대장\n로그인되었습니다."
 
         self.assertFalse(has_target_page_content(text, "dashboard"))
+
+    def test_has_target_page_content_detects_trades_markers(self) -> None:
+        """거래 화면은 새 상품 등록/예상 금액/거래 기록 마커를 모두 요구한다."""
+
+        text = "거래\n상품 등록\n예상 매입금액\n현금 흐름\n거래 기록"
+
+        self.assertTrue(has_target_page_content(text, "trades"))
+
+    def test_has_target_page_content_requires_trade_preview_marker(self) -> None:
+        """거래 화면 미리보기 마커가 없으면 준비 완료로 보지 않는다."""
+
+        text = "거래\n상품 등록\n거래 기록"
+
+        self.assertFalse(has_target_page_content(text, "trades"))
 
 
 class DebugHelperTests(unittest.TestCase):
