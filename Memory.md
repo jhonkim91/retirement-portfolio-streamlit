@@ -37,6 +37,7 @@
 - [x] 배포 대시보드에서 자산 배분 상태 칩이 실제로 `실시간 연동 중`으로 보이는지 화면 검증
 - [x] Streamlit Cloud 대시보드 초기 로딩/흰 화면 재현 2회 원격 점검
 - [x] realtime worker 상태 갱신 시 `last_quote_at` 보존 패치 및 운영 상태 복구
+- [x] 수정된 worker 코드가 GitHub Actions manual run에서도 `last_quote_at`를 유지하는지 실주행 검증
 
 ## 프로젝트 개요
 - 유형: `Python + Streamlit`
@@ -166,6 +167,11 @@ streamlit run app.py
 - 수정된 로컬 코드로 `SupabaseAdminClient.update_account_status()`를 실제 운영 계좌 `24`에 다시 호출해도 `last_quote_at=2026-05-12T15:59:50`가 유지됨을 확인함
 - 원격 `데이터` 페이지 검증에서 `KIS WebSocket worker=stopped`, `last_seen_at=2026-05-13T00:43:36`, `마지막 quote 반영=2026-05-12T15:59:50 / 2026-05-12T15:59:50` 노출을 확인함
 - 코드 fix 커밋 `aab9d67`(`Preserve realtime worker last quote timestamps`)를 `origin/main`에 푸시했고, 푸시 후 원격 `데이터` 페이지 재검증도 통과함
+- `workflow_dispatch` run `25771266167`를 `segment=manual`, `run_minutes=1`, `backend=supabase`로 직접 실행했고, 대상 커밋은 `b293d0a`
+- 해당 run 로그에서 `2026-05-13T00:54:22Z` `ping/pong timed out` 후 재연결이 발생했고, 종료 시 `worker 세션 종료 코드: 137`, 전체 job `success`를 확인함
+- 같은 run의 post-check 출력에서 계좌 `24`, `25`, `26`이 `connection_state=stopped` 전이 뒤에도 `last_quote_at`를 유지함을 확인함
+- 운영 Supabase 최종 상태 기준 계좌 `24`, `25`는 새 tick `2026-05-13T09:54:33`과 동일한 `last_quote_at`를 기록했고, 계좌 `26`은 quote 미수신 상태에서도 기존 `2026-05-12T15:48:44`를 유지함
+- 계좌 `23`은 이번 run에서도 tick 이력이 없어 `last_quote_at=null`이 유지됐고, 이는 보존 대상 값 자체가 없는 케이스로 기록함
 
 ## 최신 검증 결과
 - `python3 -m compileall app.py src scripts tests` 성공
@@ -216,6 +222,13 @@ streamlit run app.py
   - 푸시 후 `./.venv/bin/python scripts/verify_streamlit_deployment.py --page data --expect-backend supabase --debug-dir artifacts/deploy-verify-data-after-push-aab9d67 --storage-state artifacts/streamlit-storage-state.json --wait-ms 12000` 성공
   - 푸시 후 원격 데이터 페이지에서도 `마지막 quote 반영=2026-05-12T15:59:50 / 2026-05-12T15:59:50` 유지 확인
   - 산출물: `artifacts/deploy-verify-data-after-push-aab9d67/*`, `artifacts/deploy-verify-data-after-push-aab9d67-summary.json`
+- 이번 턴 GitHub Actions 실주행 추가 검증:
+  - `./.local/bin/gh workflow run "KIS Realtime Worker" --ref main -f segment=manual -f run_minutes=1 -f backend=supabase`로 manual run `25771266167` 실행
+  - run 대상 head SHA는 `b293d0ab7af23f102063d0736a060e57e12d0ff0` (`b293d0a`)
+  - job `75694701236` 로그에서 `KIS WebSocket 연결 완료: 6개 종목 구독` 후 `ping/pong timed out`, 재연결, 종료코드 `137`, 최종 `success` 확인
+  - run 중간 운영 Supabase 상태에서 계좌 `24`, `25`는 `connection_state=connected`, `last_quote_at=2026-05-13T09:53:32`, 계좌 `26`은 기존 `2026-05-12T15:48:44` 유지 확인
+  - run 종료 후 운영 Supabase 상태에서 계좌 `24`, `25`는 `last_quote_at=2026-05-13T09:54:33`, 계좌 `26`은 `2026-05-12T15:48:44` 유지, 계좌 `23`은 tick 이력 부재로 `null` 유지 확인
+  - run 로그 post-check 출력도 위 운영 DB 조회와 같은 값으로 일치함을 확인
 - 이번 턴 배포 검증 스크립트 추가 검증:
   - `python3 -m unittest tests.test_verify_streamlit_deployment` 성공 (`7`건)
   - `python3 -m unittest discover -s tests -p "test_*.py"` 재실행 성공 (`81`건)
@@ -429,7 +442,7 @@ python scripts/verify_streamlit_deployment.py --page data --expect-backend supab
   - 스케줄 2: `UTC 02:55` (`KST 11:55`)
 
 ## 남은 작업
-1. 수정된 코드가 반영된 다음 `KIS Realtime Worker` 자동 또는 수동 1회 실행에서 `error/disconnected/stopped` 전이 후에도 `realtime_worker_status.last_quote_at`가 유지되는지 GitHub Actions 로그와 운영 DB로 추가 확인
+1. 계좌 `23`처럼 quote 이력이 없는 계좌를 장중 장시간 run에서도 별도 예외 없이 처리하는 현재 동작이 운영 요구와 맞는지 확인
 2. 모바일 viewport 기준 대시보드 트리맵/보유 종목 표/거래 입력 폼 가독성을 점검하고 필요한 CSS만 보강
 3. 필요하면 Streamlit Cloud 초기 로딩을 다른 시간대에도 추가 관찰하고 콘솔/네트워크 타이밍을 수집
 
