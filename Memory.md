@@ -1137,3 +1137,7 @@ python scripts/verify_streamlit_deployment.py --page data --expect-backend supab
 ### 남은 작업
 - 현재 세션에는 원격 SQL 실행 도구가 없어 `pg_policies` 직접 조회/재적용은 아직 못 했다.
 - Supabase SQL Editor에서 전체 스크립트 또는 문제 정책 블록 재실행으로 운영 환경 확인이 필요하다.
+
+### 커밋 및 배포
+- `5e2584b` `Harden Supabase policy setup reruns` 커밋 후 `origin/main` 푸시 완료.
+- 이번 변경은 `setup_supabase.sql`과 테스트/작업 기록만 포함하므로 별도 앱 재배포는 수행하지 않았다.
