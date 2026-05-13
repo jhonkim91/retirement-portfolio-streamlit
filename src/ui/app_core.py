@@ -4153,7 +4153,7 @@ def build_holdings_mobile_cards_html(display: pd.DataFrame) -> str:
 
     return "".join(
         [
-            '<div class="holdings-mobile-card-list" aria-label="모바일 보유 종목 목록">',
+            '<div class="holdings-mobile-card-list" style="display:none;" aria-label="모바일 보유 종목 목록">',
             "".join(card_html),
             "</div>",
         ]

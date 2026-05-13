@@ -126,7 +126,7 @@ class ThemeStylesheetTests(unittest.TestCase):
         self.assertIn('@media (max-width: 768px) {\n    .st-key-trade-form-cols [data-testid="stHorizontalBlock"]', stylesheet)
         self.assertIn('.st-key-trade-form-cols [data-testid="stHorizontalBlock"] > div,\n    .st-key-trade-form-cols [data-testid="column"] {\n        width: 100% !important;', stylesheet)
         self.assertIn('@media (max-width: 640px) {\n    .st-key-dashboard-panel-holdings-table .holdings-table-shell--desktop', stylesheet)
-        self.assertIn(".st-key-dashboard-panel-holdings-table .holdings-mobile-card-list {\n        display: grid;", stylesheet)
+        self.assertIn(".st-key-dashboard-panel-holdings-table .holdings-mobile-card-list {\n        display: grid !important;", stylesheet)
         self.assertIn(".st-key-trade-log-inline-editor-shell", stylesheet)
         self.assertNotIn("${theme_primary_color}", stylesheet)
 
@@ -534,6 +534,7 @@ class HoldingsTableDisplayTests(unittest.TestCase):
         html = dashboard_app.build_holdings_mobile_cards_html(display)
 
         self.assertIn("holdings-mobile-card-list", html)
+        self.assertIn('style="display:none;"', html)
         self.assertIn("TIGER 미국S&amp;P500", html)
         self.assertIn("KOSEF &lt;국고채10년&gt;", html)
         for text in ("360750", "위험자산", "4,792,500", "1,329,500", "+38.39%", "27", "177,500", "128,259"):

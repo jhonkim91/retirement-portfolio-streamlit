@@ -23,6 +23,7 @@
 - [x] GitHub Actions realtime worker/daily rollup `setup-python` pip cache와 realtime concurrency 반영
 - [x] 자산배분 당일 추세를 KRX 전 종목 Naver full-day 분봉 우선으로 보강
 - [x] 모바일 보유 종목 영역을 640px 이하 카드형 리스트로 전환
+- [x] PC 보유 종목 테이블 아래 모바일 카드 텍스트 노출 hotfix 반영
 - [ ] KIS WebSocket worker 장시간 실행 중 재연결/상태 복구를 장중 운영 로그 기준으로 추가 점검
 - [ ] 모바일 viewport에서 대시보드 트리맵/보유 종목 표/거래 입력 폼 가독성 확인
 - [ ] 스냅샷 저장, CSV export, 운영 정리 작업의 로딩 상태 표시 누락 여부 점검
@@ -130,6 +131,10 @@ python scripts/verify_streamlit_deployment.py --page data --expect-backend supab
 - 모바일 보유 종목 카드 패치 검증: `python -m compileall app.py src scripts tests pages` 성공.
 - 모바일 보유 종목 카드 패치 검증: `python -m unittest discover -s tests -p "test_*.py"` 성공, 164 tests.
 - 로컬 Streamlit `http://127.0.0.1:8542` 데모 대시보드 1280px/390px 브라우저 검증 성공. 390px에서 table `none`, mobile cards `grid`, overflow 없음.
+- PC 보유 종목 모바일 카드 노출 hotfix 검증: `python -m unittest tests.test_app_dashboard.HoldingsTableDisplayTests tests.test_app_dashboard.ThemeStylesheetTests` 성공, 16 tests.
+- PC 보유 종목 모바일 카드 노출 hotfix 검증: `python -m compileall app.py src scripts tests pages` 성공.
+- PC 보유 종목 모바일 카드 노출 hotfix 검증: `python -m unittest discover -s tests -p "test_*.py"` 성공, 164 tests.
+- 로컬 Streamlit `http://127.0.0.1:8543` 데모 대시보드 브라우저 검증 성공. 1280px에서 table `block`, cards `none`; 390px에서 table `none`, cards `grid`; overflow 없음.
 - 배포 검증: 커밋 `d4e9813` push 후 `python scripts/verify_streamlit_deployment.py --page dashboard --expect-backend supabase --wait-ms 15000` 성공, backend `Supabase`, `allocation_status=지연 데이터 표시 중`, `ok=true`.
 - 대표 배포 검증 기록:
   - `2026-05-13` 검증 완료 패치 묶음 배포 검증 성공: 커밋 `d4e9813`, 운영 앱 dashboard, backend `Supabase`, `allocation_status=지연 데이터 표시 중`, `ok=true`
@@ -160,6 +165,7 @@ python scripts/verify_streamlit_deployment.py --page data --expect-backend supab
 - 이번 GitHub Actions cache/concurrency 패치 대상 파일은 `.github/workflows/kis-realtime-worker.yml`, `.github/workflows/daily-rollup.yml`, `Memory.md`, `docs/VALIDATION.md`다.
 - 이번 자산배분 당일 추세 패치 대상 파일은 `src/market.py`, `src/kis.py`, `tests/test_market.py`, `README.md`, `docs/DECISIONS.md`, `docs/VALIDATION.md`, `docs/CHANGELOG.md`, `Memory.md`다.
 - 이번 모바일 보유 종목 카드 패치 대상 파일은 `src/ui/app_core.py`, `.streamlit/app.css`, `tests/test_app_dashboard.py`, `docs/VALIDATION.md`, `docs/CHANGELOG.md`, `Memory.md`다.
+- 이번 PC 보유 종목 모바일 카드 노출 hotfix 대상 파일은 `src/ui/app_core.py`, `.streamlit/app.css`, `tests/test_app_dashboard.py`, `docs/VALIDATION.md`, `docs/CHANGELOG.md`, `Memory.md`다.
 - 배포 커밋: `d4e9813` `Improve realtime workflows and mobile holdings` (`origin/main` push 완료, Streamlit Cloud dashboard 운영 검증 성공)
 - 배포 커밋: `5ad9936` `Improve dashboard KPI responsive cards` (`origin/main` push 완료)
 - 커밋 시 이번 요청 관련 파일만 선별하고 `data/portfolio.db`, `.local/`, `artifacts/`, `.playtools*/`, `.playwright-browsers/`, `.vscode/`, `data/kis_cache/` 등은 제외한다.
