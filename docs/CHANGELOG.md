@@ -9,6 +9,14 @@
 ## 최근 완료 변경 요약
 
 ### 2026-05-13
+- 모바일 보유 종목 카드 표시 보강.
+  - 대시보드 현재 보유 종목 패널에서 데스크톱 11컬럼 테이블은 유지하고, `640px` 이하 모바일에서는 카드 리스트를 표시.
+  - 카드 필드는 상품명, 코드, 자산군, 평가금액, 손익, 수익률, 수량, 현재가, 평단가로 제한하고 손익/수익률 색상은 기존 positive/negative class를 재사용.
+  - 모바일 카드 HTML 테스트와 로컬 Streamlit 1280px/390px 브라우저 검증 완료.
+- 자산배분 당일 추세 provider 보강.
+  - 숫자 6자리 KRX 종목도 Naver full-day 분봉을 우선 사용해 알파뉴메릭 ETF/ETN과 동일한 당일 추세 경로를 타도록 조정.
+  - Naver 차트가 비어 있을 때만 KIS/yfinance로 fallback하고, KIS fallback의 분봉 조회 시각은 현재 KST 정규장 범위로 제한.
+  - provider 선택/KIS 시간 보정 회귀 테스트를 추가하고 전체 compileall/unittest discover 검증 완료.
 - BUG-02 CSS surface 토큰 교체.
   - 우선 교체 대상 selector의 흰색 배경 하드코딩을 `var(--surface-strong)`과 `color-mix(...)` 기반으로 전환.
   - 인증 카드, 대시보드 패널, KPI 카드, holdings table, 주요 버튼/탭 surface 배경도 토큰 기반으로 정리.

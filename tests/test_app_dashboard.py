@@ -73,6 +73,7 @@ class ThemeStylesheetTests(unittest.TestCase):
         self.assertIn(".dashboard-metric-card", stylesheet)
         self.assertIn(".dashboard-reference-time", stylesheet)
         self.assertIn(".holdings-table-shell", stylesheet)
+        self.assertIn(".holdings-mobile-card-list", stylesheet)
         self.assertIn(".st-key-dashboard-panel-allocation", stylesheet)
         self.assertIn(".st-key-dashboard-panel-holdings-table", stylesheet)
         self.assertIn("--radius-lg: 18px;", stylesheet)
@@ -124,6 +125,8 @@ class ThemeStylesheetTests(unittest.TestCase):
         self.assertIn('.st-key-dashboard-trend-controls [data-baseweb="select"] > div {\n    min-width: 0;', stylesheet)
         self.assertIn('@media (max-width: 768px) {\n    .st-key-trade-form-cols [data-testid="stHorizontalBlock"]', stylesheet)
         self.assertIn('.st-key-trade-form-cols [data-testid="stHorizontalBlock"] > div,\n    .st-key-trade-form-cols [data-testid="column"] {\n        width: 100% !important;', stylesheet)
+        self.assertIn('@media (max-width: 640px) {\n    .st-key-dashboard-panel-holdings-table .holdings-table-shell--desktop', stylesheet)
+        self.assertIn(".st-key-dashboard-panel-holdings-table .holdings-mobile-card-list {\n        display: grid;", stylesheet)
         self.assertIn(".st-key-trade-log-inline-editor-shell", stylesheet)
         self.assertNotIn("${theme_primary_color}", stylesheet)
 
@@ -493,6 +496,52 @@ class HoldingsTableDisplayTests(unittest.TestCase):
         self.assertIn("holdings-table__value--positive", html)
         self.assertIn("holdings-table__value--negative", html)
         self.assertIn("max-height:380px", html)
+
+    def test_build_holdings_mobile_cards_html_uses_required_fields_and_tone_classes(self) -> None:
+        """모바일 보유 종목 카드는 핵심 필드와 기존 손익 tone class를 사용한다."""
+
+        display = pd.DataFrame(
+            [
+                {
+                    "상품명": "TIGER 미국S&P500",
+                    "코드": "360750",
+                    "자산군": "위험자산",
+                    "수량": "27",
+                    "평단가": "128,259",
+                    "현재가": "177,500",
+                    "원금": "3,463,000",
+                    "평가금액": "4,792,500",
+                    "손익": "1,329,500",
+                    "수익률(%)": "+38.39",
+                    "가격갱신": "2026-05-11 00:00:00",
+                },
+                {
+                    "상품명": "KOSEF <국고채10년>",
+                    "코드": "148070",
+                    "자산군": "안전자산",
+                    "수량": "17",
+                    "평단가": "112,000",
+                    "현재가": "107,000",
+                    "원금": "1,904,000",
+                    "평가금액": "1,819,000",
+                    "손익": "-85,000",
+                    "수익률(%)": "-4.46",
+                    "가격갱신": "2026-05-11 00:00:00",
+                },
+            ]
+        )
+
+        html = dashboard_app.build_holdings_mobile_cards_html(display)
+
+        self.assertIn("holdings-mobile-card-list", html)
+        self.assertIn("TIGER 미국S&amp;P500", html)
+        self.assertIn("KOSEF &lt;국고채10년&gt;", html)
+        for text in ("360750", "위험자산", "4,792,500", "1,329,500", "+38.39%", "27", "177,500", "128,259"):
+            self.assertIn(text, html)
+        self.assertIn("holdings-table__value--positive", html)
+        self.assertIn("holdings-table__value--negative", html)
+        self.assertNotIn("가격갱신", html)
+        self.assertNotIn("원금", html)
 
     def test_build_data_export_table_html_reuses_theme_for_holdings(self) -> None:
         """데이터 페이지 보유 종목 미리보기는 대시보드 테이블 테마를 재사용한다."""

@@ -97,7 +97,7 @@ streamlit run app.py
 
 ### KIS 시세/실시간 설정
 
-국내 종목 섹터와 장중 시세는 KIS Open API를 우선 사용합니다.
+국내 종목 현재가와 섹터는 KIS Open API를 우선 사용하고, 자산배분 당일 추세는 full-day 분봉 확보를 위해 Naver 차트를 우선 사용합니다.
 
 ```powershell
 $env:KIS_APP_KEY = "your-kis-app-key"
@@ -106,7 +106,7 @@ $env:KIS_ENV = "prod"   # 또는 paper
 streamlit run app.py
 ```
 
-- `KIS_APP_KEY`, `KIS_APP_SECRET`이 있으면 국내주식/국내ETF 현재가와 당일 추세를 KIS REST로 우선 조회합니다.
+- `KIS_APP_KEY`, `KIS_APP_SECRET`이 있으면 국내주식/국내ETF 현재가는 KIS REST로 우선 조회합니다. 당일 추세는 Naver 차트가 비어 있을 때 KIS REST로 fallback 합니다.
 - 대시보드 `실시간` 버튼은 KIS REST 우선으로 `holdings.current_price`, `price_updated_at`을 갱신합니다.
 - 국내 개별주 섹터는 KIS 종목 마스터와 업종 코드 캐시를 기준으로 우선 분류하고, ETF/해외 자산은 기존 규칙을 fallback으로 유지합니다.
 
@@ -127,6 +127,26 @@ python scripts/run_kis_quote_worker.py --backend supabase
 - worker는 현재 보유 중인 국내 종목 전체를 KIS WebSocket으로 구독합니다.
 - 수신한 quote마다 `holdings.current_price`를 overwrite하고 `realtime_price_ticks` 이력 테이블에도 append 합니다.
 - `데이터 > 운영 상태`에서 `KIS REST`, `KIS WebSocket worker`, `마지막 quote 반영` 상태를 확인할 수 있습니다.
+
+### 실시간 tick 보존 정책
+
+`realtime_price_ticks`는 장중 worker 실행 시간에 비례해 빠르게 증가하므로, 운영 환경에서는 집계 후 원본을 정리합니다.
+
+| 구간 | 보관 형태 | 기본 정책 |
+| --- | --- | --- |
+| 최근 원본 구간 | tick 원본 | 7일 |
+| 중기 구간 | 1분봉/5분봉 | 90일 |
+| 장기 구간 | 일봉 | 유지 또는 별도 보존 기간 지정 |
+
+```powershell
+# 기본은 dry-run
+python scripts/run_realtime_tick_retention.py --backend supabase --timezone Asia/Seoul
+
+# 검토 후 실제 집계/삭제 적용
+python scripts/run_realtime_tick_retention.py --backend supabase --timezone Asia/Seoul --apply
+```
+
+상세 절차는 [docs/realtime-tick-retention-runbook.md](docs/realtime-tick-retention-runbook.md)를 기준으로 합니다.
 
 ### GitHub Actions로 장중 worker 자동 실행
 

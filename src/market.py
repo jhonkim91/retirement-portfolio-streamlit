@@ -970,15 +970,19 @@ def fetch_intraday_price_snapshot(symbol: str, interval: str = "5m") -> dict[str
     if not normalized:
         return _empty_intraday_snapshot(normalized)
 
+    if is_krx_symbol(normalized):
+        try:
+            naver_snapshot = _fetch_intraday_price_snapshot_from_naver(normalized)
+        except Exception:
+            naver_snapshot = _empty_intraday_snapshot(normalized)
+        if naver_snapshot.get("timeline") or naver_snapshot.get("series"):
+            return naver_snapshot
+
     if prefers_kis_quote(normalized):
         try:
             return _fetch_intraday_price_snapshot_from_kis(normalized)
         except Exception:
             pass
-    if is_krx_symbol(normalized):
-        naver_snapshot = _fetch_intraday_price_snapshot_from_naver(normalized)
-        if naver_snapshot.get("timeline") or naver_snapshot.get("series"):
-            return naver_snapshot
     return _fetch_intraday_price_snapshot_from_yfinance(normalized, interval=interval)
 
 

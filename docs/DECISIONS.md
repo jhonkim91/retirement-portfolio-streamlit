@@ -31,10 +31,12 @@
 
 ## 시세와 realtime worker
 - KIS REST/WebSocket을 우선 시세 공급원으로 사용한다.
-- KIS 조회가 어려운 KRX 알파뉴메릭 ETF/ETN은 Naver chart fallback을 사용한다.
+- 자산배분 당일 추세는 full-day 분봉 확보를 위해 KRX 숫자/알파뉴메릭 종목 모두 Naver chart를 우선 사용하고, 비어 있으면 KIS/yfinance fallback을 사용한다.
 - 그 외 일부 경로는 `yfinance` fallback을 유지한다.
 - realtime worker 상태 갱신 시 새 quote 시각이 없으면 기존 `last_quote_at`를 보존한다.
 - quote 이력이 없는 계좌는 `last_quote_at=null`을 유지한다.
+- `realtime_price_ticks` 원본은 기본 7일만 보관하고, 이후 구간은 `realtime_price_bars`에 1분/5분/일봉으로 집계한다.
+- tick retention 스크립트는 기본 dry-run이며 `--apply`를 명시한 경우에만 운영 DB 삭제를 수행한다.
 - GitHub Actions `KIS Realtime Worker`는 장중 `UTC 00:00`, `UTC 02:55` schedule을 기준으로 관리한다.
 
 ## UI와 디자인

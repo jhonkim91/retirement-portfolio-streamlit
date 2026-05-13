@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 import unittest
 from unittest.mock import patch
 
 import pandas as pd
 
 import src.market as market
+from src.kis import KST_TIMEZONE, _domestic_intraday_query_time
 from src.market import (
     clean_code,
     fetch_intraday_price_snapshot,
@@ -193,6 +195,121 @@ class MarketProviderSelectionTests(unittest.TestCase):
         kis_mock.assert_not_called()
         naver_mock.assert_called_once()
         yahoo_mock.assert_not_called()
+
+    @patch("src.market._fetch_intraday_price_snapshot_from_yfinance")
+    @patch("src.market._fetch_intraday_price_snapshot_from_naver")
+    @patch("src.market._fetch_intraday_price_snapshot_from_kis")
+    @patch("src.market.is_kis_enabled", return_value=True)
+    def test_fetch_intraday_price_snapshot_prefers_naver_full_day_chart_for_numeric_krx_symbol(
+        self,
+        _is_kis_enabled_mock,
+        kis_mock,
+        naver_mock,
+        yahoo_mock,
+    ) -> None:
+        naver_mock.return_value = {
+            "symbol": "005930.KS",
+            "series": [70000.0, 70100.0, 70200.0],
+            "timeline": [
+                {"datetime": "2026-05-13T09:00:00", "close": 70000.0},
+                {"datetime": "2026-05-13T09:01:00", "close": 70100.0},
+                {"datetime": "2026-05-13T09:02:00", "close": 70200.0},
+            ],
+            "current_price": 70200.0,
+            "source": "Naver",
+        }
+        kis_mock.return_value = {
+            "symbol": "005930.KS",
+            "series": [70150.0],
+            "timeline": [{"datetime": "2026-05-13T23:59:00", "close": 70150.0}],
+            "current_price": 70150.0,
+            "source": "KIS REST",
+        }
+
+        result = fetch_intraday_price_snapshot("005930")
+
+        self.assertEqual(result["source"], "Naver")
+        self.assertEqual(len(result["timeline"]), 3)
+        naver_mock.assert_called_once()
+        kis_mock.assert_not_called()
+        yahoo_mock.assert_not_called()
+
+    @patch("src.market._fetch_intraday_price_snapshot_from_yfinance")
+    @patch("src.market._fetch_intraday_price_snapshot_from_naver")
+    @patch("src.market._fetch_intraday_price_snapshot_from_kis")
+    @patch("src.market.is_kis_enabled", return_value=True)
+    def test_fetch_intraday_price_snapshot_falls_back_to_kis_when_naver_chart_is_empty(
+        self,
+        _is_kis_enabled_mock,
+        kis_mock,
+        naver_mock,
+        yahoo_mock,
+    ) -> None:
+        naver_mock.return_value = {
+            "symbol": "005930.KS",
+            "series": [],
+            "timeline": [],
+            "source": "",
+        }
+        kis_mock.return_value = {
+            "symbol": "005930.KS",
+            "series": [70150.0],
+            "timeline": [{"datetime": "2026-05-13T14:22:00", "close": 70150.0}],
+            "current_price": 70150.0,
+            "source": "KIS REST",
+        }
+
+        result = fetch_intraday_price_snapshot("005930")
+
+        self.assertEqual(result["source"], "KIS REST")
+        naver_mock.assert_called_once()
+        kis_mock.assert_called_once()
+        yahoo_mock.assert_not_called()
+
+    @patch("src.market._fetch_intraday_price_snapshot_from_yfinance")
+    @patch("src.market._fetch_intraday_price_snapshot_from_naver", side_effect=ValueError("Naver unavailable"))
+    @patch("src.market._fetch_intraday_price_snapshot_from_kis")
+    @patch("src.market.is_kis_enabled", return_value=True)
+    def test_fetch_intraday_price_snapshot_falls_back_to_kis_when_naver_raises(
+        self,
+        _is_kis_enabled_mock,
+        kis_mock,
+        naver_mock,
+        yahoo_mock,
+    ) -> None:
+        kis_mock.return_value = {
+            "symbol": "005930.KS",
+            "series": [70150.0],
+            "timeline": [{"datetime": "2026-05-13T14:22:00", "close": 70150.0}],
+            "current_price": 70150.0,
+            "source": "KIS REST",
+        }
+
+        result = fetch_intraday_price_snapshot("005930")
+
+        self.assertEqual(result["source"], "KIS REST")
+        naver_mock.assert_called_once()
+        kis_mock.assert_called_once()
+        yahoo_mock.assert_not_called()
+
+
+class KisIntradayQueryTimeTests(unittest.TestCase):
+    """KIS 국내 분봉 기준 시각 보정을 검증한다."""
+
+    def test_domestic_intraday_query_time_uses_current_kst_during_market_hours(self) -> None:
+        current = datetime(2026, 5, 13, 14, 22, 33, tzinfo=KST_TIMEZONE)
+
+        self.assertEqual(_domestic_intraday_query_time(current), "142233")
+
+    def test_domestic_intraday_query_time_caps_future_after_market_close(self) -> None:
+        current = datetime(2026, 5, 13, 23, 59, 0, tzinfo=KST_TIMEZONE)
+
+        self.assertEqual(_domestic_intraday_query_time(current), "153000")
+
+    def test_domestic_intraday_query_time_converts_aware_datetime_to_kst(self) -> None:
+        current = datetime(2026, 5, 13, 5, 22, 33, tzinfo=timezone.utc)
+
+        self.assertEqual(_domestic_intraday_query_time(current), "142233")
 
 
 class MarketSectorResolutionTests(unittest.TestCase):

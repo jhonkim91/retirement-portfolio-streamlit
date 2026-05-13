@@ -7,6 +7,19 @@
 - 최신 검증 결과는 각 작업 완료 시 대표 명령만 갱신한다.
 
 ## 최신 대표 검증 결과
+- 모바일 보유 종목 카드 패치: `python -m compileall src/ui/app_core.py tests/test_app_dashboard.py` 성공.
+- 모바일 보유 종목 카드 패치: `python -m unittest tests.test_app_dashboard.HoldingsTableDisplayTests tests.test_app_dashboard.ThemeStylesheetTests` 성공, 16 tests.
+- 모바일 보유 종목 카드 패치: `python -m compileall app.py src scripts tests pages` 성공.
+- 모바일 보유 종목 카드 패치: `python -m unittest discover -s tests -p "test_*.py"` 성공, 164 tests.
+- 모바일 보유 종목 카드 브라우저 검증: 로컬 Streamlit `http://127.0.0.1:8542` 데모 대시보드에서 1280px table `block`/cards `none`, 390px table `none`/cards `grid`, card 7개, overflow 없음, exception 0 확인.
+- 자산배분 당일 추세 provider 패치: `python -m compileall src/kis.py src/market.py tests/test_market.py` 성공.
+- 자산배분 당일 추세 provider 패치: `python -m unittest tests.test_market tests.test_app_dashboard.AllocationTreemapVisualMapTests tests.test_app_dashboard.SelectedHoldingTrendFrameTests` 성공, 27 tests.
+- 자산배분 당일 추세 provider 패치: `python -m compileall app.py src scripts tests pages` 성공.
+- 자산배분 당일 추세 provider 패치: `python -m unittest discover -s tests -p "test_*.py"` 성공, 163 tests.
+- GitHub Actions cache/concurrency 패치: `git diff --check -- .github/workflows/kis-realtime-worker.yml .github/workflows/daily-rollup.yml Memory.md docs/VALIDATION.md` 성공.
+- GitHub Actions cache/concurrency 패치: `python -m compileall app.py src scripts tests pages` 성공.
+- GitHub Actions cache/concurrency 패치: `python -m unittest discover -s tests -p "test_*.py"` 성공, 157 tests.
+- BUG-02 원격 배포 검증: `git push origin main`으로 커밋 `21df7c6` 배포 트리거 후 `python scripts/verify_streamlit_deployment.py --page dashboard --expect-backend supabase --wait-ms 15000` 성공.
 - BUG-02 CSS surface 토큰 교체: `python -m unittest tests.test_app_dashboard.ThemeStylesheetTests` 성공, 8 tests.
 - BUG-02 CSS surface 토큰 교체: `python -m compileall app.py src scripts tests pages` 성공.
 - BUG-02 CSS surface 토큰 교체: `python -m unittest discover -s tests -p "test_*.py"` 성공, 157 tests.
@@ -84,6 +97,20 @@
 - Streamlit Cloud 대시보드/거래/데이터 페이지 원격 검증 성공 기록 있음.
 
 ## 2026-05-13 검증 요약
+- 모바일 보유 종목 카드 패치 검증.
+  - 대시보드 현재 보유 종목 패널에서 데스크톱은 기존 11컬럼 테이블을 유지하고, `640px` 이하에서는 테이블을 숨기고 카드 리스트를 표시하도록 보강.
+  - 카드에는 상품명, 코드, 자산군, 평가금액, 손익, 수익률, 수량, 현재가, 평단가를 표시하고 손익/수익률은 기존 tone class를 재사용.
+  - 모바일 카드 HTML 생성 함수 테스트, 스타일시트 테스트, 전체 compileall, 전체 unittest discover 성공.
+  - 로컬 Streamlit 데모 대시보드 1280px/390px Playwright 검증 성공. 스크린샷: `artifacts/mobile-holdings-desktop.png`, `artifacts/mobile-holdings-mobile.png`.
+- 자산배분 당일 추세 provider 패치 검증.
+  - 숫자 6자리 KRX 종목이 KIS REST 30포인트/미래 기준시각 경로를 먼저 타면서 일부 tooltip 당일 추세가 부정확해질 수 있던 조건을 확인.
+  - KRX 숫자/알파뉴메릭 종목 모두 Naver full-day 분봉을 우선 사용하고, Naver가 비어 있을 때 KIS/yfinance로 fallback하도록 변경.
+  - KIS fallback 조회 기준 시각을 `235959` 고정값에서 현재 KST 정규장 범위(`09:00:00`~`15:30:00`)로 보정.
+  - 직접 조회에서 `005930`, `396500`, `0113D0`, `0015S0` 모두 Naver 분봉 source와 당일 timeline 생성 확인.
+  - target market/app dashboard tests, 전체 compileall, 전체 unittest discover 성공.
+- BUG-02 원격 배포 검증.
+  - 커밋 `21df7c6` `Tokenize Streamlit surface backgrounds`를 `origin/main`에 push해 Streamlit Cloud 자동 배포를 트리거.
+  - 운영 앱 dashboard 검증 성공: 로그인 성공, workspace 표시, backend `Supabase`, allocation status `지연 데이터 표시 중`, `ok=true`.
 - BUG-02 CSS surface 토큰 교체 검증.
   - 우선 교체 대상 selector와 주요 카드/표면 배경의 `#ffffff`, `rgba(255, 255, 255, ...)` 하드코딩을 `var(--surface-strong)` 또는 `color-mix(...)`로 전환.
   - 우선 교체 대상 블록에 흰색 배경 하드코딩이 남지 않는 회귀 테스트 추가.

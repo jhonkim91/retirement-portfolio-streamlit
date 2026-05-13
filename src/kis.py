@@ -37,6 +37,9 @@ KIS_WS_URLS = {
     "prod": "ws://ops.koreainvestment.com:21000/tryitout",
     "paper": "ws://ops.koreainvestment.com:21000/tryitout",
 }
+KST_TIMEZONE = timezone(timedelta(hours=9))
+KIS_REGULAR_SESSION_OPEN = "090000"
+KIS_REGULAR_SESSION_CLOSE = "153000"
 KIS_MASTER_CACHE_DIR = Path(__file__).resolve().parents[1] / "data" / "kis_cache"
 KIS_MASTER_CACHE_TTL_SECONDS = 24 * 60 * 60
 KIS_MASTER_URLS = {
@@ -460,6 +463,23 @@ def is_kis_domestic_symbol(symbol: Any) -> bool:
     return len(code) == 6 and code.isdigit()
 
 
+def _domestic_intraday_query_time(now: datetime | None = None) -> str:
+    """KIS 국내 분봉 조회 기준 시각을 정규 장 시간 안으로 제한한다."""
+
+    current = now or datetime.now(tz=KST_TIMEZONE)
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=KST_TIMEZONE)
+    else:
+        current = current.astimezone(KST_TIMEZONE)
+
+    raw_time = current.strftime("%H%M%S")
+    if raw_time < KIS_REGULAR_SESSION_OPEN:
+        return KIS_REGULAR_SESSION_OPEN
+    if raw_time > KIS_REGULAR_SESSION_CLOSE:
+        return KIS_REGULAR_SESSION_CLOSE
+    return raw_time
+
+
 def _cache_path(file_name: str) -> Path:
     """KIS 캐시 파일 경로를 반환한다."""
 
@@ -843,7 +863,7 @@ class KisApiClient:
             params={
                 "FID_COND_MRKT_DIV_CODE": "J",
                 "FID_INPUT_ISCD": code,
-                "FID_INPUT_HOUR_1": "235959",
+                "FID_INPUT_HOUR_1": _domestic_intraday_query_time(),
                 "FID_PW_DATA_INCU_YN": "Y",
                 "FID_ETC_CLS_CODE": "",
             },

@@ -20,6 +20,9 @@
 - [x] `setup_supabase.sql` RLS 정책 재실행 안정화 반영
 - [x] UG-01 CSS 파일 누락 시 `render_app_stylesheet()` 안전 반환 처리
 - [x] BUG-02 우선 surface 배경의 흰색 하드코딩 토큰화
+- [x] GitHub Actions realtime worker/daily rollup `setup-python` pip cache와 realtime concurrency 반영
+- [x] 자산배분 당일 추세를 KRX 전 종목 Naver full-day 분봉 우선으로 보강
+- [x] 모바일 보유 종목 영역을 640px 이하 카드형 리스트로 전환
 - [ ] KIS WebSocket worker 장시간 실행 중 재연결/상태 복구를 장중 운영 로그 기준으로 추가 점검
 - [ ] 모바일 viewport에서 대시보드 트리맵/보유 종목 표/거래 입력 폼 가독성 확인
 - [ ] 스냅샷 저장, CSV export, 운영 정리 작업의 로딩 상태 표시 누락 여부 점검
@@ -81,6 +84,7 @@ python scripts/verify_streamlit_deployment.py --page data --expect-backend supab
 
 ## 현재 운영 상태
 - 기준일: `2026-05-13`
+- BUG-02 배포 커밋 `21df7c6`을 `origin/main`에 push했고 Streamlit Cloud 운영 dashboard 검증이 성공했다.
 - 배포 앱은 `Supabase` backend를 사용 중인 것으로 최근 검증에 기록됨.
 - 운영 Supabase realtime 테이블 노출 상태는 최근 기록 기준 `accounts`, `realtime_worker_status`, `realtime_price_ticks` 모두 HTTP `200`.
 - GitHub Actions `KIS Realtime Worker` manual run `25771266167`은 job `success`로 기록됨.
@@ -101,7 +105,7 @@ python scripts/verify_streamlit_deployment.py --page data --expect-backend supab
 - 보유현금은 자산 비중 표시에서 안전자산에 포함한다.
 - 계좌 간 이체 UI와 데모 seed 이체 예시는 제거된 상태다.
 - realtime worker 상태 갱신 시 새 quote 시각이 없으면 기존 `last_quote_at`를 보존한다.
-- KIS 가능한 종목은 KIS를 우선하고, KRX 알파뉴메릭 종목은 Naver chart fallback을 사용한다.
+- 최신가/실시간 worker는 KIS를 우선하고, 자산배분 당일 추세는 KRX 숫자/알파뉴메릭 종목 모두 Naver full-day 분봉을 우선 사용한다.
 - `altair`는 Streamlit Cloud Python 3.14 호환 문제 때문에 `altair>=5.3,<5.4`로 제한한다.
 - Supabase hotfix 상세 절차는 기본 비노출이며 `PORTFOLIO_SHOW_HOTFIX_GUIDE=true`일 때만 표시한다.
 - 전역 차트 색상은 `ChartColors`/`CHART_COLORS` 네임스페이스를 기준으로 관리한다.
@@ -114,11 +118,23 @@ python scripts/verify_streamlit_deployment.py --page data --expect-backend supab
 - UG-01 CSS 누락 안전장치: `python -m unittest tests.test_app_dashboard.ThemeStylesheetTests` 성공, 7 tests.
 - 최신 전체 검증: `python -m compileall app.py src scripts tests pages` 성공.
 - 최신 전체 검증: `python -m unittest discover -s tests -p "test_*.py"` 성공, 157 tests.
+- GitHub Actions cache/concurrency 패치 검증: `git diff --check -- .github/workflows/kis-realtime-worker.yml .github/workflows/daily-rollup.yml Memory.md docs/VALIDATION.md` 성공.
+- GitHub Actions cache/concurrency 패치 검증: `python -m compileall app.py src scripts tests pages` 성공.
+- GitHub Actions cache/concurrency 패치 검증: `python -m unittest discover -s tests -p "test_*.py"` 성공, 157 tests.
+- 자산배분 당일 추세 패치 검증: `python -m unittest tests.test_market tests.test_app_dashboard.AllocationTreemapVisualMapTests tests.test_app_dashboard.SelectedHoldingTrendFrameTests` 성공, 27 tests.
+- 자산배분 당일 추세 패치 검증: `python -m compileall app.py src scripts tests pages` 성공.
+- 자산배분 당일 추세 패치 검증: `python -m unittest discover -s tests -p "test_*.py"` 성공, 163 tests.
+- 직접 조회 확인: `005930`, `396500`, `0113D0`, `0015S0` 모두 Naver source와 당일 timeline 생성 확인.
+- 모바일 보유 종목 카드 패치 검증: `python -m unittest tests.test_app_dashboard.HoldingsTableDisplayTests tests.test_app_dashboard.ThemeStylesheetTests` 성공, 16 tests.
+- 모바일 보유 종목 카드 패치 검증: `python -m compileall app.py src scripts tests pages` 성공.
+- 모바일 보유 종목 카드 패치 검증: `python -m unittest discover -s tests -p "test_*.py"` 성공, 164 tests.
+- 로컬 Streamlit `http://127.0.0.1:8542` 데모 대시보드 1280px/390px 브라우저 검증 성공. 390px에서 table `none`, mobile cards `grid`, overflow 없음.
 - 대표 배포 검증 기록:
+  - `2026-05-13` BUG-02 CSS surface 토큰 배포 검증 성공: 커밋 `21df7c6`, 운영 앱 dashboard, backend `Supabase`, `allocation_status=지연 데이터 표시 중`, `ok=true`
   - `2026-05-13` DESIGN-04 KPI 반응형 배포 검증 성공: 운영 앱 dashboard, backend `Supabase`, allocation status `실시간 반영 중`, `ok=true`
   - `python3 scripts/verify_streamlit_deployment.py --page data --expect-backend supabase --wait-ms 12000` 성공
   - Streamlit Cloud 대시보드/거래/데이터 페이지 검증 성공 기록 존재
-- 이번 UG-01/BUG-02 패치는 로컬 코드/단위 테스트/전체 테스트로 검증했고 BUG-02 요청에 따라 배포를 진행한다.
+- 이번 UG-01/BUG-02 패치는 로컬 코드/단위 테스트/전체 테스트로 검증했고, BUG-02 커밋 `21df7c6` 원격 배포와 운영 dashboard 검증까지 완료했다.
 
 ## 문서 분리 결과
 - 날짜별 상세 로그:
@@ -138,6 +154,9 @@ python scripts/verify_streamlit_deployment.py --page data --expect-backend supab
 - 기존 워크트리에는 `data/portfolio.db` 수정과 여러 untracked 로컬 산출물이 남아 있다.
 - 최근 주요 변경 파일은 `.streamlit/app.css`, `.streamlit/config.toml`, `src/ui/app_core.py`, `tests/test_app_dashboard.py`, `docs/VALIDATION.md`, `docs/CHANGELOG.md`, `Memory.md` 중심이다.
 - 이번 UG-01/BUG-02 배포 대상 파일은 `.streamlit/app.css`, `.streamlit/config.toml`, `src/ui/app_core.py`, `tests/test_app_dashboard.py`, `docs/VALIDATION.md`, `docs/CHANGELOG.md`, `Memory.md`다.
+- 이번 GitHub Actions cache/concurrency 패치 대상 파일은 `.github/workflows/kis-realtime-worker.yml`, `.github/workflows/daily-rollup.yml`, `Memory.md`, `docs/VALIDATION.md`다.
+- 이번 자산배분 당일 추세 패치 대상 파일은 `src/market.py`, `src/kis.py`, `tests/test_market.py`, `README.md`, `docs/DECISIONS.md`, `docs/VALIDATION.md`, `docs/CHANGELOG.md`, `Memory.md`다.
+- 이번 모바일 보유 종목 카드 패치 대상 파일은 `src/ui/app_core.py`, `.streamlit/app.css`, `tests/test_app_dashboard.py`, `docs/VALIDATION.md`, `docs/CHANGELOG.md`, `Memory.md`다.
 - 배포 커밋: `5ad9936` `Improve dashboard KPI responsive cards` (`origin/main` push 완료)
 - 커밋 시 이번 요청 관련 파일만 선별하고 `data/portfolio.db`, `.local/`, `artifacts/`, `.playtools*/`, `.playwright-browsers/`, `.vscode/`, `data/kis_cache/` 등은 제외한다.
 

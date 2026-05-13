@@ -63,6 +63,32 @@ class SetupSupabaseSqlTests(unittest.TestCase):
 
         self.assertRegex(sql_text, pattern)
 
+    def test_realtime_price_bars_schema_supports_tick_retention_policy(self) -> None:
+        """실시간 tick 집계/보존 정책용 bar 테이블과 인덱스를 생성한다."""
+
+        sql_text = read_setup_sql()
+
+        self.assertIn("CREATE TABLE IF NOT EXISTS public.realtime_price_bars", sql_text)
+        self.assertIn("UNIQUE(account_id, symbol, interval, bucket_start)", sql_text)
+        self.assertIn("CHECK (interval IN ('1m', '5m', '1d'))", sql_text)
+        self.assertIn("idx_realtime_price_bars_account_interval_bucket", sql_text)
+        self.assertIn("GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.realtime_price_bars", sql_text)
+        self.assertIn("ALTER TABLE public.realtime_price_bars ENABLE ROW LEVEL SECURITY", sql_text)
+
+    def test_realtime_price_bars_policy_blocks_have_local_drop_before_create(self) -> None:
+        """bar 테이블 RLS 정책은 재실행 가능한 DROP 구문을 바로 앞에 둔다."""
+
+        sql_text = read_setup_sql()
+
+        for action in ("select", "insert", "update", "delete"):
+            with self.subTest(action=action):
+                pattern = re.compile(
+                    rf"DROP POLICY IF EXISTS realtime_price_bars_{action}_own ON public\.realtime_price_bars;[\s\S]*?"
+                    rf"CREATE POLICY realtime_price_bars_{action}_own",
+                    re.MULTILINE,
+                )
+                self.assertRegex(sql_text, pattern)
+
     def test_update_policy_blocks_have_balanced_parentheses(self) -> None:
         """문제 후보였던 UPDATE 정책 블록의 괄호 수가 균형인지 확인한다."""
 
@@ -70,6 +96,7 @@ class SetupSupabaseSqlTests(unittest.TestCase):
         policy_names = (
             "holdings_update_own",
             "daily_interest_update_own",
+            "realtime_price_bars_update_own",
         )
 
         for policy_name in policy_names:

@@ -222,6 +222,48 @@ def _ensure_realtime_price_ticks_table(connection: sqlite3.Connection) -> None:
     )
 
 
+def _ensure_realtime_price_bars_table(connection: sqlite3.Connection) -> None:
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS realtime_price_bars (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            account_id INTEGER NOT NULL,
+            symbol TEXT NOT NULL,
+            interval TEXT NOT NULL,
+            bucket_start TEXT NOT NULL,
+            open_price REAL NOT NULL,
+            high_price REAL NOT NULL,
+            low_price REAL NOT NULL,
+            close_price REAL NOT NULL,
+            previous_close REAL,
+            day_change_rate REAL,
+            tick_count INTEGER NOT NULL,
+            currency TEXT NOT NULL DEFAULT 'KRW',
+            first_quote_at TEXT NOT NULL,
+            last_quote_at TEXT NOT NULL,
+            aggregated_at TEXT NOT NULL,
+            source TEXT NOT NULL DEFAULT 'tick-retention',
+            metadata_json TEXT NOT NULL DEFAULT '{}',
+            UNIQUE(account_id, symbol, interval, bucket_start),
+            CHECK(interval IN ('1m', '5m', '1d')),
+            FOREIGN KEY(account_id) REFERENCES accounts(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_realtime_price_bars_account_interval_bucket
+        ON realtime_price_bars(account_id, interval, bucket_start DESC)
+        """
+    )
+    connection.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_realtime_price_bars_symbol_interval_bucket
+        ON realtime_price_bars(symbol, interval, bucket_start DESC)
+        """
+    )
+
+
 def _ensure_realtime_worker_status_table(connection: sqlite3.Connection) -> None:
     connection.execute(
         """
@@ -296,6 +338,7 @@ def initialize_database() -> None:
         _ensure_daily_interest_table(connection)
         _ensure_daily_account_snapshot_table(connection)
         _ensure_realtime_price_ticks_table(connection)
+        _ensure_realtime_price_bars_table(connection)
         _ensure_realtime_worker_status_table(connection)
         _migrate_trade_logs(connection)
         # 자동 배포 검사용 빈 계좌는 남길 필요가 없다.
@@ -308,6 +351,7 @@ def initialize_database() -> None:
               AND id NOT IN (SELECT account_id FROM daily_interest)
               AND id NOT IN (SELECT account_id FROM daily_account_snapshot)
               AND id NOT IN (SELECT account_id FROM realtime_price_ticks)
+              AND id NOT IN (SELECT account_id FROM realtime_price_bars)
               AND id NOT IN (SELECT account_id FROM realtime_worker_status)
             """
         )
@@ -1193,4 +1237,3 @@ def delete_trade_log(*args: Any, **kwargs: Any) -> None:
             )
 
         connection.commit()
-

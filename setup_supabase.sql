@@ -84,6 +84,29 @@ CREATE TABLE IF NOT EXISTS public.realtime_price_ticks (
     metadata_json JSONB NOT NULL DEFAULT '{}'::jsonb
 );
 
+CREATE TABLE IF NOT EXISTS public.realtime_price_bars (
+    id BIGSERIAL PRIMARY KEY,
+    account_id BIGINT NOT NULL REFERENCES public.accounts(id) ON DELETE CASCADE,
+    symbol TEXT NOT NULL,
+    interval TEXT NOT NULL,
+    bucket_start TEXT NOT NULL,
+    open_price DOUBLE PRECISION NOT NULL,
+    high_price DOUBLE PRECISION NOT NULL,
+    low_price DOUBLE PRECISION NOT NULL,
+    close_price DOUBLE PRECISION NOT NULL,
+    previous_close DOUBLE PRECISION,
+    day_change_rate DOUBLE PRECISION,
+    tick_count INTEGER NOT NULL,
+    currency TEXT NOT NULL DEFAULT 'KRW',
+    first_quote_at TEXT NOT NULL,
+    last_quote_at TEXT NOT NULL,
+    aggregated_at TEXT NOT NULL,
+    source TEXT NOT NULL DEFAULT 'tick-retention',
+    metadata_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+    UNIQUE(account_id, symbol, interval, bucket_start),
+    CHECK (interval IN ('1m', '5m', '1d'))
+);
+
 CREATE TABLE IF NOT EXISTS public.realtime_worker_status (
     account_id BIGINT PRIMARY KEY REFERENCES public.accounts(id) ON DELETE CASCADE,
     worker_name TEXT NOT NULL,
@@ -120,6 +143,8 @@ CREATE INDEX IF NOT EXISTS idx_daily_interest_account_date ON public.daily_inter
 CREATE INDEX IF NOT EXISTS idx_daily_account_snapshot_account_date ON public.daily_account_snapshot(account_id, snapshot_date);
 CREATE INDEX IF NOT EXISTS idx_realtime_price_ticks_account_quote_time ON public.realtime_price_ticks(account_id, quote_time DESC);
 CREATE INDEX IF NOT EXISTS idx_realtime_price_ticks_symbol_quote_time ON public.realtime_price_ticks(symbol, quote_time DESC);
+CREATE INDEX IF NOT EXISTS idx_realtime_price_bars_account_interval_bucket ON public.realtime_price_bars(account_id, interval, bucket_start DESC);
+CREATE INDEX IF NOT EXISTS idx_realtime_price_bars_symbol_interval_bucket ON public.realtime_price_bars(symbol, interval, bucket_start DESC);
 
 UPDATE public.trade_logs
 SET trade_type = 'personal_deposit'
@@ -162,6 +187,7 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.trade_logs TO authenticated
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.daily_interest TO authenticated, service_role;
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.daily_account_snapshot TO authenticated, service_role;
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.realtime_price_ticks TO authenticated, service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.realtime_price_bars TO authenticated, service_role;
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.realtime_worker_status TO authenticated, service_role;
 
 GRANT USAGE, SELECT ON SEQUENCE public.accounts_id_seq TO authenticated, service_role;
@@ -170,6 +196,7 @@ GRANT USAGE, SELECT ON SEQUENCE public.trade_logs_id_seq TO authenticated, servi
 GRANT USAGE, SELECT ON SEQUENCE public.daily_interest_id_seq TO authenticated, service_role;
 GRANT USAGE, SELECT ON SEQUENCE public.daily_account_snapshot_id_seq TO authenticated, service_role;
 GRANT USAGE, SELECT ON SEQUENCE public.realtime_price_ticks_id_seq TO authenticated, service_role;
+GRANT USAGE, SELECT ON SEQUENCE public.realtime_price_bars_id_seq TO authenticated, service_role;
 
 ALTER TABLE public.accounts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.holdings ENABLE ROW LEVEL SECURITY;
@@ -177,6 +204,7 @@ ALTER TABLE public.trade_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.daily_interest ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.daily_account_snapshot ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.realtime_price_ticks ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.realtime_price_bars ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.realtime_worker_status ENABLE ROW LEVEL SECURITY;
 
 -- SQL Editor에서 정책 일부만 재실행할 때 현재 정책 상태를 먼저 확인한다.
@@ -582,6 +610,76 @@ USING (
         SELECT 1
         FROM public.accounts
         WHERE accounts.id = realtime_price_ticks.account_id
+          AND accounts.owner_user_id = (select auth.uid())
+    )
+);
+
+DROP POLICY IF EXISTS realtime_price_bars_select_own ON public.realtime_price_bars;
+DROP POLICY IF EXISTS realtime_price_bars_insert_own ON public.realtime_price_bars;
+DROP POLICY IF EXISTS realtime_price_bars_update_own ON public.realtime_price_bars;
+DROP POLICY IF EXISTS realtime_price_bars_delete_own ON public.realtime_price_bars;
+
+CREATE POLICY realtime_price_bars_select_own
+ON public.realtime_price_bars
+FOR SELECT
+TO authenticated
+USING (
+    (select auth.uid()) IS NOT NULL
+    AND EXISTS (
+        SELECT 1
+        FROM public.accounts
+        WHERE accounts.id = realtime_price_bars.account_id
+          AND accounts.owner_user_id = (select auth.uid())
+    )
+);
+
+CREATE POLICY realtime_price_bars_insert_own
+ON public.realtime_price_bars
+FOR INSERT
+TO authenticated
+WITH CHECK (
+    (select auth.uid()) IS NOT NULL
+    AND EXISTS (
+        SELECT 1
+        FROM public.accounts
+        WHERE accounts.id = realtime_price_bars.account_id
+          AND accounts.owner_user_id = (select auth.uid())
+    )
+);
+
+CREATE POLICY realtime_price_bars_update_own
+ON public.realtime_price_bars
+FOR UPDATE
+TO authenticated
+USING (
+    (select auth.uid()) IS NOT NULL
+    AND EXISTS (
+        SELECT 1
+        FROM public.accounts
+        WHERE accounts.id = realtime_price_bars.account_id
+          AND accounts.owner_user_id = (select auth.uid())
+    )
+)
+WITH CHECK (
+    (select auth.uid()) IS NOT NULL
+    AND EXISTS (
+        SELECT 1
+        FROM public.accounts
+        WHERE accounts.id = realtime_price_bars.account_id
+          AND accounts.owner_user_id = (select auth.uid())
+    )
+);
+
+CREATE POLICY realtime_price_bars_delete_own
+ON public.realtime_price_bars
+FOR DELETE
+TO authenticated
+USING (
+    (select auth.uid()) IS NOT NULL
+    AND EXISTS (
+        SELECT 1
+        FROM public.accounts
+        WHERE accounts.id = realtime_price_bars.account_id
           AND accounts.owner_user_id = (select auth.uid())
     )
 );

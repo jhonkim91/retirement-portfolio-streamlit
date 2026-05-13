@@ -3842,7 +3842,15 @@ def show_holdings_table(frame: pd.DataFrame, *, height: int = 420) -> None:
         return
 
     display = build_holdings_table_display(frame)
-    st.markdown(build_holdings_table_html(display, max_height=height), unsafe_allow_html=True)
+    st.markdown(
+        "".join(
+            [
+                build_holdings_table_html(display, max_height=height, shell_class="holdings-table-shell--desktop"),
+                build_holdings_mobile_cards_html(display),
+            ]
+        ),
+        unsafe_allow_html=True,
+    )
 
 
 def build_holdings_mix_bar_html(summary: dict[str, Any]) -> str:
@@ -4031,6 +4039,7 @@ def build_theme_table_html(
     numeric_columns: set[str] | None = None,
     tone_columns: set[str] | None = None,
     html_columns: set[str] | None = None,
+    shell_class: str = "",
 ) -> str:
     """앱 공통 테이블 테마 클래스로 표시용 DataFrame을 HTML 테이블로 변환한다."""
 
@@ -4059,9 +4068,13 @@ def build_theme_table_html(
             )
         body_rows.append(f"<tr>{''.join(cells)}</tr>")
 
+    shell_classes = "holdings-table-shell"
+    if shell_class:
+        shell_classes += f" {html.escape(shell_class, quote=True)}"
+
     return "".join(
         [
-            f'<div class="holdings-table-shell" style="max-height:{int(max_height)}px;">',
+            f'<div class="{shell_classes}" style="max-height:{int(max_height)}px;">',
             '<table class="holdings-table">',
             f"<thead><tr>{header_html}</tr></thead>",
             f"<tbody>{''.join(body_rows)}</tbody>",
@@ -4071,7 +4084,7 @@ def build_theme_table_html(
     )
 
 
-def build_holdings_table_html(display: pd.DataFrame, *, max_height: int = 420) -> str:
+def build_holdings_table_html(display: pd.DataFrame, *, max_height: int = 420, shell_class: str = "") -> str:
     """현재 보유 종목 표를 스크린샷 스타일에 맞는 HTML 테이블로 변환한다."""
 
     return build_theme_table_html(
@@ -4079,6 +4092,71 @@ def build_holdings_table_html(display: pd.DataFrame, *, max_height: int = 420) -
         max_height=max_height,
         numeric_columns={"수량", "평단가", "현재가", "원금", "평가금액", "손익", "수익률(%)", "가격갱신"},
         tone_columns={"손익", "수익률(%)"},
+        shell_class=shell_class,
+    )
+
+
+def build_holdings_mobile_cards_html(display: pd.DataFrame) -> str:
+    """모바일 화면에서 현재 보유 종목을 카드형 리스트 HTML로 변환한다."""
+
+    if display.empty:
+        return ""
+
+    def cell(row: dict[str, Any], column: str) -> str:
+        value = str(row.get(column) or "-").strip()
+        return html.escape(value or "-")
+
+    card_html: list[str] = []
+    for row in display.to_dict(orient="records"):
+        profit_tone = _holding_value_tone_class(row.get("손익"))
+        rate_tone = _holding_value_tone_class(row.get("수익률(%)"))
+        rate_value = cell(row, "수익률(%)")
+        if rate_value not in {"-", ""} and not rate_value.endswith("%"):
+            rate_value = f"{rate_value}%"
+        stat_items = [
+            ("평가금액", cell(row, "평가금액"), ""),
+            ("손익", cell(row, "손익"), profit_tone),
+            ("수익률", rate_value, rate_tone),
+            ("수량", cell(row, "수량"), ""),
+            ("현재가", cell(row, "현재가"), ""),
+            ("평단가", cell(row, "평단가"), ""),
+        ]
+        stats = "".join(
+            "".join(
+                [
+                    '<div class="holdings-mobile-card__stat">',
+                    f'<span class="holdings-mobile-card__label">{label}</span>',
+                    f'<span class="holdings-mobile-card__value{tone_class}">{value}</span>',
+                    "</div>",
+                ]
+            )
+            for label, value, tone_class in stat_items
+        )
+        card_html.append(
+            "".join(
+                [
+                    '<article class="holdings-mobile-card">',
+                    '<div class="holdings-mobile-card__header">',
+                    '<div class="holdings-mobile-card__identity">',
+                    f'<div class="holdings-mobile-card__title">{cell(row, "상품명")}</div>',
+                    f'<div class="holdings-mobile-card__code">{cell(row, "코드")}</div>',
+                    "</div>",
+                    f'<span class="holdings-mobile-card__asset">{cell(row, "자산군")}</span>',
+                    "</div>",
+                    '<div class="holdings-mobile-card__stats">',
+                    stats,
+                    "</div>",
+                    "</article>",
+                ]
+            )
+        )
+
+    return "".join(
+        [
+            '<div class="holdings-mobile-card-list" aria-label="모바일 보유 종목 목록">',
+            "".join(card_html),
+            "</div>",
+        ]
     )
 
 
