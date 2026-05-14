@@ -3295,6 +3295,13 @@ def account_type_badge_html(account: dict[str, Any]) -> str:
     )
 
 
+def sidebar_account_name_html(account: dict[str, Any]) -> str:
+    """사이드바 단일 계좌 표시용 이름 박스 HTML을 만든다."""
+
+    account_name = html.escape(str(account.get("name") or "선택 계좌"))
+    return f'<div class="sidebar-account-selected-name">{account_name}</div>'
+
+
 def render_sidebar_navigation() -> None:
     """사이드바 상단에 브랜드와 페이지 링크를 렌더링한다."""
 
@@ -3399,6 +3406,29 @@ def dashboard_trend_values(
     else:
         selected_values = numeric_values.tail(max(int(limit), 1))
     return [float(value) for value in selected_values.tolist()]
+
+
+def dashboard_previous_day_change(
+    trend_frame: pd.DataFrame | None,
+    *,
+    column: str = "total_value",
+) -> tuple[float, float]:
+    """추이 데이터의 마지막 두 값으로 전일 대비 증감액과 증감률을 계산한다."""
+
+    if trend_frame is None or trend_frame.empty or column not in trend_frame.columns:
+        return 0.0, 0.0
+    working = trend_frame.copy()
+    if "date" in working.columns:
+        working["_sort_date"] = pd.to_datetime(working["date"], errors="coerce")
+        working = working.sort_values("_sort_date")
+    numeric_values = pd.to_numeric(working[column], errors="coerce").dropna()
+    if len(numeric_values) < 2:
+        return 0.0, 0.0
+    previous_value = float(numeric_values.iloc[-2])
+    current_value = float(numeric_values.iloc[-1])
+    amount_delta = current_value - previous_value
+    rate_delta = (amount_delta / previous_value * 100) if previous_value else 0.0
+    return amount_delta, rate_delta
 
 
 def format_dashboard_overview_reference_time(value: Any) -> str:
@@ -3587,10 +3617,6 @@ def render_dashboard_top_overview_option2(
     """제안 2번 디자인의 대시보드 상단 통합 Overview Panel을 렌더링한다."""
 
     total_value = dashboard_safe_float(summary.get("total_value"))
-    principal_profit_loss = dashboard_safe_float(summary.get("principal_profit_loss") or summary.get("actual_profit_loss"))
-    principal_profit_rate = dashboard_safe_float(summary.get("principal_profit_rate") or summary.get("actual_profit_rate"))
-    hero_tone = dashboard_tone_from_value(principal_profit_loss)
-    hero_arrow = "▲" if principal_profit_loss >= 0 else "▼"
     hero_label = "보유 평가액" if bool(summary.get("_valuation_mode")) else "총 자산 평가액"
     selected_period = selected_dashboard_overview_period()
     trend_values = dashboard_trend_values(
@@ -3598,6 +3624,9 @@ def render_dashboard_top_overview_option2(
         "total_value",
         limit=dashboard_overview_period_limit(selected_period),
     )
+    previous_day_delta, previous_day_rate = dashboard_previous_day_change(trend_frame, column="total_value")
+    hero_tone = dashboard_tone_from_value(previous_day_delta)
+    hero_arrow = "▲" if previous_day_delta >= 0 else "▼"
     hero_sparkline = build_dashboard_sparkline_svg(trend_values, tone="hero", width=420, height=120)
     metric_cards = "".join(
         render_dashboard_metric_card_option2(spec)
@@ -3656,8 +3685,8 @@ def render_dashboard_top_overview_option2(
                         f'<div class="dashboard-overview-hero__label">{html.escape(hero_label)}</div>'
                         f'<div class="soft-wealth-hero__value dashboard-overview-hero__value">{dashboard_format_won(total_value)}</div>'
                         f'<div class="dashboard-overview-hero__delta dashboard-overview-hero__delta--{hero_tone}">'
-                        f"{hero_arrow} {dashboard_format_won(abs(principal_profit_loss))} "
-                        f"({dashboard_format_rate(principal_profit_rate, signed=True)})"
+                        f"{hero_arrow} {dashboard_format_won(abs(previous_day_delta))} "
+                        f"({dashboard_format_rate(previous_day_rate, signed=True)})"
                         "</div>"
                         '<div class="dashboard-overview-hero__caption">전일 대비</div>'
                         f'<div class="dashboard-overview-hero__chart">{hero_sparkline}</div>'
@@ -6867,15 +6896,20 @@ def sidebar(accounts: list[dict[str, Any]], selected_account_id: int | None, use
                         st.session_state.get("sidebar_show_new_account_form")
                     )
 
-            selected_account_id = st.selectbox(
-                "계좌",
-                options=account_ids,
-                index=account_ids.index(selected_account_id),
-                format_func=lambda account_id: str(
-                    next(account for account in accounts if int(account["id"]) == account_id).get("name") or account_id
-                ),
-                label_visibility="collapsed",
-            )
+            if len(account_ids) > 1:
+                selected_account_id = st.selectbox(
+                    "계좌",
+                    options=account_ids,
+                    index=account_ids.index(selected_account_id),
+                    format_func=lambda account_id: str(
+                        next(account for account in accounts if int(account["id"]) == account_id).get("name") or account_id
+                    ),
+                    label_visibility="collapsed",
+                )
+            else:
+                selected_account_id = account_ids[0]
+                single_account = next(account for account in accounts if int(account["id"]) == int(selected_account_id))
+                st.markdown(sidebar_account_name_html(single_account), unsafe_allow_html=True)
             st.session_state["selected_account_id"] = selected_account_id
             selected_account = next(account for account in accounts if int(account["id"]) == int(selected_account_id))
             st.markdown(account_type_badge_html(selected_account), unsafe_allow_html=True)

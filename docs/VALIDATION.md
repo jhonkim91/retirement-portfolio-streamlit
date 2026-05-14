@@ -7,11 +7,13 @@
 
 ## 최신 대표 검증 결과
 - 작업 범위: 입금액 기준 일별 평가액 기록 기능 추가
+- 추가 UI 조정: 단일 계좌 사이드바 체크 표시 제거, Dashboard 히어로 전일 대비 자산 증감 표시, 입금 대비 손익/수익률 KPI 차트 확대
 - 신규 저장소: Supabase/SQLite `daily_valuation_snapshot` 테이블, RLS/GRANT, batch upsert, 조회/삭제 wrapper 추가
 - 신규 계산: `src/valuation.py`에서 `employer_deposit`, `personal_deposit`, legacy `deposit`, `opening_cash`를 입금 원금으로 누적하고 FIFO 잔여 매입원가, 현금간주액, 오늘 실제 현금, 가격 fallback 종목을 계산
 - 경고 수정: Supabase 평가 스냅샷 저장 전 중복 계좌 재조회로 정상 계좌에서도 “계좌를 찾을 수 없습니다”가 표시될 수 있는 경로를 제거
 - 신규 가격 조회: 거래 로그 종목별 날짜 범위 가격 이력을 KIS/Naver/yfinance 경로로 조회하고 실패 종목은 빈 series로 넘겨 lot 단가 fallback 적용
 - 신규 UI: `평가액 기록` 별도 페이지 추가, Dashboard 상단은 오늘 평가 스냅샷이 있으면 `보유 평가액`/`입금 원금` 기준으로 표시
+- Dashboard 히어로: `전일 대비` 값은 추이 데이터의 마지막 두 `total_value` 차이로 계산
 - 신규 편집: 평가액 기록 CSV 저장/불러오기와 `data_editor` 기반 수동 수정 저장 추가
 - 재계산 hook: 거래 저장/수정/삭제, 현금 흐름, CSV import 완료, 수동 가격 refresh, daily rollup에서 계좌별 1회 재계산
 - 배치 연동: `scripts/run_daily_rollup.py`가 기존 `daily_account_snapshot`과 신규 `daily_valuation_snapshot`을 함께 처리
@@ -19,9 +21,10 @@
 
 ## 명령 검증
 - `python -m compileall app.py src scripts tests pages` 성공
+- `python -m unittest discover -s tests -p "test_*.py"` 성공, 233 tests
+- `git diff --check -- .streamlit/app.css src/ui/app_core.py tests/test_app_dashboard.py` 성공
 - `python -m pytest tests/test_app_dashboard.py tests/test_db.py tests/test_valuation.py tests/test_verify_streamlit_deployment.py` 성공, 166 tests
 - `python -m pytest tests/test_valuation.py tests/test_db.py tests/test_app_dashboard.py tests/test_run_daily_rollup.py tests/test_verify_streamlit_deployment.py` 성공, 164 tests
-- `python -m unittest discover -s tests -p "test_*.py"` 성공, 232 tests
 - `git diff --check -- README.md docs/VALIDATION.md setup_supabase.sql migrations/2026-05-14_add_daily_valuation_snapshot.sql src/valuation.py src/market.py src/sqlite_db.py src/db.py src/ui/app_core.py scripts/run_daily_rollup.py scripts/verify_streamlit_deployment.py pages/valuation.py tests/test_valuation.py tests/test_db.py tests/test_setup_supabase_sql.py tests/test_app_dashboard.py tests/test_run_daily_rollup.py tests/test_verify_streamlit_deployment.py` 성공
 - `curl -sS --max-time 5 http://127.0.0.1:8501/_stcore/health` 결과 `ok`
 
@@ -64,6 +67,9 @@ python scripts/verify_streamlit_deployment.py \
 - `PAGES`, `PAGE_LABELS`, 사이드바, navigation page name에 `평가액 기록` 연결
 - Dashboard가 오늘 평가 스냅샷을 summary보다 우선 사용
 - Dashboard 문구가 `보유 평가액`, `입금 원금`, `현재 보유현금`, `입금 대비 손익`, `입금 대비 수익률`로 표시
+- Dashboard 히어로가 입금 대비 손익 대신 전일 대비 총자산 증감을 표시
+- 단일 계좌 사이드바가 selectbox 대신 이름 박스를 렌더링해 체크 표시를 노출하지 않음
+- 입금 대비 손익/수익률 KPI 카드의 sparkline 표시 영역 확대
 - 평가액 기록 페이지가 CSV 저장, CSV 불러오기, 화면 수정 저장 UI를 제공
 - `scripts/run_daily_rollup.py`가 기존 daily account snapshot과 신규 valuation snapshot을 함께 처리
 

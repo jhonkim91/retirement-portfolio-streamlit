@@ -479,6 +479,8 @@ class TradeFormResetTests(unittest.TestCase):
         self.assertIn("render_sidebar_navigation()", sidebar_source)
         self.assertIn("render_new_account_form()", sidebar_source)
         self.assertIn("render_account_delete_dialog(selected_account, account_ids)", sidebar_source)
+        self.assertIn("if len(account_ids) > 1:", sidebar_source)
+        self.assertIn("sidebar_account_name_html(single_account)", sidebar_source)
         self.assertIn('@st.dialog("계좌 삭제 확인")', dialog_source)
 
     def test_navigation_uses_custom_sidebar_links(self) -> None:
@@ -532,6 +534,24 @@ class TradeFormResetTests(unittest.TestCase):
         self.assertIn("dashboard-overview-toolbar__combined", stylesheet)
         self.assertIn("dashboard-overview-toolbar__status", stylesheet)
         self.assertIn("dashboard-overview-card--no-sparkline", stylesheet)
+        self.assertIn("dashboard-overview-card--profit .dashboard-overview-card__sparkline", stylesheet)
+        self.assertIn("dashboard_previous_day_change", overview_source)
+
+    def test_dashboard_previous_day_change_uses_last_two_total_values(self) -> None:
+        """히어로 증감값은 입금 대비 손익이 아니라 전일 대비 총자산 변화로 계산한다."""
+
+        frame = pd.DataFrame(
+            [
+                {"date": "2026-05-13", "total_value": 1_000_000},
+                {"date": "2026-05-12", "total_value": 900_000},
+                {"date": "2026-05-14", "total_value": 1_050_000},
+            ]
+        )
+
+        amount_delta, rate_delta = dashboard_app.dashboard_previous_day_change(frame)
+
+        self.assertEqual(amount_delta, 50_000)
+        self.assertAlmostEqual(rate_delta, 5.0)
 
     def test_dashboard_overview_metric_labels_use_profit_rate(self) -> None:
         """Overview KPI는 목표 달성률 대신 수익률 라벨을 사용한다."""

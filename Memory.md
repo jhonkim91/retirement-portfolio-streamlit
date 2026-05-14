@@ -15,8 +15,9 @@
 - [x] 평가액 기록 시작일과 원금을 회사 납입금 단독 기준에서 개인 입금 포함 입금성 거래 기준으로 변경
 - [x] Supabase 평가 스냅샷 저장 전 중복 계좌 재조회로 발생하던 “계좌를 찾을 수 없습니다” 경고 방지
 - [x] 평가액 기록 CSV 저장/불러오기와 화면 수정 저장 기능 추가
+- [x] 단일 계좌 사이드바 체크 표시 제거, Dashboard 히어로 전일 대비 증감 표시, 손익/수익률 KPI 차트 확대
 - [x] 계산/DB/스키마/UI/배치 회귀 테스트 추가 및 통과
-- [ ] Supabase 운영/스테이징 DB에 `migrations/2026-05-14_add_daily_valuation_snapshot.sql` 적용
+- [x] Supabase 운영 DB에 `migrations/2026-05-14_add_daily_valuation_snapshot.sql` 적용 및 평가 스냅샷 재계산
 - [ ] 기존 `migrations/2026-05-14_normalize_temporal_columns.sql` 적용 전 cast 실패 행 여부 점검
 - [ ] KIS WebSocket worker 장시간 실행 중 재연결/상태 복구를 장중 운영 로그 기준으로 추가 점검
 
@@ -40,6 +41,8 @@
 - `src/db.py`: Supabase/SQLite 공통 wrapper, Supabase batch upsert, cache 무효화, export table 반영
 - `src/ui/app_core.py`: Dashboard 스냅샷 우선 표시, 평가액 기록 페이지, 거래/CSV/가격 갱신 후 재계산 hook 추가
 - `src/ui/app_core.py`: 평가액 기록 CSV 저장/불러오기, `data_editor` 기반 수동 수정 저장 추가
+- `src/ui/app_core.py`: 단일 계좌 사이드바는 selectbox 대신 이름 박스로 표시하고, Dashboard 히어로는 전일 대비 총자산 증감을 표시
+- `.streamlit/app.css`: 사이드바 단일 계좌 이름 박스 스타일과 손익/수익률 KPI sparkline 확대 스타일 추가
 - `pages/valuation.py`: Streamlit 평가액 기록 페이지 진입점 추가
 - `scripts/run_daily_rollup.py`: 기존 일별 계좌 스냅샷 저장 후 평가 스냅샷도 재계산 저장
 - `scripts/verify_streamlit_deployment.py`: `valuation` 페이지 검증 대상 추가
@@ -58,6 +61,8 @@
 - `rebuild_and_save_daily_valuation_snapshots()`는 stale row 방지를 위해 계좌의 기존 평가 스냅샷을 삭제한 뒤 전체 series를 다시 저장한다.
 - realtime tick마다 재계산하지 않고 거래 UI, CSV import 완료, 수동 가격 refresh, daily rollup에서 계좌별 1회 재계산한다.
 - Dashboard는 오늘 평가 스냅샷이 있으면 `보유 평가액`, `입금 원금`, `현재 보유현금`, `입금 대비 손익`, `입금 대비 수익률`을 우선 표시한다.
+- Dashboard 히어로의 `전일 대비` 값은 입금 대비 손익이 아니라 추이 데이터의 마지막 두 `total_value` 차이로 계산한다.
+- 사이드바 계좌가 1개뿐이면 Streamlit selectbox를 사용하지 않아 선택 체크 표시가 보이지 않게 한다.
 - 스냅샷이 없으면 기존 summary와 `daily_account_snapshot` 기반 표시로 fallback한다.
 
 ## 실행 명령
@@ -72,17 +77,18 @@ streamlit run app.py --server.port 8501 --server.address 0.0.0.0 --server.fileWa
 
 ## 최신 검증 결과
 - `python -m compileall app.py src scripts tests pages` 성공
+- `python -m unittest discover -s tests -p "test_*.py"` 성공, 233 tests
+- `git diff --check -- .streamlit/app.css src/ui/app_core.py tests/test_app_dashboard.py` 성공
 - `python -m pytest tests/test_app_dashboard.py tests/test_db.py tests/test_valuation.py tests/test_verify_streamlit_deployment.py` 성공, 166 tests
 - `python -m pytest tests/test_valuation.py tests/test_db.py tests/test_app_dashboard.py tests/test_run_daily_rollup.py tests/test_verify_streamlit_deployment.py` 성공, 164 tests
-- `python -m unittest discover -s tests -p "test_*.py"` 성공, 232 tests
 - `git diff --check -- README.md docs/VALIDATION.md setup_supabase.sql migrations/2026-05-14_add_daily_valuation_snapshot.sql src/valuation.py src/market.py src/sqlite_db.py src/db.py src/ui/app_core.py scripts/run_daily_rollup.py scripts/verify_streamlit_deployment.py pages/valuation.py tests/test_valuation.py tests/test_db.py tests/test_setup_supabase_sql.py tests/test_app_dashboard.py tests/test_run_daily_rollup.py tests/test_verify_streamlit_deployment.py` 성공
 - 로컬 Streamlit 서버 `http://127.0.0.1:8501` health `ok`
 - `python scripts/verify_streamlit_deployment.py --url http://127.0.0.1:8501 --page valuation --expect-backend sqlite --wait-ms 12000 ...` 성공, `ok=true`
 
 ## Git/GitHub 상태
 - 기본 브랜치: `main`
-- 이번 요청에서 평가액 기록 기능과 누적 UI/스키마 변경을 `main`에 커밋/푸시한다.
-- 최종 commit hash와 배포 검증 결과는 완료 보고와 `git log -1 --oneline` 기준으로 확인한다.
+- 평가액 기록 CSV 편집 기능은 `bbe5ee7 Add valuation CSV edit workflow`로 `main`에 커밋/푸시했다.
+- 이번 Dashboard/sidebar UI 변경은 검증 후 `main`에 커밋/푸시한다.
 - 워크트리에는 이번 요청 전부터 `data/portfolio.db`, `.streamlit/app.css`, `src/auth.py`, `docs/review_report.md` 삭제, 로컬 도구 디렉터리, 산출물 등 여러 변경/미추적 파일이 함께 있었다.
 - 커밋 시 요청 관련 파일만 선별하고 `data/portfolio.db`, `.local/`, `.playtools*/`, `.playwright-browsers/`, `.vscode/`, `artifacts/`, `data/kis_cache/` 등 로컬 산출물은 제외한다.
 

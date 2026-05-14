@@ -173,6 +173,20 @@ h6 {
     padding: 0.32rem 0.54rem;
 }
 
+.sidebar-account-selected-name {
+    align-items: center;
+    background: color-mix(in srgb, var(--surface-strong) 94%, var(--theme-primary) 6%);
+    border: 1px solid var(--line-soft);
+    border-radius: 8px;
+    color: var(--brand-deep);
+    display: flex;
+    font-size: 0.9rem;
+    font-weight: 900;
+    min-height: 2.35rem;
+    padding: 0.52rem 0.72rem;
+    width: 100%;
+}
+
 .sidebar-account-name {
     color: var(--mid-text);
     font-size: 0.78rem;
@@ -2504,6 +2518,28 @@ div[role="dialog"] [data-testid="stFormSubmitButton"] > button {
     bottom: 0.98rem;
     height: 2.42rem;
     opacity: 0.88;
+}
+
+.dashboard-overview-card--profit .dashboard-overview-card__sparkline,
+.dashboard-overview-card--goal .dashboard-overview-card__sparkline {
+    bottom: 0.54rem;
+    height: 4.85rem;
+    left: 0.68rem;
+    right: 0.68rem;
+    opacity: 0.96;
+}
+
+.dashboard-overview-card--profit::after,
+.dashboard-overview-card--goal::after {
+    bottom: 0.36rem;
+    height: 5.15rem;
+    left: 0.6rem;
+    right: 0.6rem;
+}
+
+.dashboard-overview-card--profit .dashboard-overview-sparkline__line,
+.dashboard-overview-card--goal .dashboard-overview-sparkline__line {
+    stroke-width: 4;
 }
 
 .dashboard-overview-sparkline--primary {
