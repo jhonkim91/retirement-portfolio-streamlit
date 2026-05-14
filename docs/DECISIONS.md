@@ -2,13 +2,14 @@
 
 ## 기준
 - 이 문서는 `Memory.md`에서 분리한 중요한 설계 결정 요약이다.
-- 정리 기준일은 `2026-05-13`이다.
+- 정리 기준일은 `2026-05-14`이다.
 - 상세 배경은 `docs/archive/memory-YYYY-MM-DD.md`와 `docs/CHANGELOG.md`를 참조한다.
 
 ## 앱 구조
 - `app.py`는 얇은 엔트리포인트와 호환 레이어로 유지한다.
 - 실제 앱 구현은 `src/ui/app_core.py`가 담당한다.
-- `pages/dashboard.py`, `pages/trades.py`, `pages/data.py`는 `st.navigation` 기반 페이지 진입점으로 유지한다.
+- `pages/dashboard.py`, `pages/trades.py`만 `st.navigation` 공개 페이지로 유지한다.
+- 데이터/운영 상태 페이지는 현재 UI 내비게이션에서 제거하고, 대시보드와 거래만 노출한다.
 - 기존 테스트와 monkey patch 호환을 위해 `app.py` 공개 함수/상수 접근은 앱 코어로 위임한다.
 - 무거운 의존성은 인증 화면 첫 렌더를 늦추지 않도록 가능한 지연 로드한다.
 

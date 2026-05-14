@@ -95,8 +95,8 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--page",
-        choices=("dashboard", "trades", "data"),
-        default="data",
+        choices=("dashboard", "trades"),
+        default="dashboard",
         help="배포 검증에서 열 페이지",
     )
     parser.add_argument("--wait-ms", type=int, default=12_000, help="배포 검증 대기 시간(ms)")

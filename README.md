@@ -126,7 +126,7 @@ python scripts/run_kis_quote_worker.py --backend supabase
 
 - worker는 현재 보유 중인 국내 종목 전체를 KIS WebSocket으로 구독합니다.
 - 수신한 quote마다 `holdings.current_price`를 overwrite하고 `realtime_price_ticks` 이력 테이블에도 append 합니다.
-- `데이터 > 운영 상태`에서 `KIS REST`, `KIS WebSocket worker`, `마지막 quote 반영` 상태를 확인할 수 있습니다.
+- 현재 UI에서 데이터 탭은 제거되어 있습니다. worker 상태는 `realtime_worker_status` 저장소 값과 배포 검증 스크립트의 backend 결과로 확인합니다.
 
 ### 실시간 tick 보존 정책
 
@@ -223,7 +223,7 @@ python scripts/run_daily_rollup.py --backend supabase --date 2026-05-10 --timezo
 - 기본 백엔드 선택값은 `PORTFOLIO_BACKEND=auto`입니다.
 - `SUPABASE_URL`과 `SUPABASE_KEY`가 있으면 앱은 기본적으로 `Supabase`를 우선 사용합니다.
 - `PORTFOLIO_BACKEND=sqlite`가 설정되어 있으면 배포 환경에서도 로컬 SQLite를 강제로 사용하므로 운영 배포에서는 권장하지 않습니다.
-- 웹 앱의 `데이터 > 운영 상태` 패널에서 현재 저장소, Supabase 설정 감지 여부, 강제 백엔드 설정 여부를 바로 확인할 수 있습니다.
+- 현재 운영 UI는 대시보드와 거래 페이지만 노출합니다. 저장소 상태는 배포 검증 스크립트의 `backend_storage` 결과로 확인합니다.
 
 ## 웹 배포 검증
 
@@ -235,7 +235,7 @@ python -m playwright install chromium
 
 $env:STREAMLIT_VERIFY_EMAIL = "you@example.com"
 $env:STREAMLIT_VERIFY_PASSWORD = "your-password"
-python scripts/verify_streamlit_deployment.py --page data --expect-backend supabase
+python scripts/verify_streamlit_deployment.py --page dashboard --expect-backend supabase
 ```
 
 - `--screenshot`을 주면 전체 화면 이미지를 저장합니다.

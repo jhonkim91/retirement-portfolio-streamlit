@@ -47,36 +47,48 @@ class ThemeStylesheetTests(unittest.TestCase):
 
         tokens = dashboard_app.load_design_tokens()
 
-        self.assertEqual(tokens["theme_primary_color"], "#3B5BDB")
-        self.assertEqual(tokens["theme_background_color"], "#F6F8FB")
-        self.assertEqual(tokens["theme_secondary_background_color"], "#EEF2F7")
-        self.assertEqual(tokens["theme_text_color"], "#0F172A")
-        self.assertEqual(tokens["brand_deep_color"], "#0F172A")
-        self.assertEqual(tokens["brand_accent_color"], "#3B5BDB")
-        self.assertEqual(tokens["brand_hover_color"], "#2F47B8")
-        self.assertEqual(tokens["status_good_color"], "#0F766E")
-        self.assertEqual(tokens["chart_up_color"], "#0F766E")
-        self.assertEqual(tokens["chart_down_color"], "#DC2626")
-        self.assertEqual(tokens["chart_line_color"], "#1E3A8A")
-        self.assertEqual(tokens["chart_accent_color"], "#3B5BDB")
-        self.assertEqual(tokens["chart_accent_strong_color"], "#2F47B8")
+        self.assertEqual(tokens["theme_primary_color"], "#5DBB92")
+        self.assertEqual(tokens["theme_background_color"], "#F7F8F4")
+        self.assertEqual(tokens["theme_secondary_background_color"], "#EEF5F1")
+        self.assertEqual(tokens["theme_text_color"], "#172033")
+        self.assertEqual(tokens["brand_deep_color"], "#172033")
+        self.assertEqual(tokens["brand_accent_color"], "#5DBB92")
+        self.assertEqual(tokens["brand_hover_color"], "#479A78")
+        self.assertEqual(tokens["status_good_color"], "#16A46C")
+        self.assertEqual(tokens["chart_up_color"], "#16A46C")
+        self.assertEqual(tokens["chart_down_color"], "#E85D75")
+        self.assertEqual(tokens["chart_line_color"], "#5DBB92")
+        self.assertEqual(tokens["chart_accent_color"], "#5DBB92")
+        self.assertEqual(tokens["chart_accent_strong_color"], "#479A78")
 
     def test_render_app_stylesheet_substitutes_theme_variables(self) -> None:
         """외부 CSS 템플릿의 플레이스홀더가 실제 토큰 값으로 치환된다."""
 
         stylesheet = dashboard_app.render_app_stylesheet()
 
-        self.assertIn("--theme-primary: #3B5BDB;", stylesheet)
-        self.assertIn("--brand-deep: #0F172A;", stylesheet)
-        self.assertIn("--chart-up: #0F766E;", stylesheet)
-        self.assertIn("--chart-down: #DC2626;", stylesheet)
-        self.assertIn("--chart-line: #1E3A8A;", stylesheet)
+        self.assertIn("--theme-primary: #5DBB92;", stylesheet)
+        self.assertIn("--theme-bg: #F7F8F4;", stylesheet)
+        self.assertIn("--theme-secondary-bg: #EEF5F1;", stylesheet)
+        self.assertIn("--brand-deep: #172033;", stylesheet)
+        self.assertIn("--chart-up: #16A46C;", stylesheet)
+        self.assertIn("--chart-down: #E85D75;", stylesheet)
+        self.assertIn("--chart-line: #5DBB92;", stylesheet)
+        self.assertIn(".soft-wealth-hero", stylesheet)
+        self.assertIn("#5DBB92", stylesheet)
+        self.assertIn("#F7F8F4", stylesheet)
+        self.assertIn("#EEF5F1", stylesheet)
         self.assertIn(".dashboard-metric-card", stylesheet)
         self.assertIn(".dashboard-reference-time", stylesheet)
         self.assertIn(".holdings-table-shell", stylesheet)
         self.assertIn(".holdings-mobile-card-list", stylesheet)
         self.assertIn(".st-key-dashboard-panel-allocation", stylesheet)
         self.assertIn(".st-key-dashboard-panel-holdings-table", stylesheet)
+        self.assertIn(".returns-chart", stylesheet)
+        self.assertIn(".returns-chart__filter-pill", stylesheet)
+        self.assertIn(".returns-chart__sort-pill", stylesheet)
+        self.assertIn(".returns-chart__bar-outer--pos", stylesheet)
+        self.assertIn(".returns-chart__bar-outer--neg", stylesheet)
+        self.assertIn("@keyframes returns-chart-bar-in", stylesheet)
         self.assertIn(".st-key-sidebar-account-panel", stylesheet)
         self.assertIn(".sidebar-brand", stylesheet)
         self.assertIn(".st-key-trade-product-entry", stylesheet)
@@ -91,23 +103,36 @@ class ThemeStylesheetTests(unittest.TestCase):
         self.assertIn(".trade-log-result-summary", stylesheet)
         self.assertIn(".trade-log-pagination", stylesheet)
         self.assertIn(".trade-log-profit-rate--positive", stylesheet)
+        self.assertIn(".st-key-trade-log-panel [data-testid=\"stVerticalBlockBorderWrapper\"]", stylesheet)
+        self.assertIn("border-radius: 12px !important;", stylesheet)
+        self.assertIn('.st-key-trade-log-panel [data-testid="stDownloadButton"] > button', stylesheet)
+        self.assertIn("background: #FFFFFF !important;", stylesheet)
+        self.assertIn("padding: 6px 10px !important;", stylesheet)
+        self.assertIn(".st-key-trade-log-panel .trade-log-result-summary span + span::before", stylesheet)
+        self.assertIn('[class*="st-key-trade-log-actions"] [data-testid="stVerticalBlock"]', stylesheet)
+        self.assertIn('[class*="st-key-trade-log-actions"][data-testid="stVerticalBlock"]', stylesheet)
+        self.assertIn("flex-direction: row !important;", stylesheet)
+        self.assertIn("white-space: nowrap !important;", stylesheet)
+        self.assertIn("min-width: 2.8rem !important;", stylesheet)
+        self.assertIn("background: #EEF4FF !important;", stylesheet)
+        self.assertIn("background: #FDF0F3 !important;", stylesheet)
+        self.assertIn("background: #5DBB92;", stylesheet)
+        self.assertNotIn("background: linear-gradient(90deg, #F0FDF4 0%, #FFFFFF 100%);", stylesheet)
+        self.assertNotIn("background: linear-gradient(90deg, #FEF2F2 0%, #FFFFFF 100%);", stylesheet)
         self.assertIn("--radius-lg: 18px;", stylesheet)
-        self.assertIn("--shadow-card: 0 14px 38px rgba(15, 23, 42, 0.08);", stylesheet)
+        self.assertIn("--shadow-card: 0 18px 42px rgba(23, 32, 51, 0.07);", stylesheet)
         self.assertIn("--panel-radius: var(--radius-lg);", stylesheet)
         self.assertIn("--dashboard-summary-card-height: 128px;", stylesheet)
         self.assertIn("--dashboard-secondary-panel-min-height: 560px;", stylesheet)
         self.assertNotIn("--card-shadow:", stylesheet)
-        self.assertIn(
-            '[data-testid="stSidebar"] {\n    background: linear-gradient(180deg, var(--surface-strong) 0%, var(--theme-secondary-bg) 100%);',
-            stylesheet,
-        )
+        self.assertIn('[data-testid="stSidebar"] {\n    background: rgba(255, 255, 255, 0.94);', stylesheet)
         self.assertIn('[data-testid="stVerticalBlockBorderWrapper"] {\n    background: var(--surface-strong);', stylesheet)
         self.assertIn('[data-testid="stMetric"] {\n    background: var(--surface-strong);', stylesheet)
         self.assertIn(".dashboard-summary-card,\n.dashboard-metric-card", stylesheet)
         self.assertIn("border-radius: var(--radius-xl);", stylesheet)
         self.assertIn("box-shadow: var(--shadow-card);", stylesheet)
-        self.assertIn("color-mix(in srgb, var(--surface-strong) 98%, transparent)", stylesheet)
-        self.assertIn("color-mix(in srgb, var(--surface) 94%, var(--theme-secondary-bg))", stylesheet)
+        self.assertIn("rgba(255, 255, 255, 0.94)", stylesheet)
+        self.assertIn("linear-gradient(135deg, #DDF7EA 0%, #E4F5FF 58%, #F8FBF6 100%)", stylesheet)
         self.assertIn(".dashboard-summary-card::before,\n.dashboard-metric-card::before", stylesheet)
         self.assertIn("box-shadow: var(--shadow-hover);", stylesheet)
         self.assertIn(".dashboard-summary-card--positive .dashboard-summary-card__delta", stylesheet)
@@ -146,28 +171,16 @@ class ThemeStylesheetTests(unittest.TestCase):
         self.assertIn(".st-key-trade-log-inline-editor-shell", stylesheet)
         self.assertNotIn("${theme_primary_color}", stylesheet)
 
-    def test_priority_surface_blocks_do_not_hardcode_white_backgrounds(self) -> None:
-        """우선 교체 대상 CSS 블록은 흰색 배경 하드코딩 대신 surface 토큰을 사용한다."""
+    def test_stylesheet_keeps_soft_wealth_light_surfaces(self) -> None:
+        """Soft Wealth 테마는 밝은 화이트 카드와 다크 자동 전환 제거를 유지한다."""
 
         stylesheet = dashboard_app.render_app_stylesheet()
-        ranges = [
-            ('[data-testid="stSidebar"] {', '[data-testid="stVerticalBlockBorderWrapper"] {'),
-            ('[data-testid="stVerticalBlockBorderWrapper"] {', '[data-testid="stSidebar"] [data-testid="stVerticalBlock"]'),
-            ('[data-testid="stMetric"] {', '[data-testid="stMetricLabel"]'),
-            ('.auth-feature-card {', '.auth-feature-card__index'),
-            ('.st-key-auth-card-shell {', '.st-key-auth-card-shell [data-testid="stTextInput"] [data-baseweb="input"]:focus-within'),
-            ('.st-key-dashboard-panel-allocation,\n.st-key-dashboard-panel-selected-trend,', '.st-key-dashboard-panel-allocation [data-testid="stVerticalBlockBorderWrapper"],'),
-            ('.dashboard-summary-card,\n.dashboard-metric-card {', '.dashboard-summary-card {'),
-        ]
 
-        for start_marker, end_marker in ranges:
-            with self.subTest(start_marker=start_marker):
-                start = stylesheet.index(start_marker)
-                end = stylesheet.index(end_marker, start + len(start_marker))
-                block = stylesheet[start:end].lower()
-
-                self.assertNotIn("#ffffff", block)
-                self.assertNotIn("rgba(255, 255, 255", block)
+        self.assertNotIn("@media (prefers-color-scheme: dark)", stylesheet)
+        self.assertIn("background: rgba(255, 255, 255, 0.94)", stylesheet)
+        self.assertIn("background: #FFFFFF", stylesheet)
+        self.assertIn("#F7F8F4", stylesheet)
+        self.assertIn("#EEF5F1", stylesheet)
 
     def test_render_app_stylesheet_uses_local_system_font_stack(self) -> None:
         """초기 렌더 지연을 줄이기 위해 외부 CDN 폰트 import 없이 시스템 폰트를 사용한다."""
@@ -309,7 +322,9 @@ class TradeFormResetTests(unittest.TestCase):
         self.assertNotIn("현금증감", dashboard_app.TRADE_LOG_TABLE_HEADER_LABELS)
         self.assertNotIn("cash_delta", dashboard_app.TRADE_LOG_TABLE_DISPLAY_FIELDS)
         self.assertNotIn("코드", dashboard_app.TRADE_LOG_TABLE_HEADER_LABELS)
-        self.assertIn("실현수익률", dashboard_app.TRADE_LOG_TABLE_HEADER_LABELS)
+        self.assertNotIn("자산군", dashboard_app.TRADE_LOG_TABLE_HEADER_LABELS)
+        self.assertNotIn("asset_type", dashboard_app.TRADE_LOG_TABLE_DISPLAY_FIELDS)
+        self.assertIn("수익률", dashboard_app.TRADE_LOG_TABLE_HEADER_LABELS)
         self.assertIn("realized_profit_rate", dashboard_app.TRADE_LOG_TABLE_DISPLAY_FIELDS)
         self.assertEqual(
             len(dashboard_app.TRADE_LOG_TABLE_HEADER_LABELS),
@@ -336,8 +351,9 @@ class TradeFormResetTests(unittest.TestCase):
 
         self.assertEqual(dashboard_app.trade_submit_button_label("buy"), "+ 상품 추가")
         self.assertEqual(dashboard_app.trade_submit_button_label("sell"), "상품 저장")
-        self.assertEqual(dashboard_app.trade_price_label("buy"), "매입가/기준가")
-        self.assertEqual(dashboard_app.trade_date_label("sell"), "매매일")
+        self.assertEqual(dashboard_app.trade_price_label("buy"), "매입가")
+        self.assertEqual(dashboard_app.trade_price_label("sell"), "매도가")
+        self.assertEqual(dashboard_app.trade_date_label("sell"), "거래일자")
         self.assertEqual(dashboard_app.cash_flow_panel_title("employer_deposit"), "회사 현금입금")
         self.assertIn("퇴직금 원금", dashboard_app.cash_flow_panel_caption("employer_deposit"))
         self.assertEqual(dashboard_app.cash_flow_submit_label("withdraw"), "✓ 출금 기록")
@@ -411,6 +427,48 @@ class TradeFormResetTests(unittest.TestCase):
         self.assertIn("st.navigation(build_navigation_pages(), expanded=True)", main_source)
         self.assertIn('[data-testid="stSidebarNav"] {\n    display: none;', stylesheet)
         self.assertIn('st.page_link("pages/trades.py"', sidebar_nav_source)
+        self.assertNotIn('st.page_link("pages/data.py"', sidebar_nav_source)
+
+    def test_navigation_pages_exclude_data_page(self) -> None:
+        """현재 앱 내비게이션은 대시보드와 거래 페이지만 노출한다."""
+
+        pages_source = inspect.getsource(dashboard_app.build_navigation_pages)
+        page_name_source = inspect.getsource(dashboard_app.navigation_page_name)
+
+        self.assertEqual(dashboard_app.PAGES, ("Dashboard", "Trades"))
+        self.assertNotIn("Data", dashboard_app.PAGE_LABELS)
+        self.assertIn('st.Page("pages/dashboard.py"', pages_source)
+        self.assertIn('st.Page("pages/trades.py"', pages_source)
+        self.assertNotIn('st.Page("pages/data.py"', pages_source)
+        self.assertNotIn('endswith("/data")', page_name_source)
+
+    def test_soft_wealth_dashboard_hero_renderer_exists(self) -> None:
+        """대시보드에는 Soft Wealth Hero 렌더러가 포함된다."""
+
+        dashboard_source = inspect.getsource(dashboard_app.dashboard_page)
+        hero_source = inspect.getsource(dashboard_app.render_soft_wealth_dashboard_hero)
+
+        self.assertIn("render_soft_wealth_dashboard_hero(", dashboard_source)
+        self.assertIn("soft-wealth-hero__value", hero_source)
+        self.assertIn("총 자산 평가액", hero_source)
+
+    def test_trade_page_uses_three_soft_wealth_tabs(self) -> None:
+        """거래 페이지는 입력/기록/실현 손익 3개 탭을 사용한다."""
+
+        source = inspect.getsource(dashboard_app.trade_entry_page)
+
+        self.assertIn('st.tabs(["거래 입력", "거래 기록", "실현 손익"])', source)
+        self.assertIn("with trade_input_tab:", source)
+        self.assertIn("with trade_log_tab:", source)
+        self.assertIn("with realized_tab:", source)
+
+    def test_trade_type_toggle_precedes_product_search(self) -> None:
+        """거래 입력 카드의 매수/매도 토글은 상품 검색보다 먼저 표시한다."""
+
+        source = inspect.getsource(dashboard_app.trade_entry_page)
+
+        self.assertLess(source.index("trade_type = st.radio("), source.index("상품명 또는 코드 검색"))
+        self.assertLess(source.index("trade_type = st.radio("), source.index("build_trade_total_preview_html(trade_total)"))
 
     def test_dashboard_selected_trend_period_options_exclude_today(self) -> None:
         """대시보드 선택 종목 트렌드 기간에서는 당일 옵션을 숨긴다."""
@@ -442,13 +500,15 @@ class TradeFormResetTests(unittest.TestCase):
         self.assertEqual(dashboard_app.format_trade_log_cell(log, "total_amount", {}), "130,000")
         self.assertEqual(dashboard_app.format_trade_log_cell(log, "cash_delta", {}), "-130,000")
 
-    def test_trade_type_badge_styles_include_cash_flow_types(self) -> None:
-        """입금/회사납입/출금 거래유형도 거래 기록 표에서 배지로 표시한다."""
+    def test_trade_type_badge_styles_use_soft_wealth_palette(self) -> None:
+        """거래 기록 배지는 Soft Wealth 민트/블루/레드 팔레트를 사용한다."""
 
         expected_styles = {
-            "personal_deposit": {"background": "#EFF6FF", "border": "#BFDBFE", "color": "#1D4ED8", "label": "개인 입금"},
-            "employer_deposit": {"background": "#F0FDF4", "border": "#BBF7D0", "color": "#15803D", "label": "회사 납입금"},
-            "withdraw": {"background": "#FFF7ED", "border": "#FED7AA", "color": "#C2410C", "label": "일반 출금"},
+            "buy": {"background": "#EEF5F1", "border": "#BFE7D5", "color": "#16A46C", "label": "매수"},
+            "sell": {"background": "#FDF0F3", "border": "#F7C7D1", "color": "#E85D75", "label": "매도"},
+            "personal_deposit": {"background": "#EEF5F1", "border": "#BFE7D5", "color": "#16A46C", "label": "개인 입금"},
+            "employer_deposit": {"background": "#EEF4FF", "border": "#C7D9FF", "color": "#4E7EDC", "label": "회사 납입금"},
+            "withdraw": {"background": "#FDF0F3", "border": "#F7C7D1", "color": "#C94861", "label": "일반 출금"},
         }
 
         for trade_type, expected in expected_styles.items():
@@ -521,6 +581,52 @@ class TradeFormResetTests(unittest.TestCase):
         self.assertEqual([row["id"] for row in filtered], [2])
         self.assertEqual([row["id"] for row in page_items], [2])
         self.assertEqual((current_page, total_pages, page_start, page_end), (1, 1, 1, 1))
+
+    def test_trade_log_premium_date_range_and_pagination_helpers(self) -> None:
+        """프리미엄 거래 기록 UI는 날짜 범위 필터와 번호 페이지네이션을 사용한다."""
+
+        logs = [
+            {"id": 1, "trade_date": "2026-05-01"},
+            {"id": 2, "trade_date": "2026-05-12"},
+            {"id": 3, "trade_date": "2026-04-30"},
+        ]
+
+        self.assertEqual(dashboard_app.trade_log_default_date_range(logs), (date(2026, 4, 30), date(2026, 5, 12)))
+        self.assertEqual(
+            [row["id"] for row in dashboard_app.filter_trade_logs_by_date_range(logs, start_date=date(2026, 5, 1), end_date=date(2026, 5, 31))],
+            [1, 2],
+        )
+        self.assertEqual(dashboard_app.trade_log_pagination_pages(5, 9), [3, 4, 5, 6, 7])
+        self.assertEqual(dashboard_app.compact_trade_log_date_text({"trade_date": "2026-05-12"}), "05/12")
+
+    def test_trade_log_premium_cells_match_reference_markup(self) -> None:
+        """거래 기록 행 셀은 premium_ui.html 스타일의 아이콘, 배지, 원화 표기를 만든다."""
+
+        log = {
+            "id": 42,
+            "trade_date": "2026-05-12",
+            "product_name": "KODEX AI반도체",
+            "symbol": "KODEX",
+            "trade_type": "buy",
+            "quantity": 10,
+            "price": 15200,
+            "total_amount": 152000,
+        }
+
+        self.assertIn("trade-log-product-icon", dashboard_app.format_trade_log_premium_cell(log, "product_name", {}))
+        self.assertIn("trade-log-badge--buy", dashboard_app.format_trade_log_premium_cell(log, "trade_type", {}))
+        self.assertIn("₩15,200", dashboard_app.format_trade_log_premium_cell(log, "price", {}))
+        self.assertIn("10주", dashboard_app.format_trade_log_premium_cell(log, "quantity", {}))
+
+    def test_trade_log_actions_use_compact_icon_buttons(self) -> None:
+        """거래 기록 액션은 목업 톤에 맞춘 작은 배지 버튼 라벨을 사용한다."""
+
+        source = inspect.getsource(dashboard_app.trade_entry_page)
+
+        self.assertIn('st.button("수정"', source)
+        self.assertIn('help="거래 기록 수정"', source)
+        self.assertIn('st.button("삭제"', source)
+        self.assertIn('help="거래 기록 삭제"', source)
 
     def test_trade_log_realized_profit_rate_cell_uses_sell_log_lookup(self) -> None:
         """거래 기록의 실현수익률 컬럼은 매도 거래 ID lookup으로 표시한다."""
@@ -728,7 +834,7 @@ class HoldingsTableDisplayTests(unittest.TestCase):
         self.assertIn("max-height:220px", html)
 
     def test_build_data_export_table_html_reuses_theme_for_trade_logs(self) -> None:
-        """데이터 페이지 거래 기록 미리보기는 배지와 테이블 테마를 함께 사용한다."""
+        """CSV export 거래 기록 미리보기는 배지와 테이블 테마를 함께 사용한다."""
 
         frame = pd.DataFrame(
             [
@@ -750,7 +856,7 @@ class HoldingsTableDisplayTests(unittest.TestCase):
 
         self.assertIn("holdings-table-shell", html)
         self.assertIn("개인 입금", html)
-        self.assertIn("background:#EFF6FF", html)
+        self.assertIn("background:#EEF5F1", html)
         self.assertIn("holdings-table__cell--numeric", html)
         self.assertIn("max-height:220px", html)
 
@@ -829,6 +935,80 @@ class DashboardSelectionPayloadTests(unittest.TestCase):
         result = dashboard_app.resolve_dashboard_selected_symbol(holdings, payload)
 
         self.assertEqual(result, "AAPL")
+
+
+class ReturnsChartHtmlTests(unittest.TestCase):
+    """returns_chart.html 기반 보유 종목 수익률 HTML 렌더러를 검증한다."""
+
+    def test_build_returns_chart_html_matches_reference_structure(self) -> None:
+        """보유 종목 수익률 차트는 목업의 카드, 필터, 요약, 바 리스트 구조를 출력한다."""
+
+        frame = pd.DataFrame(
+            [
+                {
+                    "product_name": "HANARO 원자재iS.",
+                    "symbol": "411060",
+                    "selection_symbol": "411060",
+                    "asset_type": "risk",
+                    "quantity": 10,
+                    "current_value": 1500000,
+                    "profit_rate": 234.67,
+                    "price_updated_at": "2026-05-13T15:30:00",
+                },
+                {
+                    "product_name": "TIGER 미국S&P500",
+                    "symbol": "360750",
+                    "selection_symbol": "360750",
+                    "asset_type": "safe",
+                    "quantity": 20,
+                    "current_value": 900000,
+                    "profit_rate": -78.48,
+                    "price_updated_at": "2026-05-13T15:30:00",
+                },
+            ]
+        )
+
+        html = dashboard_app.build_returns_chart_html(frame, selected_symbol="360750")
+
+        self.assertIn('class="returns-chart"', html)
+        self.assertIn("보유 종목 수익률", html)
+        self.assertIn("현재 보유 상위 종목의 수익률 흐름을 비교합니다", html)
+        self.assertIn("returns-chart__filter-pill", html)
+        self.assertIn('data-filter="profit"', html)
+        self.assertIn('data-filter="loss"', html)
+        self.assertIn("returns-chart__sort-pill", html)
+        self.assertIn('data-sort="rate"', html)
+        self.assertIn('data-sort="amount"', html)
+        self.assertIn("renderReturnsChart", html)
+        self.assertIn("returnsChartBarGeometry", html)
+        self.assertIn("Math.min(width, 100 - left)", html)
+        self.assertIn("최고 수익", html)
+        self.assertIn("+234.67%", html)
+        self.assertIn("최대 손실", html)
+        self.assertIn("-78.48%", html)
+        self.assertIn("수익 종목", html)
+        self.assertIn("1 / 2", html)
+        self.assertIn("returns-chart__divider", html)
+        self.assertIn("returns-chart__bar-outer--pos", html)
+        self.assertIn("returns-chart__bar-outer--neg", html)
+        self.assertIn("returns-chart__bar-item--selected", html)
+        self.assertIn("⟳ 기준일: 2026-05-13", html)
+
+    def test_dashboard_uses_returns_chart_html_renderer(self) -> None:
+        """대시보드 보유 종목 수익률 패널은 ECharts 대신 HTML 렌더러를 사용한다."""
+
+        source = inspect.getsource(dashboard_app.dashboard_page)
+
+        self.assertIn("render_returns_chart(overview_frame", source)
+        self.assertIn("components.html(", inspect.getsource(dashboard_app.render_returns_chart))
+        self.assertNotIn("holdings-profit-bar", source)
+
+    def test_returns_chart_component_height_is_bounded(self) -> None:
+        """보유 종목 수익률 컴포넌트 높이는 행 수에 맞추되 과도하게 커지지 않는다."""
+
+        self.assertEqual(dashboard_app.returns_chart_component_height(0), dashboard_app.RETURNS_CHART_MIN_HEIGHT)
+        self.assertGreater(dashboard_app.returns_chart_component_height(5, 1), dashboard_app.RETURNS_CHART_MIN_HEIGHT)
+        self.assertEqual(dashboard_app.returns_chart_component_height(50), dashboard_app.RETURNS_CHART_MAX_HEIGHT)
 
 
 class HoldingsBarLabelTests(unittest.TestCase):

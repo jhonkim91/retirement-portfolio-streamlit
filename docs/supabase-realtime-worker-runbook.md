@@ -82,12 +82,12 @@ KIS_ENV
 
 ## 4. 앱/REST 후속 검증
 
-1. `데이터 > 운영 상태`에서 `KIS WebSocket worker=connected` 확인
-2. `마지막 quote 반영` 시각이 갱신되는지 확인
+1. `realtime_worker_status.connection_state=connected` 확인
+2. `last_quote_at` 시각이 갱신되는지 확인
 3. 필요하면 아래 명령으로 배포 화면을 재검증합니다.
 
 ```powershell
-python scripts/verify_streamlit_deployment.py --page data --expect-backend supabase
+python scripts/verify_streamlit_deployment.py --page dashboard --expect-backend supabase
 ```
 
 주의:

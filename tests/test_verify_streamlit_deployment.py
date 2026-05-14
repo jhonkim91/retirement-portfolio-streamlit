@@ -4,6 +4,8 @@ import textwrap
 import unittest
 
 from scripts.verify_streamlit_deployment import (
+    PAGE_LABELS,
+    PAGE_READY_MARKERS,
     build_summary,
     format_debug_dir_hint,
     has_target_page_content,
@@ -141,7 +143,6 @@ class DeploymentSummaryParserTests(unittest.TestCase):
             RetirementPort
             대시보드
             거래
-            데이터
             내 계좌
             데모 일반계좌
             일반
@@ -158,6 +159,12 @@ class DeploymentSummaryParserTests(unittest.TestCase):
         self.assertTrue(summary.logged_in)
         self.assertTrue(summary.workspace_visible)
         self.assertTrue(summary.demo_seeded)
+
+    def test_verify_script_targets_visible_pages_only(self) -> None:
+        """배포 검증 대상은 현재 노출 중인 대시보드/거래 페이지만 유지한다."""
+
+        self.assertEqual(tuple(PAGE_LABELS), ("dashboard", "trades"))
+        self.assertNotIn("data", PAGE_READY_MARKERS)
 
     def test_build_summary_extracts_dashboard_allocation_status(self) -> None:
         """대시보드 화면에서 자산 배분 상태 칩 텍스트를 추출한다."""

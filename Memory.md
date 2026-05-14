@@ -1,33 +1,20 @@
 # Memory.md
 
 ## 문서 목적
-- 이 파일은 현재 프로젝트 상태와 다음 작업에 필요한 최소 정보만 유지한다.
-- 날짜별 상세 작업 로그는 `docs/archive/memory-YYYY-MM-DD.md`로 분리했다.
-- 검증 상세 이력은 `docs/VALIDATION.md`에 모았다.
-- 완료된 변경 이력은 `docs/CHANGELOG.md`에 모았다.
-- 중요한 설계 결정은 `docs/DECISIONS.md`에 모았다.
-- 정리 기준일은 `2026-05-13`이다.
-- 원본의 `2026-05-15` 섹션은 현재 기준일보다 뒤라 날짜 오류 가능성으로 별도 표시했다.
+- 현재 프로젝트 상태와 다음 작업에 필요한 최소 정보만 유지한다.
+- 상세 검증 이력은 `docs/VALIDATION.md`, 완료 변경 이력은 `docs/CHANGELOG.md`, 설계 결정은 `docs/DECISIONS.md`를 기준으로 확인한다.
+- 기준일: `2026-05-14`
 
 ## 작업 상태
-- [x] 프로젝트 구조 분석, 문서 분리, `app.py` 지연 로더와 `src/ui/app_core.py` 중심 구조 반영
-- [x] `pages/dashboard.py`, `pages/trades.py`, `pages/data.py` 기반 `st.navigation` 전환 반영
-- [x] Supabase 우선 저장소, SQLite fallback, KIS REST/WebSocket worker, daily rollup 유지
-- [x] 보유현금 수동 관리, 거래/현금 흐름 분리, 삭제 후 DB 조회 캐시 무효화 반영
-- [x] realtime worker `last_quote_at` 보존과 `realtime_price_ticks` 보존/집계 정책 반영
-- [x] 대시보드/거래/데이터 페이지 UI 정리와 모바일 거래 입력 overflow 보강
-- [x] CSS radius/shadow 토큰, KPI 카드 위계/반응형 grid, 차트 패널 카드감, 팔레트 보강
-- [x] `setup_supabase.sql` RLS 정책 재실행 안정화 반영
-- [x] UG-01 CSS 파일 누락 시 `render_app_stylesheet()` 안전 반환 처리
-- [x] BUG-02 우선 surface 배경의 흰색 하드코딩 토큰화
-- [x] GitHub Actions realtime worker/daily rollup `setup-python` pip cache와 realtime concurrency 반영
-- [x] 자산배분 당일 추세를 KRX 전 종목 Naver full-day 분봉 우선으로 보강
-- [x] 모바일 보유 종목 영역을 640px 이하 카드형 리스트로 전환
-- [x] PC 보유 종목 테이블 아래 모바일 카드 텍스트 노출 hotfix 반영
-- [x] `docs/report.md` 기준 거래 UI/UX 단계별+화면 목업 보정 패치 반영
-- [x] `ui 개선/report2.md` 기준 대시보드 KPI/실현손익/거래 기록 UI 개선 반영
+- [x] Streamlit 앱을 RetirementPort Soft Wealth 라이트 디자인으로 전환
+- [x] Data 페이지 파일/기본 multipage/커스텀 사이드바/라우팅 노출 제거
+- [x] Dashboard Hero, KPI 카드, Trades 3탭 구조 유지 및 밝은 핀테크 스타일 적용
+- [x] `returns_chart.html` 목업 기준 Dashboard 보유 종목 수익률 차트, 전체/수익/손실 탭, 수익률순/금액순 정렬, 막대 overflow 방지 반영
+- [x] `premium_ui.html` 목업 기준 거래 기록 카드, 필터, 흰색 테이블 내부, 흰색 CSV 버튼, 색상 매수/매도 배지, 수정/삭제 액션 배지, 민트 페이지네이션 스타일 반영
+- [x] 거래/현금 입력, 저장, 조회, 분석, Supabase/SQLite fallback, CSV export helper 로직 보존
+- [x] 로컬 테스트와 브라우저 검증 완료
 - [ ] KIS WebSocket worker 장시간 실행 중 재연결/상태 복구를 장중 운영 로그 기준으로 추가 점검
-- [ ] 모바일 viewport에서 대시보드 트리맵/보유 종목 표 가독성 확인
+- [ ] 모바일 viewport에서 대시보드 트리맵/보유 종목 표 가독성 추가 확인
 - [ ] 스냅샷 저장, CSV export, 운영 정리 작업의 로딩 상태 표시 누락 여부 점검
 - [ ] Supabase SQL Editor에서 `setup_supabase.sql` 전체 또는 문제 정책 블록 재실행 확인
 
@@ -35,46 +22,72 @@
 - 유형: `Python + Streamlit`
 - 진입점: `app.py`
 - 앱 코어: `src/ui/app_core.py`
-- 페이지: `pages/dashboard.py`, `pages/trades.py`, `pages/data.py`
+- 공개 페이지: `pages/dashboard.py`, `pages/trades.py`
 - 저장소: `Supabase` 우선, 필요 시 `SQLite`
 - 로컬 SQLite DB: `data/portfolio.db`
 - 시세: `KIS REST/WebSocket` 우선, KRX/Naver fallback, 일부 `yfinance` fallback
+- UI 설정: `.streamlit/config.toml`, `.streamlit/app.css`
 - 배포 앱: `https://retirement-portfolio-app-nh2vq9ferqnpehsslbykbe.streamlit.app/`
-- UI 설정: `.streamlit/config.toml`과 `.streamlit/app.css` 기준 유지
 
-## 핵심 파일
-- `app.py`: 얇은 Streamlit 엔트리포인트와 기존 공개 API 호환 지연 로더
-- `src/ui/app_core.py`: 앱 라우터, 페이지 공통 상태, UI helper의 중심 구현
-- `src/ui/charts.py`, `src/ui/forms.py`, `src/ui/layout.py`: 앱 코어 helper re-export 호환 모듈
-- `pages/dashboard.py`: 대시보드 페이지 진입점
-- `pages/trades.py`: 거래 페이지 진입점
-- `pages/data.py`: 데이터/운영 상태 페이지 진입점
-- `src/db.py`: Supabase 중심 DB 추상화 및 조회 캐시
-- `src/sqlite_db.py`: SQLite fallback 구현
-- `src/auth.py`: 인증 및 Supabase client 지연 초기화
-- `src/analytics.py`: 포트폴리오 계산 및 차트 데이터
-- `src/market.py`: KIS/Naver/yfinance 시세 조회와 캐시
-- `scripts/run_daily_rollup.py`: 일별 롤업 배치
-- `scripts/run_kis_quote_worker.py`: KIS realtime quote worker
-- `scripts/run_realtime_tick_retention.py`: realtime tick 1분/5분/일봉 집계와 raw tick 보존 정책 실행
-- `scripts/verify_streamlit_deployment.py`: Streamlit Cloud 운영 검증
-- `setup_supabase.sql`: Supabase schema/RLS 정책 기준 스크립트
-- `.github/workflows/kis-realtime-worker.yml`: 장중 worker 자동 실행
-- `.github/workflows/daily-rollup.yml`: 일별 롤업 자동 실행
+## 최근 변경 파일
+- `.streamlit/config.toml`: Soft Wealth 라이트 테마 색상 적용
+- `.streamlit/app.css`: 화이트 사이드바, 아이보리 배경, 민트 활성 메뉴, Hero/KPI/거래 카드/거래 기록 프리미엄 테이블, 보유 종목 수익률 차트 wrapper 스타일 적용
+- `src/ui/app_core.py`: Data 라우팅 제거, Soft Wealth 디자인 토큰, Dashboard Hero, returns_chart 기반 인터랙티브 수익률 차트, Trades 입력 순서, 거래 기록 필터/테이블/아이콘 액션/페이지네이션 helper 반영
+- `pages/data.py`: 삭제 상태 유지
+- `pages/dashboard.py`, `pages/trades.py`: Streamlit multipage 진입점 유지
+- `tests/test_app_dashboard.py`: Soft Wealth 테마, Data 제거, 거래 기록 프리미엄 UI helper와 아이콘 액션 버튼 회귀 테스트 갱신
+- `docs/VALIDATION.md`: 최신 검증 결과 갱신
+
+## 핵심 설계 결정
+- `PAGES == ("Dashboard", "Trades")`만 유지하고, `"Data"` 또는 알 수 없는 page name은 Dashboard로 fallback한다.
+- Data UI는 제거했지만 `TABLE_LABELS`, `backend_status`, `export_dataframe_rows`, `build_data_export_table_html` 등 내부 helper는 보존한다.
+- 거래 기록 화면 테이블은 목업 기준 `매입일`, `종목명`, `유형`, `단가`, `수량`, `총금액`, `수익률`, `액션` 순서를 사용한다.
+- 거래 기록 페이지 크기는 목업과 맞춰 5건으로 유지한다.
+- 거래 기록 필터의 자산 구분은 유지하되 화면 테이블 컬럼에서는 제외한다.
+- Dashboard 보유 종목 수익률 차트는 `streamlit.components.v1.html`로 렌더링해 `전체/수익/손실` 필터와 `수익률순/금액순` 정렬을 클라이언트에서 즉시 전환한다.
+- 수익률 차트 막대 좌표는 양수/음수 최대값을 별도 span으로 계산하고 `Math.min(width, 100 - left)`로 clamp해 차트 track 밖으로 벗어나지 않게 한다.
+- 매수/매도/현금 흐름 저장 로직, 계좌 로직, DB fallback, 시세 조회, CSV export 로직은 변경하지 않는다.
+- 전체 앱은 항상 밝은 Soft Wealth 테마를 유지하고 다크 자동 전환 CSS는 사용하지 않는다.
 
 ## 실행 명령
 ```powershell
 python -m pip install -r requirements.txt
 streamlit run app.py
 ```
+- 로컬호스트가 응답하지 않거나 파일 감시자 이슈가 있으면 다음처럼 실행한다.
+```powershell
+streamlit run app.py --server.port 8501 --server.address 0.0.0.0 --server.fileWatcherType none
+```
 
 ## 권장 검증 명령
 ```powershell
 python -m compileall app.py src scripts tests pages
+python -m pytest tests/test_app_dashboard.py
 python -m unittest discover -s tests -p "test_*.py"
-python scripts/run_kis_quote_worker.py --backend sqlite --preflight-only
-python scripts/verify_streamlit_deployment.py --page data --expect-backend supabase --wait-ms 12000
 ```
+
+## 최신 검증 결과
+- `python -m compileall app.py src scripts tests pages` 성공
+- `python -m pytest tests/test_app_dashboard.py` 성공, 77 tests
+- `python -m unittest discover -s tests -p "test_*.py"` 성공, 190 tests
+- `git diff --check -- .streamlit/app.css src/ui/app_core.py tests/test_app_dashboard.py Memory.md docs/VALIDATION.md` 성공
+- Streamlit 로컬 실행 검증: SQLite backend로 `127.0.0.1:8501` 실행 중이며 health `ok`
+- 브라우저 검증: 수익률 차트 독립 컴포넌트에서 `손실` 탭 클릭 시 손실 종목만 표시, `금액순` 클릭 시 평가금액 내림차순 전환, 막대 overflow 없음, browser error 없음
+- Playwright 검증: Data 메뉴 없음, 거래 기록 프리미엄 패널/CSV 버튼/날짜 범위/목업 헤더/5건 페이지네이션/매수·매도 배지/390px 모바일 overflow 없음/browser error 없음
+- 최근 사용자 브라우저 확인 후 거래 기록 행 배경을 흰색으로 고정하고, CSV 버튼도 흰색으로 고정했다. 매수/매도 배지는 색상 유지.
+- 거래 기록 패널 내부 Streamlit wrapper 배경을 흰색으로 강제해 행 사이에 연한 배경이 비치지 않도록 했다.
+- 액션 셀 내부 `st.columns(2)` 구조를 제거하고 단일 flex 액션 컨테이너로 변경해 `수정`/`삭제` pill 배지가 한 줄로 보이도록 조정했다.
+- Streamlit key class가 `stVerticalBlock` 자체에 붙는 경우까지 잡도록 self selector를 추가해 액션 컨테이너를 확실히 row 배치한다.
+- 거래 기록 행 padding은 `6px 10px`로 줄여 목업에 가깝게 행간을 낮췄다.
+- 페이지네이션 active 버튼은 검은색 대신 `#5DBB92` 민트로 표시한다.
+- 브라우저 산출물: `artifacts/premium-trade-log-desktop.png`, `artifacts/premium-trade-log-mobile.png`, `artifacts/returns-chart-interactive-standalone.png`
+- 현재 8501 Streamlit 서버는 사용자 확인을 위해 실행 상태로 유지 중
+
+## Git/GitHub 상태
+- 기본 브랜치: `main`
+- 이번 작업은 로컬 수정만 수행했고 커밋, push, 실제 PR 생성은 하지 않았다.
+- 워크트리에는 이번 요청 전부터 `data/portfolio.db`, 문서, 산출물, 로컬 도구 디렉터리 등 여러 변경/미추적 파일이 있었다.
+- 커밋 시 요청 관련 파일만 선별하고 `data/portfolio.db`, `.local/`, `.playtools*/`, `.playwright-browsers/`, `.vscode/`, `artifacts/`, `data/kis_cache/` 등 로컬 산출물은 제외한다.
 
 ## 운영 시크릿 메모
 - 앱용: `SUPABASE_URL`, `SUPABASE_KEY`
@@ -82,104 +95,9 @@ python scripts/verify_streamlit_deployment.py --page data --expect-backend supab
 - KIS용: `KIS_APP_KEY`, `KIS_APP_SECRET`, `KIS_ENV`
 - 배포 검증용: `STREAMLIT_VERIFY_EMAIL`, `STREAMLIT_VERIFY_PASSWORD`
 - 실제 값은 `.streamlit/secrets.toml`, Streamlit Cloud secrets, GitHub Actions secrets, OS 환경 변수에만 둔다.
-- `SUPABASE_SERVICE_ROLE_KEY` 같은 관리자 키는 UI, 문서, 커밋에 노출하지 않는다.
-
-## 현재 운영 상태
-- 기준일: `2026-05-13`
-- PC 보유 종목 모바일 카드 노출 hotfix 배포 커밋 `199c853`을 `origin/main`에 push했고 Streamlit Cloud 운영 dashboard 검증이 성공했다.
-- 검증 완료 패치 묶음 배포 커밋 `d4e9813`을 `origin/main`에 push했고 Streamlit Cloud 운영 dashboard 검증이 성공했다.
-- BUG-02 배포 커밋 `21df7c6`을 `origin/main`에 push했고 Streamlit Cloud 운영 dashboard 검증이 성공했다.
-- 거래 UI/UX 단계별+화면 목업 보정 배포 커밋 `3e023e0`을 `origin/main`에 push했고, 수동 재배포 후 Streamlit Cloud 운영 trades 검증이 성공했다.
-- 배포 앱은 `Supabase` backend를 사용 중인 것으로 최근 검증에 기록됨.
-- 운영 Supabase realtime 테이블 노출 상태는 최근 기록 기준 `accounts`, `realtime_worker_status`, `realtime_price_ticks` 모두 HTTP `200`.
-- GitHub Actions `KIS Realtime Worker` manual run `25771266167`은 job `success`로 기록됨.
-- run 중 `ping/pong timed out` 후 재연결이 발생했고, 종료 시 `exit 137`이 있었으나 workflow 결과는 성공으로 기록됨.
-- 계좌 `24`, `25`는 최신 tick과 같은 `last_quote_at=2026-05-13T09:54:33` 기록.
-- 계좌 `26`은 quote 미수신 상태에서도 기존 `last_quote_at=2026-05-12T15:48:44` 유지.
-- 계좌 `23`은 tick 이력이 없어 `last_quote_at=null` 유지.
-- `setup_supabase.sql` 정책 재실행 안정화는 로컬 문법/테스트/배포 데이터 페이지 검증까지 완료.
-- 원격 SQL Editor에서 정책 블록 직접 재실행 검증은 아직 남아 있음.
-- `ui 개선/report2.md` 기반 대시보드 KPI/실현손익/거래 기록 개선은 커밋 `9571ea9`로 `origin/main`에 push했고 Streamlit Cloud dashboard/trades 운영 검증이 성공했다.
-
-## 핵심 설계 결정 요약
-- Supabase를 기본 저장소로 사용하고, 로컬/개발 fallback은 SQLite로 유지한다.
-- `app.py`는 얇은 엔트리포인트로 두고 실제 구현은 `src/ui/app_core.py`와 `pages/`에 둔다.
-- 기존 테스트와 monkey patch 호환을 위해 `app.py` 공개 함수/상수 접근은 앱 코어로 위임한다.
-- 보유현금은 거래 저장과 자동 연동하지 않고 사용자가 직접 수정한 현재 잔액으로 관리한다.
-- 매수는 현재 보유현금 부족 여부와 무관하게 저장을 허용한다.
-- 거래 상품 등록은 예상 매입금액 미리보기와 0원 저장 방지를 적용한다.
-- 현금 흐름 입력은 개인 입금/회사 납입금/출금 탭별 위젯 key로 분리한다.
-- 레거시 `cash_adjustment` 거래는 거래 화면과 원금/순유입 계산에서 제외한다.
-- 보유현금은 자산 비중 표시에서 안전자산에 포함한다.
-- 계좌 간 이체 UI와 데모 seed 이체 예시는 제거된 상태다.
-- realtime worker 상태 갱신 시 새 quote 시각이 없으면 기존 `last_quote_at`를 보존한다.
-- 최신가/실시간 worker는 KIS를 우선하고, 자산배분 당일 추세는 KRX 숫자/알파뉴메릭 종목 모두 Naver full-day 분봉을 우선 사용한다.
-- `altair`는 Streamlit Cloud Python 3.14 호환 문제 때문에 `altair>=5.3,<5.4`로 제한한다.
-- Supabase hotfix 상세 절차는 기본 비노출이며 `PORTFOLIO_SHOW_HOTFIX_GUIDE=true`일 때만 표시한다.
-- 전역 차트 색상은 `ChartColors`/`CHART_COLORS` 네임스페이스를 기준으로 관리한다.
-- `.streamlit/config.toml`의 테마/서버 설정은 요청이 없으면 변경하지 않는다.
-
-## 최신 검증 결과
-- 상세 검증 이력은 `docs/VALIDATION.md`에 정리했다.
-- `ui 개선/report2.md` 기반 UI 개선: `python -m compileall app.py src scripts tests pages` 성공.
-- `ui 개선/report2.md` 기반 UI 개선: `python -m unittest discover -s tests -p "test_*.py"` 성공, 179 tests.
-- 로컬 SQLite Streamlit 검증: `scripts/verify_streamlit_deployment.py`로 dashboard/trades 각각 backend `SQLite`, `ok=true` 확인.
-- `agent-browser` CLI 설치 검증: `agent-browser 0.27.0`, `agent-browser doctor` 기준 8 pass, 0 fail, headless launch 성공.
-- `agent-browser` UI 검증: `http://127.0.0.1:8546` 데모 대시보드 1440px, 거래 페이지 820px/390px에서 핵심 문구 노출과 `scrollWidth == clientWidth` 확인.
-- `ui 개선/report2.md` 기반 UI 개선 배포 검증: 커밋 `9571ea9` push 후 운영 앱 dashboard/trades에서 backend `Supabase`, `ok=true` 확인.
-- 최신 diff 검사: `git diff --check -- src/analytics.py src/ui/app_core.py .streamlit/app.css tests/test_analytics.py tests/test_app_dashboard.py Memory.md docs/VALIDATION.md docs/CHANGELOG.md` 성공.
-
-## 문서 분리 결과
-- 날짜별 상세 로그:
-  - `docs/archive/memory-2026-05-11.md`
-  - `docs/archive/memory-2026-05-12.md`
-  - `docs/archive/memory-2026-05-13.md`
-  - `docs/archive/memory-2026-05-15.md`
-- `2026-05-15` archive는 현재 기준일보다 뒤라 날짜 오류 가능성을 파일 상단에 표시했다.
-- 검증 상세 이력: `docs/VALIDATION.md`
-- 완료 변경 이력: `docs/CHANGELOG.md`
-- 설계 결정: `docs/DECISIONS.md`
-
-## Git/GitHub 상태
-- 기본 브랜치: `main`
-- 최근 커밋 기록에는 `437c4db`, `b293d0a`, `aab9d67`, `5e2584b`, `a3d9285`, `32fe43a`, `33e754f` 등이 있음.
-- `2026-05-15`로 기록된 `33e754f`, `32fe43a` 관련 내용은 현재 파일/커밋에는 존재하지만 날짜는 오류 가능성으로 취급한다.
-- 기존 워크트리에는 `data/portfolio.db` 수정과 여러 untracked 로컬 산출물이 남아 있다.
-- 최근 주요 변경 파일은 `.streamlit/app.css`, `.streamlit/config.toml`, `src/ui/app_core.py`, `tests/test_app_dashboard.py`, `docs/VALIDATION.md`, `docs/CHANGELOG.md`, `Memory.md` 중심이다.
-- 이번 UG-01/BUG-02 배포 대상 파일은 `.streamlit/app.css`, `.streamlit/config.toml`, `src/ui/app_core.py`, `tests/test_app_dashboard.py`, `docs/VALIDATION.md`, `docs/CHANGELOG.md`, `Memory.md`다.
-- 이번 GitHub Actions cache/concurrency 패치 대상 파일은 `.github/workflows/kis-realtime-worker.yml`, `.github/workflows/daily-rollup.yml`, `Memory.md`, `docs/VALIDATION.md`다.
-- 이번 자산배분 당일 추세 패치 대상 파일은 `src/market.py`, `src/kis.py`, `tests/test_market.py`, `README.md`, `docs/DECISIONS.md`, `docs/VALIDATION.md`, `docs/CHANGELOG.md`, `Memory.md`다.
-- 이번 모바일 보유 종목 카드 패치 대상 파일은 `src/ui/app_core.py`, `.streamlit/app.css`, `tests/test_app_dashboard.py`, `docs/VALIDATION.md`, `docs/CHANGELOG.md`, `Memory.md`다.
-- 이번 PC 보유 종목 모바일 카드 노출 hotfix 대상 파일은 `src/ui/app_core.py`, `.streamlit/app.css`, `tests/test_app_dashboard.py`, `docs/VALIDATION.md`, `docs/CHANGELOG.md`, `Memory.md`다.
-- 이번 거래 UI/UX 단계별 패치 대상 파일은 `src/ui/app_core.py`, `.streamlit/app.css`, `scripts/verify_streamlit_deployment.py`, `tests/test_app_dashboard.py`, `tests/test_verify_streamlit_deployment.py`, `docs/VALIDATION.md`, `docs/CHANGELOG.md`, `Memory.md`다.
-- 배포 커밋: `199c853` `Hide mobile holdings cards on desktop` (`origin/main` push 완료, Streamlit Cloud dashboard 운영 검증 성공)
-- 배포 커밋: `d4e9813` `Improve realtime workflows and mobile holdings` (`origin/main` push 완료, Streamlit Cloud dashboard 운영 검증 성공)
-- 배포 커밋: `5ad9936` `Improve dashboard KPI responsive cards` (`origin/main` push 완료)
-- 배포 커밋: `3e023e0` `Improve trade entry and cash flow UX` (`origin/main` push 완료, Streamlit Cloud trades 수동 재배포 운영 검증 성공)
-- 커밋 시 이번 요청 관련 파일만 선별하고 `data/portfolio.db`, `.local/`, `artifacts/`, `.playtools*/`, `.playwright-browsers/`, `.vscode/`, `data/kis_cache/` 등은 제외한다.
-- 이번 UI 개선 배포 코드 커밋은 `9571ea9` `Improve dashboard and trade summaries`다.
-
-## 운영 runbook 요약
-- realtime schema hotfix: `docs/supabase-realtime-schema-hotfix.sql`
-- realtime worker runbook: `docs/supabase-realtime-worker-runbook.md`
-- realtime tick retention runbook: `docs/realtime-tick-retention-runbook.md`
-- Supabase hotfix runbook: `docs/supabase-hotfix-runbook.md`
-- worker 수동 실행:
-```powershell
-python scripts/run_kis_quote_worker.py --backend supabase
-```
-- 배포 상태 검증:
-```powershell
-python scripts/verify_streamlit_deployment.py --page data --expect-backend supabase
-```
-- GitHub Actions 장중 자동 실행:
-  - workflow: `KIS Realtime Worker`
-  - schedule 1: `UTC 00:00` (`KST 09:00`)
-  - schedule 2: `UTC 02:55` (`KST 11:55`)
 
 ## 남은 작업
-1. KIS WebSocket worker 장시간 실행 중 재연결/상태 복구 로직을 장중 운영 로그로 추가 확인한다.
-2. 계좌 `23`처럼 tick 이력이 없는 계좌의 `last_quote_at=null` 유지가 운영 요구와 맞는지 확인한다.
-3. 모바일 viewport에서 대시보드 트리맵, 보유 종목 표 가독성을 실제 스크린샷으로 확인한다.
-4. 장시간 작업의 `st.spinner`/`st.status` 적용 누락 여부를 점검한다.
-5. Supabase SQL Editor에서 `setup_supabase.sql` 전체 또는 문제 정책 블록 재실행 결과를 확인한다.
+1. 운영 배포가 필요하면 별도 지시 후 관련 파일만 커밋하고 push한다.
+2. PR 제목은 `Apply Soft Wealth design and remove Data page`를 사용한다.
+3. PR 설명에는 Data 페이지 제거, Soft Wealth 테마 적용, 저장/분석/시세/거래 로직 보존, 테스트 갱신을 명시한다.
+4. 운영 배포 후 `scripts/verify_streamlit_deployment.py`로 dashboard/trades를 다시 확인한다.

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.ui import app_core
+import src.ui.app_core as app_core
 
 
 def main() -> None:

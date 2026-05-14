@@ -24,17 +24,14 @@ DEFAULT_WAIT_MS = 8_000
 PAGE_LABELS = {
     "dashboard": "대시보드",
     "trades": "거래",
-    "data": "데이터",
 }
 PAGE_LABEL_INDEX = {
     "dashboard": 2,
     "trades": 3,
-    "data": 4,
 }
 PAGE_READY_MARKERS = {
     "dashboard": ("자산 배분", "선택 종목 트렌드"),
     "trades": ("상품 등록", "예상 매입금액", "거래 기록"),
-    "data": ("운영 상태", "데이터 저장소"),
 }
 LOCAL_SECRETS_PATH = Path(".streamlit/secrets.toml")
 
@@ -113,7 +110,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--page",
         choices=tuple(PAGE_LABELS),
-        default="data",
+        default="dashboard",
         help="로그인 후 이동할 페이지",
     )
     parser.add_argument(
