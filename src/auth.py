@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import time
 from typing import TYPE_CHECKING, Any
+from urllib.parse import urlparse
 
 import streamlit as st
 
@@ -10,7 +11,7 @@ if TYPE_CHECKING:
     from supabase import Client
 
 
-DEFAULT_SUPABASE_URL = "https://iyszkybxostbjfzbbymq.supabase.co"
+DEFAULT_SUPABASE_URL = ""
 DEFAULT_EMAIL_REDIRECT_TO = "https://retirement-portfolio-app-nh2vq9ferqnpehsslbykbe.streamlit.app/"
 SESSION_STATE_KEY = "auth_session"
 BACKEND_STATE_KEY = "db_backend_state"
@@ -45,6 +46,13 @@ def _supabase_url() -> str:
     return _get_config_value("SUPABASE_URL", DEFAULT_SUPABASE_URL)
 
 
+def _is_valid_supabase_url(url: str) -> bool:
+    """Supabase hosted 프로젝트 URL 형식인지 확인한다."""
+
+    parsed = urlparse(str(url or "").strip())
+    return parsed.scheme == "https" and parsed.netloc.endswith(".supabase.co")
+
+
 def _supabase_key() -> str:
     """현재 세션에서 사용할 Supabase 키를 반환한다."""
 
@@ -75,7 +83,7 @@ def has_demo_credentials() -> bool:
 def is_enabled() -> bool:
     """현재 실행 환경에 Supabase 인증 설정이 있는지 확인한다."""
 
-    return bool(_supabase_url() and _supabase_key())
+    return _is_valid_supabase_url(_supabase_url()) and bool(_supabase_key())
 
 
 def _serialize_session(session: Any) -> dict[str, Any]:

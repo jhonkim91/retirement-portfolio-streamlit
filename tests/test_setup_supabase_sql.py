@@ -75,6 +75,22 @@ class SetupSupabaseSqlTests(unittest.TestCase):
         self.assertIn("GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.realtime_price_bars", sql_text)
         self.assertIn("ALTER TABLE public.realtime_price_bars ENABLE ROW LEVEL SECURITY", sql_text)
 
+    def test_daily_valuation_snapshot_schema_and_access_policy_exist(self) -> None:
+        """회사입금 기준 평가 스냅샷 테이블은 RLS와 명시적 GRANT를 함께 둔다."""
+
+        sql_text = read_setup_sql()
+
+        self.assertIn("CREATE TABLE IF NOT EXISTS public.daily_valuation_snapshot", sql_text)
+        self.assertIn("valuation_date DATE NOT NULL", sql_text)
+        self.assertIn("company_principal DOUBLE PRECISION NOT NULL DEFAULT 0", sql_text)
+        self.assertIn("missing_price_symbols JSONB NOT NULL DEFAULT '[]'::jsonb", sql_text)
+        self.assertIn("UNIQUE(account_id, valuation_date)", sql_text)
+        self.assertIn("CHECK (cash_source IN ('implied', 'actual'))", sql_text)
+        self.assertIn("idx_daily_valuation_snapshot_account_date", sql_text)
+        self.assertIn("GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.daily_valuation_snapshot", sql_text)
+        self.assertIn("GRANT USAGE, SELECT ON SEQUENCE public.daily_valuation_snapshot_id_seq", sql_text)
+        self.assertIn("ALTER TABLE public.daily_valuation_snapshot ENABLE ROW LEVEL SECURITY", sql_text)
+
     def test_realtime_price_bars_policy_blocks_have_local_drop_before_create(self) -> None:
         """bar 테이블 RLS 정책은 재실행 가능한 DROP 구문을 바로 앞에 둔다."""
 
@@ -96,6 +112,7 @@ class SetupSupabaseSqlTests(unittest.TestCase):
         policy_names = (
             "holdings_update_own",
             "daily_interest_update_own",
+            "daily_valuation_snapshot_update_own",
             "realtime_price_bars_update_own",
         )
 

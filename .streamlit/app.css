@@ -1891,52 +1891,689 @@ h6 {
     font-weight: 800;
 }
 
-.st-key-trade-log-inline-editor-shell {
-    margin: 0.45rem 0 0.2rem;
-    padding: 0.55rem 0.6rem 0.15rem;
-    border-radius: 8px;
-    border: 1px solid var(--line-soft);
-    background: #f8fafc;
+div[role="dialog"] {
+    color: var(--brand-deep);
 }
 
-.st-key-trade-log-inline-editor-shell [data-testid="stForm"] {
+div[role="dialog"] [data-testid="stForm"] {
     background: transparent;
+    border: 0;
+    box-shadow: none;
+    padding: 0;
 }
 
-.st-key-trade-log-inline-editor-shell [data-testid="stTextInput"] input,
-.st-key-trade-log-inline-editor-shell [data-testid="stNumberInput"] input,
-.st-key-trade-log-inline-editor-shell [data-baseweb="select"] > div,
-.st-key-trade-log-inline-editor-shell [data-testid="stDateInput"] [data-baseweb="input"] {
-    min-height: 2.6rem;
-    border-radius: 6px;
+div[role="dialog"] [data-testid="stTextInput"] input,
+div[role="dialog"] [data-testid="stNumberInput"] input,
+div[role="dialog"] [data-baseweb="select"] > div,
+div[role="dialog"] [data-testid="stDateInput"] [data-baseweb="input"] {
+    min-height: 2.65rem;
+    border-radius: 10px;
     border: 1px solid var(--border-emphasis);
-    background: var(--surface-strong);
+    background: #F8FAFC;
     color: var(--brand-deep);
     box-shadow: none;
 }
 
-.st-key-trade-log-inline-editor-shell [data-testid="stTextInput"] input::placeholder {
+div[role="dialog"] [data-testid="stTextInput"] input::placeholder {
     color: var(--text-muted);
 }
 
-.st-key-trade-log-inline-editor-shell [data-baseweb="select"] > div:focus-within,
-.st-key-trade-log-inline-editor-shell [data-testid="stDateInput"] [data-baseweb="input"]:focus-within {
+div[role="dialog"] [data-baseweb="select"] > div:focus-within,
+div[role="dialog"] [data-testid="stDateInput"] [data-baseweb="input"]:focus-within {
     border-color: var(--brand-accent);
-    outline: 2px solid #8ecae6;
+    outline: 2px solid rgba(93, 187, 146, 0.18);
     outline-offset: 0;
 }
 
-.st-key-trade-log-inline-editor-shell [data-testid="stButton"] > button,
-.st-key-trade-log-inline-editor-shell [data-testid="stFormSubmitButton"] > button {
+div[role="dialog"] [data-testid="stFormSubmitButton"] > button {
     min-height: 2.6rem;
-    border-radius: 6px;
+    border-radius: 14px;
+    font-weight: 900;
+}
+
+/* ------------------------------------------------------------------
+   Dashboard Overview Option 2
+   ------------------------------------------------------------------ */
+
+.st-key-dashboard-overview-option2 {
+    margin-bottom: 1.35rem;
+    padding: 0.82rem 0.9rem 1.05rem;
+    border: 1px solid rgba(203, 213, 225, 0.72) !important;
+    border-radius: 24px !important;
+    background:
+        radial-gradient(circle at 12% 8%, rgba(122, 170, 247, 0.10), transparent 26rem),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 251, 246, 0.94)) !important;
+    box-shadow: 0 18px 42px rgba(23, 32, 51, 0.07) !important;
+    overflow: hidden;
+}
+
+.st-key-dashboard-overview-option2 [data-testid="stVerticalBlockBorderWrapper"] {
+    border: none !important;
+    background: transparent !important;
+    box-shadow: none !important;
+}
+
+.dashboard-overview-toolbar__status,
+.dashboard-overview-toolbar__time {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 2.05rem;
+    min-height: 2.05rem;
+    width: 100%;
+    border-radius: 999px;
+    border: 1px solid var(--line-soft);
+    background: rgba(255, 255, 255, 0.94);
+    color: var(--brand-deep);
+    font-size: 0.78rem;
+    font-weight: 800;
+    white-space: nowrap;
+}
+
+.dashboard-overview-toolbar__combined {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.78rem;
+    height: 2.05rem;
+    min-height: 2.05rem;
+    width: 100%;
+    border-radius: 999px;
+    border: 1px solid var(--line-soft);
+    background: rgba(255, 255, 255, 0.94);
+    color: var(--brand-deep);
+    box-shadow: 0 8px 18px rgba(23, 32, 51, 0.04);
+    white-space: nowrap;
+}
+
+.dashboard-overview-toolbar__combined .dashboard-overview-toolbar__status,
+.dashboard-overview-toolbar__combined .dashboard-overview-toolbar__time {
+    width: auto;
+    height: auto;
+    min-height: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+}
+
+.dashboard-overview-toolbar__divider {
+    width: 1px;
+    height: 0.86rem;
+    background: rgba(216, 222, 233, 0.92);
+}
+
+.st-key-dashboard-overview-option2 [data-testid="stHorizontalBlock"]:has(.dashboard-overview-toolbar__combined) {
+    align-items: center !important;
+    margin-bottom: 0.48rem;
+}
+
+.st-key-dashboard-overview-option2 [data-testid="stColumn"]:has(.dashboard-overview-toolbar__combined),
+.st-key-dashboard-overview-option2 [data-testid="stColumn"]:has(.st-key-dashboard-overview-refresh) {
+    display: flex !important;
+    align-items: center !important;
+}
+
+.dashboard-overview-toolbar__status {
+    gap: 0.42rem;
+}
+
+.dashboard-overview-toolbar__status span {
+    width: 0.42rem;
+    height: 0.42rem;
+    border-radius: 999px;
+    background: var(--status-good);
+}
+
+.dashboard-overview-toolbar__status--stale span {
+    background: var(--status-warn);
+}
+
+.dashboard-overview-toolbar__time {
+    color: var(--text-muted);
+    font-weight: 700;
+}
+
+.st-key-dashboard-overview-refresh button {
+    width: 2.05rem !important;
+    min-width: 2.05rem !important;
+    height: 2.05rem !important;
+    min-height: 2.05rem !important;
+    padding: 0 !important;
+    border-radius: 999px !important;
+    font-size: 1rem !important;
+    font-weight: 900 !important;
+    background: #ffffff !important;
+    border: 1px solid var(--line-soft) !important;
+    box-shadow: 0 8px 18px rgba(23, 32, 51, 0.06) !important;
+    transform: translateY(0.5rem) !important;
+}
+
+.st-key-dashboard-overview-refresh [data-testid="stButton"] {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: flex-end !important;
+}
+
+.st-key-dashboard-overview-refresh [data-testid="stButton"] > button {
+    margin: 0 !important;
+}
+
+.dashboard-overview-hero {
+    position: relative;
+    height: 206px;
+    min-height: 206px;
+    margin: 0;
+    padding: 1.18rem 1.35rem;
+    border-radius: 22px;
+    overflow: hidden;
+    background: #253075;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    box-shadow: 0 18px 44px rgba(23, 32, 51, 0.18);
+}
+
+.st-key-dashboard-overview-hero-shell {
+    position: relative;
+}
+
+.st-key-dashboard-overview-hero-shell > [data-testid="stLayoutWrapper"]:has(.st-key-dashboard-overview-period-controls) {
+    position: absolute !important;
+    top: 0 !important;
+    right: 0 !important;
+    left: 0 !important;
+    height: 0 !important;
+    overflow: visible !important;
+    z-index: 6 !important;
+}
+
+.st-key-dashboard-overview-hero-shell > [data-testid="stLayoutWrapper"]:has(.st-key-dashboard-overview-period-controls) [data-testid="stVerticalBlock"] {
+    overflow: visible !important;
+}
+
+.st-key-dashboard-overview-period-controls {
+    position: absolute;
+    top: 1.18rem;
+    right: 1.35rem;
+    z-index: 5;
+    width: auto;
+}
+
+.st-key-dashboard-overview-period-controls [data-testid="stHorizontalBlock"] {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: flex-end !important;
+    flex-wrap: nowrap !important;
+    gap: 0.24rem !important;
+}
+
+.st-key-dashboard-overview-period-controls [data-testid="stColumn"],
+.st-key-dashboard-overview-period-controls [data-testid="column"] {
+    display: flex !important;
+    width: 2rem !important;
+    min-width: 0 !important;
+    max-width: 2rem !important;
+    flex: 0 0 2rem !important;
+    padding: 0 !important;
+}
+
+.st-key-dashboard-overview-period-controls [data-testid="stColumn"]:last-child,
+.st-key-dashboard-overview-period-controls [data-testid="column"]:last-child {
+    width: 2.35rem !important;
+    max-width: 2.35rem !important;
+    flex-basis: 2.35rem !important;
+}
+
+.st-key-dashboard-overview-period-controls [data-testid="stButton"] {
+    width: 2rem !important;
+    margin: 0 !important;
+}
+
+.st-key-dashboard-overview-period-controls [data-testid="stColumn"]:last-child [data-testid="stButton"],
+.st-key-dashboard-overview-period-controls [data-testid="column"]:last-child [data-testid="stButton"] {
+    width: 2.35rem !important;
+}
+
+.st-key-dashboard-overview-period-controls [data-testid="stButton"] button {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    min-width: 2rem !important;
+    width: 2rem !important;
+    max-width: 2rem !important;
+    min-height: 1.45rem !important;
+    height: 1.45rem !important;
+    padding: 0 0.42rem !important;
+    border-radius: 7px !important;
+    border: 1px solid rgba(255, 255, 255, 0.18) !important;
+    background: rgba(255, 255, 255, 0.06) !important;
+    color: rgba(255, 255, 255, 0.72) !important;
+    box-shadow: none !important;
+    font-size: 0.7rem !important;
+    font-weight: 850 !important;
+    line-height: 1 !important;
+    white-space: nowrap !important;
+    word-break: normal !important;
+    overflow-wrap: normal !important;
+    text-transform: none !important;
+}
+
+.st-key-dashboard-overview-period-controls [data-testid="stColumn"]:last-child [data-testid="stButton"] button,
+.st-key-dashboard-overview-period-controls [data-testid="column"]:last-child [data-testid="stButton"] button {
+    min-width: 2.35rem !important;
+    width: 2.35rem !important;
+    max-width: 2.35rem !important;
+}
+
+.st-key-dashboard-overview-period-controls [data-testid="stButton"] button *,
+.st-key-dashboard-overview-period-controls [data-testid="stButton"] button p {
+    margin: 0 !important;
+    padding: 0 !important;
+    line-height: 1 !important;
+    white-space: nowrap !important;
+    word-break: normal !important;
+    overflow-wrap: normal !important;
+}
+
+.st-key-dashboard-overview-period-controls [data-testid="stButton"] button:hover {
+    background: rgba(255, 255, 255, 0.16) !important;
+    color: #ffffff !important;
+}
+
+.st-key-dashboard-overview-period-controls [data-testid="stButton"] button[kind="primary"] {
+    background: #ffffff !important;
+    border-color: #ffffff !important;
+    color: #1f2b69 !important;
+}
+
+.dashboard-overview-hero::before {
+    content: "";
+    position: absolute;
+    inset: auto -8% -36% 38%;
+    width: 68%;
+    height: 72%;
+    display: none;
+    background: transparent;
+    pointer-events: none;
+}
+
+.dashboard-overview-hero__top {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.8rem;
+    margin-bottom: 0.82rem;
+}
+
+.dashboard-overview-hero__broker {
+    display: inline-flex;
+    align-items: center;
+    min-height: 1.9rem;
+    padding: 0.32rem 0.7rem;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.12);
+    color: #ffffff;
+    font-size: 0.82rem;
+    font-weight: 900;
+}
+
+.dashboard-overview-hero__periods {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.24rem;
+    flex-wrap: wrap;
+}
+
+.dashboard-overview-hero__period {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 2rem;
+    min-height: 1.55rem;
+    padding: 0 0.42rem;
+    border-radius: 7px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    color: rgba(255, 255, 255, 0.72);
+    font-size: 0.72rem;
     font-weight: 800;
 }
 
-.st-key-trade-log-inline-editor-shell [data-testid="stFormSubmitButton"] > button[kind="primary"] {
-    background: var(--brand-accent);
-    color: #ffffff;
-    border-color: var(--brand-accent);
+.dashboard-overview-hero__period.is-active {
+    background: #ffffff;
+    color: #1f2b69;
+}
+
+.dashboard-overview-hero__label {
+    position: relative;
+    z-index: 1;
+    color: rgba(255, 255, 255, 0.82);
+    font-size: 0.96rem;
+    font-weight: 800;
+    margin-bottom: 0.34rem;
+}
+
+.dashboard-overview-hero__value {
+    position: relative;
+    z-index: 1;
+    color: #ffffff !important;
+    font-size: clamp(2.05rem, 3.45vw, 2.85rem);
+    font-weight: 950;
+    line-height: 1.05;
+    letter-spacing: -0.055em;
+}
+
+.dashboard-overview-hero__delta {
+    position: relative;
+    z-index: 1;
+    margin-top: 0.72rem;
+    font-size: 0.95rem;
+    font-weight: 900;
+}
+
+.dashboard-overview-hero__delta--positive {
+    color: #4fe3ae;
+}
+
+.dashboard-overview-hero__delta--negative {
+    color: #ff8aa0;
+}
+
+.dashboard-overview-hero__caption {
+    position: relative;
+    z-index: 1;
+    margin-top: 0.28rem;
+    color: rgba(255, 255, 255, 0.78);
+    font-size: 0.84rem;
+    font-weight: 700;
+}
+
+.dashboard-overview-hero__chart {
+    position: absolute;
+    z-index: 1;
+    right: 1rem;
+    bottom: 0.85rem;
+    width: 50%;
+    height: 40%;
+    opacity: 0.96;
+}
+
+.dashboard-overview-hero__chart::before {
+    content: "";
+    position: absolute;
+    inset: -22% -18% -18% -26%;
+    border-radius: 999px;
+    background:
+        radial-gradient(ellipse at 88% 34%, rgba(79, 227, 174, 0.24), transparent 56%),
+        radial-gradient(ellipse at 58% 72%, rgba(46, 204, 160, 0.16), transparent 62%);
+    filter: blur(1px);
+    pointer-events: none;
+}
+
+.dashboard-overview-sparkline {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+}
+
+.dashboard-overview-sparkline__glow {
+    display: none;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 8.5;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    opacity: 0.22;
+    filter: blur(2.5px);
+}
+
+.dashboard-overview-sparkline__line {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 3.2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.dashboard-overview-sparkline__endpoint {
+    display: none;
+    fill: currentColor;
+    stroke: rgba(255, 255, 255, 0.72);
+    stroke-width: 2.2;
+    filter: drop-shadow(0 0 9px rgba(79, 227, 174, 0.82));
+}
+
+.dashboard-overview-sparkline--hero {
+    color: #4fe3ae;
+    filter: drop-shadow(0 8px 18px rgba(79, 227, 174, 0.28));
+}
+
+.dashboard-overview-sparkline--hero .dashboard-overview-sparkline__glow,
+.dashboard-overview-sparkline--hero .dashboard-overview-sparkline__endpoint {
+    display: block;
+}
+
+.dashboard-overview-card-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.72rem;
+    height: 100%;
+    align-items: stretch;
+    padding-bottom: 0.18rem;
+}
+
+.dashboard-overview-card {
+    position: relative;
+    box-sizing: border-box;
+    height: 206px;
+    min-height: 206px;
+    padding: 1rem 0.95rem 1.24rem;
+    border-radius: 18px;
+    border: 1px solid rgba(226, 232, 240, 0.92);
+    background: rgba(255, 255, 255, 0.94);
+    box-shadow: 0 12px 28px rgba(23, 32, 51, 0.055);
+    overflow: hidden;
+}
+
+.dashboard-overview-card--no-sparkline {
+    display: flex;
+    flex-direction: column;
+}
+
+.dashboard-overview-card--no-sparkline::after {
+    display: none;
+}
+
+.dashboard-overview-card--no-sparkline .dashboard-overview-card__value {
+    width: 100%;
+    margin-top: 2.2rem;
+    text-align: center;
+}
+
+.dashboard-overview-card--no-sparkline .dashboard-overview-card__caption {
+    text-align: center;
+}
+
+.dashboard-overview-card::after {
+    content: "";
+    position: absolute;
+    left: 0.9rem;
+    right: 0.9rem;
+    bottom: 0.82rem;
+    height: 2.8rem;
+    border-radius: 14px;
+    background: linear-gradient(180deg, transparent, rgba(248, 250, 252, 0.88));
+    pointer-events: none;
+}
+
+.dashboard-overview-card__header {
+    display: flex;
+    align-items: center;
+    gap: 0.62rem;
+    margin-bottom: 0.94rem;
+}
+
+.dashboard-overview-card__icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.35rem;
+    height: 2.35rem;
+    flex: 0 0 2.35rem;
+    border-radius: 999px;
+    background: rgba(93, 187, 146, 0.10);
+    color: var(--brand-accent);
+}
+
+.dashboard-overview-card__icon svg {
+    width: 1.25rem;
+    height: 1.25rem;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.dashboard-overview-card__icon--principal {
+    background: rgba(123, 92, 246, 0.12);
+    color: #7c5cf6;
+}
+
+.dashboard-overview-card__icon--cash {
+    background: rgba(122, 170, 247, 0.13);
+    color: #5d97f6;
+}
+
+.dashboard-overview-card__icon--profit {
+    background: rgba(93, 187, 146, 0.13);
+    color: #16a46c;
+}
+
+.dashboard-overview-card__icon--goal {
+    background: rgba(255, 146, 43, 0.13);
+    color: #ff8a00;
+}
+
+.dashboard-overview-card__label {
+    color: var(--brand-deep);
+    font-size: 0.82rem;
+    font-weight: 900;
+    line-height: 1.2;
+}
+
+.dashboard-overview-card__value {
+    position: relative;
+    z-index: 1;
+    color: var(--brand-deep);
+    font-size: clamp(1.05rem, 1.35vw, 1.45rem);
+    font-weight: 950;
+    line-height: 1.1;
+    letter-spacing: -0.045em;
+    overflow-wrap: anywhere;
+}
+
+.dashboard-overview-card__caption {
+    position: relative;
+    z-index: 1;
+    margin-top: 0.45rem;
+    color: var(--text-muted);
+    font-size: 0.82rem;
+    font-weight: 800;
+}
+
+.dashboard-overview-card--positive .dashboard-overview-card__value {
+    color: #16a46c;
+}
+
+.dashboard-overview-card--negative .dashboard-overview-card__value {
+    color: #e85d75;
+}
+
+.dashboard-overview-card--warning .dashboard-overview-card__value {
+    color: #ff8500;
+}
+
+.dashboard-overview-card__sparkline {
+    position: absolute;
+    left: 0.9rem;
+    right: 0.9rem;
+    bottom: 0.98rem;
+    height: 2.42rem;
+    opacity: 0.88;
+}
+
+.dashboard-overview-sparkline--primary {
+    color: #8b5cf6;
+}
+
+.dashboard-overview-sparkline--info {
+    color: #5d97f6;
+}
+
+.dashboard-overview-sparkline--positive {
+    color: #16a46c;
+}
+
+.dashboard-overview-sparkline--negative {
+    color: #e85d75;
+}
+
+.dashboard-overview-sparkline--warning {
+    color: #ff8a00;
+}
+
+.dashboard-overview-sparkline--neutral {
+    color: #9aa3b4;
+}
+
+@media (max-width: 1280px) {
+    .dashboard-overview-card-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .dashboard-overview-card {
+        height: 160px;
+        min-height: 160px;
+    }
+}
+
+@media (max-width: 920px) {
+    .st-key-dashboard-overview-option2 {
+        padding: 0.9rem;
+    }
+
+    .dashboard-overview-hero {
+        height: 206px;
+        min-height: 206px;
+    }
+
+    .dashboard-overview-hero__chart {
+        width: 58%;
+        opacity: 0.72;
+    }
+}
+
+@media (max-width: 720px) {
+    .dashboard-overview-card-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .dashboard-overview-hero__top {
+        flex-direction: column;
+    }
+
+    .dashboard-overview-hero__chart {
+        position: relative;
+        right: auto;
+        bottom: auto;
+        width: 100%;
+        height: 84px;
+        margin-top: 1rem;
+    }
 }
 
 /* 반응형 */
@@ -2291,6 +2928,25 @@ h6 {
 .st-key-soft-wealth-hero-actions [data-testid="stButton"] > button {
     min-height: 2.2rem;
     padding-inline: 0.9rem;
+}
+
+.soft-wealth-hero.dashboard-overview-hero {
+    height: 206px !important;
+    min-height: 206px !important;
+    margin: 0 !important;
+    padding: 1.18rem 1.35rem !important;
+    border-radius: 22px !important;
+    border: 1px solid rgba(255, 255, 255, 0.18) !important;
+    background: #253075 !important;
+    box-shadow: 0 18px 44px rgba(23, 32, 51, 0.18) !important;
+}
+
+.soft-wealth-hero.dashboard-overview-hero::before {
+    display: none !important;
+}
+
+.dashboard-overview-card__label {
+    white-space: nowrap;
 }
 
 .dashboard-summary-card::before,
@@ -2950,6 +3606,7 @@ h6 {
     line-height: 1.5;
 }
 
+.st-key-trade-log-panel [data-testid="stPopover"] button[kind="secondary"],
 .st-key-trade-log-panel [data-testid="stDownloadButton"] > button {
     min-height: 1.85rem;
     border-radius: 6px;
@@ -2959,8 +3616,18 @@ h6 {
     font-size: 0.72rem;
     font-weight: 700;
     padding: 0.28rem 0.58rem;
+    white-space: nowrap;
 }
 
+.st-key-trade-log-panel [data-testid="stPopover"] button[kind="secondary"] p,
+.st-key-trade-log-panel [data-testid="stPopover"] button[kind="secondary"] span,
+.st-key-trade-log-panel [data-testid="stDownloadButton"] > button p,
+.st-key-trade-log-panel [data-testid="stDownloadButton"] > button span {
+    word-break: keep-all;
+    white-space: nowrap;
+}
+
+.st-key-trade-log-panel [data-testid="stPopover"] button[kind="secondary"]:hover,
 .st-key-trade-log-panel [data-testid="stDownloadButton"] > button:hover {
     background: #FFFFFF !important;
     border-color: #D0D3DE;

@@ -10,6 +10,7 @@ from zoneinfo import ZoneInfo
 
 from dateutil.relativedelta import relativedelta
 
+import pandas as pd
 import requests
 import streamlit as st
 
@@ -19,7 +20,7 @@ from . import sqlite_db
 
 T = TypeVar("T")
 
-DEFAULT_SUPABASE_URL = "https://iyszkybxostbjfzbbymq.supabase.co"
+DEFAULT_SUPABASE_URL = ""
 BACKEND_AUTO = "auto"
 DEFAULT_BACKEND = BACKEND_AUTO
 BACKEND_SQLITE = "sqlite"
@@ -45,7 +46,7 @@ CASH_EVENT_LABELS = {
 EDITABLE_TRADE_LOG_TYPES = {"buy", "sell", "personal_deposit", "employer_deposit", "withdraw"}
 EDITABLE_CASH_FLOW_LOG_TYPES = {"personal_deposit", "employer_deposit", "withdraw"}
 EXPORTABLE_TRADE_LOG_TYPES = {"buy", "sell", "personal_deposit", "employer_deposit"}
-EXPORTABLE_TABLES = {"accounts", "holdings", "trade_logs", "daily_account_snapshot"}
+EXPORTABLE_TABLES = {"accounts", "holdings", "trade_logs", "daily_account_snapshot", "daily_valuation_snapshot"}
 DEFAULT_ANNUAL_INTEREST_RATE = 0.05
 DEFAULT_ROLLUP_TIMEZONE = "Asia/Seoul"
 AUTO_DAILY_INTEREST_NOTE = "일별 이자 적립"
@@ -55,6 +56,7 @@ ACCOUNT_CACHE_TTL_SECONDS = 10
 HOLDINGS_CACHE_TTL_SECONDS = 5
 TRADE_LOGS_CACHE_TTL_SECONDS = 30
 SNAPSHOTS_CACHE_TTL_SECONDS = 30
+VALUATION_SNAPSHOTS_CACHE_TTL_SECONDS = 30
 
 
 def _state_store() -> dict[str, Any]:
@@ -122,6 +124,13 @@ def _supabase_url() -> str:
     return _read_config_value("SUPABASE_URL", DEFAULT_SUPABASE_URL)[0]
 
 
+def _is_valid_supabase_url(url: str) -> bool:
+    """Supabase hosted 프로젝트 URL 형식인지 확인한다."""
+
+    parsed = urlparse(str(url or "").strip())
+    return parsed.scheme == "https" and parsed.netloc.endswith(".supabase.co")
+
+
 def _supabase_key() -> str:
     """현재 세션에서 사용할 Supabase 키를 반환한다."""
 
@@ -149,7 +158,7 @@ def _masked_supabase_project() -> str:
     """운영 상태 패널에 보여줄 Supabase 프로젝트 호스트를 반환한다."""
 
     url = _supabase_url()
-    if not url:
+    if not _is_valid_supabase_url(url):
         return ""
     return urlparse(url).netloc or url
 
@@ -171,7 +180,7 @@ def _set_backend(name: str, reason: str = "") -> None:
 
 
 def _has_supabase_config() -> bool:
-    return bool(_supabase_url() and _supabase_key())
+    return _is_valid_supabase_url(_supabase_url()) and bool(_supabase_key())
 
 
 def _normalized_backend_override() -> str:
@@ -207,7 +216,9 @@ def _select_initial_backend() -> tuple[str, str]:
 
     override = _normalized_backend_override()
     if override == BACKEND_SUPABASE:
-        return BACKEND_SUPABASE, "PORTFOLIO_BACKEND=supabase 설정으로 Supabase 저장소를 강제 사용 중입니다."
+        if _has_supabase_config():
+            return BACKEND_SUPABASE, "PORTFOLIO_BACKEND=supabase 설정으로 Supabase 저장소를 강제 사용 중입니다."
+        return BACKEND_SQLITE, "PORTFOLIO_BACKEND=supabase 설정이 있지만 Supabase URL 또는 키가 없어 로컬 SQLite 저장소를 사용합니다."
     if override == BACKEND_SQLITE:
         return BACKEND_SQLITE, "PORTFOLIO_BACKEND=sqlite 설정으로 로컬 SQLite 저장소를 강제 사용 중입니다."
     if _has_supabase_config():
@@ -234,15 +245,16 @@ def backend_status() -> dict[str, Any]:
     state = _backend_state()
     supabase_url, supabase_url_source = _read_config_value("SUPABASE_URL", DEFAULT_SUPABASE_URL)
     supabase_key, supabase_key_source = _read_config_value("SUPABASE_KEY")
+    supabase_url_valid = _is_valid_supabase_url(supabase_url)
     missing_items: list[str] = []
     notices: list[str] = []
 
-    if not supabase_url:
+    if not supabase_url_valid:
         missing_items.append("SUPABASE_URL")
     if not supabase_key:
         missing_items.append("SUPABASE_KEY")
-    if supabase_url_source == "default":
-        notices.append("SUPABASE_URL이 Streamlit secrets나 환경변수에 없어 코드 기본값을 사용 중입니다.")
+    if not supabase_url_valid:
+        notices.append("SUPABASE_URL이 없거나 형식이 올바르지 않아 Supabase 저장소를 비활성화합니다.")
     if supabase_key_source == "missing":
         notices.append("SUPABASE_KEY가 없어 Supabase 저장소를 활성화할 수 없습니다.")
 
@@ -252,6 +264,7 @@ def backend_status() -> dict[str, Any]:
         "override": _normalized_backend_override(),
         "has_supabase_config": _has_supabase_config(),
         "supabase_url_present": bool(supabase_url),
+        "supabase_url_valid": supabase_url_valid,
         "supabase_key_present": bool(supabase_key),
         "supabase_url_source": _config_source_label(supabase_url_source),
         "supabase_key_source": _config_source_label(supabase_key_source),
@@ -281,14 +294,12 @@ def _rollup_today(timezone_name: str = DEFAULT_ROLLUP_TIMEZONE) -> date:
 def _parse_iso_date(value: Any) -> date | None:
     """문자열/타임스탬프 값을 날짜로 해석한다."""
 
-    text = str(value or "").strip()
-    if not text:
+    if value in (None, ""):
         return None
-    normalized = text[:10]
-    try:
-        return date.fromisoformat(normalized)
-    except ValueError:
+    timestamp = pd.to_datetime(str(value).strip(), errors="coerce")
+    if pd.isna(timestamp):
         return None
+    return timestamp.date()
 
 
 def _is_auto_daily_interest_trade(log: dict[str, Any]) -> bool:
@@ -906,9 +917,9 @@ def _activate_sqlite(reason: str) -> None:
     _set_backend(BACKEND_SQLITE, reason)
 
 
-def _build_headers(prefer_return: str | None = None) -> dict[str, str]:
+def _build_headers(prefer_return: str | None = None, prefer_resolution: str | None = None) -> dict[str, str]:
     if not _has_supabase_config():
-        raise RuntimeError("SUPABASE_URL 또는 SUPABASE_KEY 설정이 없습니다.")
+        raise RuntimeError("SUPABASE_URL이 없거나 형식이 올바르지 않거나 SUPABASE_KEY 설정이 없습니다.")
     if app_auth.is_demo_user():
         raise RuntimeError("로컬 데모 세션은 Supabase 요청을 사용하지 않습니다.")
 
@@ -926,8 +937,13 @@ def _build_headers(prefer_return: str | None = None) -> dict[str, str]:
         "Authorization": f"Bearer {access_token}",
         "Content-Type": "application/json",
     }
+    prefer_values: list[str] = []
+    if prefer_resolution:
+        prefer_values.append(f"resolution={prefer_resolution}")
     if prefer_return:
-        headers["Prefer"] = f"return={prefer_return}"
+        prefer_values.append(f"return={prefer_return}")
+    if prefer_values:
+        headers["Prefer"] = ",".join(prefer_values)
     return headers
 
 
@@ -1431,11 +1447,12 @@ def _desired_holdings_by_symbol(trade_logs: list[dict[str, Any]]) -> dict[str, d
 def _supabase_request(
     method: str,
     table: str,
-    data: dict[str, Any] | None = None,
+    data: dict[str, Any] | list[dict[str, Any]] | None = None,
     filters: dict[str, str | int] | None = None,
     prefer_return: str | None = None,
+    prefer_resolution: str | None = None,
 ) -> list[dict[str, Any]] | dict[str, Any] | None:
-    request_headers = _build_headers(prefer_return=prefer_return)
+    request_headers = _build_headers(prefer_return=prefer_return, prefer_resolution=prefer_resolution)
     response = requests.request(
         method=method,
         url=f"{_supabase_url()}/rest/v1/{table}",
@@ -2607,6 +2624,61 @@ def _supabase_record_account_snapshot(
     _supabase_request("POST", "daily_account_snapshot", data=payload, prefer_return="minimal")
 
 
+def _supabase_list_valuation_snapshots(
+    account_id: int,
+    *,
+    start_date: str | None = None,
+    end_date: str | None = None,
+) -> list[dict[str, Any]]:
+    filters: dict[str, str | int] = {"account_id": f"eq.{account_id}"}
+    if start_date:
+        filters["valuation_date"] = f"gte.{start_date}"
+    if end_date:
+        filters["valuation_date"] = f"lte.{end_date}"
+    result = _supabase_request("GET", "daily_valuation_snapshot", filters=filters)
+    rows = result or []
+    return sorted(rows, key=lambda row: (row.get("valuation_date", ""), row.get("id", 0)))
+
+
+def _supabase_record_valuation_snapshots(account_id: int, snapshots: list[dict[str, Any]]) -> None:
+    """Supabase daily_valuation_snapshot를 batch upsert한다."""
+
+    if not snapshots:
+        return
+    if not _supabase_get_account(account_id):
+        raise ValueError("계좌를 찾을 수 없습니다.")
+
+    timestamp = now_iso()
+    rows: list[dict[str, Any]] = []
+    for snapshot in snapshots:
+        row = dict(snapshot)
+        row["account_id"] = account_id
+        row["updated_at"] = timestamp
+        row.setdefault("created_at", timestamp)
+        rows.append(row)
+
+    _supabase_request(
+        "POST",
+        "daily_valuation_snapshot",
+        data=rows,
+        filters={"on_conflict": "account_id,valuation_date"},
+        prefer_return="minimal",
+        prefer_resolution="merge-duplicates",
+    )
+
+
+def _supabase_delete_valuation_snapshots(account_id: int) -> None:
+    """Supabase 계좌의 회사입금 기준 평가 스냅샷을 삭제한다."""
+
+    if not _supabase_get_account(account_id):
+        raise ValueError("계좌를 찾을 수 없습니다.")
+    _supabase_request(
+        "DELETE",
+        "daily_valuation_snapshot",
+        filters={"account_id": f"eq.{account_id}"},
+    )
+
+
 def _sqlite_list_accounts() -> list[dict[str, Any]]:
     accounts = [_present_account(row) for row in sqlite_db.list_accounts()]
     visible = [account for account in accounts if account]
@@ -2734,6 +2806,17 @@ def _sqlite_list_account_snapshots(account_id: int, start_date: str | None = Non
     return sqlite_db.list_account_snapshots(account_id, start_date=start_date)
 
 
+def _sqlite_list_valuation_snapshots(
+    account_id: int,
+    *,
+    start_date: str | None = None,
+    end_date: str | None = None,
+) -> list[dict[str, Any]]:
+    if not _sqlite_get_account(account_id):
+        return []
+    return sqlite_db.list_valuation_snapshots(account_id, start_date=start_date, end_date=end_date)
+
+
 def _sqlite_export_dataframe_rows(table_name: str) -> list[dict[str, Any]]:
     if table_name == "accounts":
         return _sqlite_list_accounts()
@@ -2817,6 +2900,25 @@ def _read_account_snapshots_once(backend_name: str, account_id: int, start_date:
         raise
 
 
+def _read_valuation_snapshots_once(
+    backend_name: str,
+    account_id: int,
+    start_date: str | None,
+    end_date: str | None,
+) -> list[dict[str, Any]]:
+    """현재 백엔드 기준 회사입금 평가 스냅샷을 한 번 조회한다."""
+
+    if backend_name == BACKEND_SQLITE:
+        return _sqlite_list_valuation_snapshots(account_id, start_date=start_date, end_date=end_date)
+
+    try:
+        return _supabase_list_valuation_snapshots(account_id, start_date=start_date, end_date=end_date)
+    except Exception as exc:
+        if _should_fallback(exc):
+            return _sqlite_list_valuation_snapshots(account_id, start_date=start_date, end_date=end_date)
+        raise
+
+
 @st.cache_data(ttl=ACCOUNTS_CACHE_TTL_SECONDS, max_entries=200, show_spinner=False)
 def _cached_list_accounts(scope_key: str, backend_name: str, refresh_token: int) -> list[dict[str, Any]]:
     """사용자/세션 범위의 계좌 목록 조회를 캐시한다."""
@@ -2874,6 +2976,20 @@ def _cached_list_account_snapshots(
     return _read_account_snapshots_once(backend_name, account_id, start_date)
 
 
+@st.cache_data(ttl=VALUATION_SNAPSHOTS_CACHE_TTL_SECONDS, max_entries=400, show_spinner=False)
+def _cached_list_valuation_snapshots(
+    scope_key: str,
+    backend_name: str,
+    account_id: int,
+    start_date: str | None,
+    end_date: str | None,
+    refresh_token: int,
+) -> list[dict[str, Any]]:
+    """사용자/세션 범위의 회사입금 평가 스냅샷 조회를 캐시한다."""
+
+    return _read_valuation_snapshots_once(backend_name, account_id, start_date, end_date)
+
+
 def clear_data_cache() -> None:
     """DB 조회 캐시를 모두 비운다."""
 
@@ -2883,6 +2999,7 @@ def clear_data_cache() -> None:
         _cached_list_holdings,
         _cached_list_trade_logs,
         _cached_list_account_snapshots,
+        _cached_list_valuation_snapshots,
     ):
         getattr(cache_function, "clear", lambda: None)()
 
@@ -3579,6 +3696,25 @@ def list_account_snapshots(account_id: int, start_date: str | None = None) -> li
     )
 
 
+def list_valuation_snapshots(
+    account_id: int,
+    *,
+    start_date: str | None = None,
+    end_date: str | None = None,
+) -> list[dict[str, Any]]:
+    """계좌의 회사입금 기준 일별 평가 스냅샷을 조회한다."""
+
+    backend_name = _current_backend()
+    return _cached_list_valuation_snapshots(
+        _data_cache_scope_key(backend_name),
+        backend_name,
+        int(account_id),
+        str(start_date).strip() if start_date not in (None, "") else None,
+        str(end_date).strip() if end_date not in (None, "") else None,
+        _current_data_refresh_token(),
+    )
+
+
 def export_dataframe_rows(table_name: str) -> list[dict[str, Any]]:
     return _run_with_fallback(
         supabase_call=lambda: _supabase_export_dataframe_rows(table_name),
@@ -3843,6 +3979,32 @@ def record_account_snapshot(
     mark_data_dirty()
 
 
+def record_valuation_snapshots(account_id: int, snapshots: list[dict[str, Any]]) -> None:
+    """계좌의 회사입금 기준 일별 평가 스냅샷을 저장한다."""
+
+    _run_with_fallback(
+        supabase_call=lambda: _supabase_record_valuation_snapshots(account_id, snapshots),
+        sqlite_call=lambda: sqlite_db.record_valuation_snapshots(account_id, snapshots),
+    )
+    mark_data_dirty()
+
+
+def delete_valuation_snapshots(account_id: int) -> None:
+    """계좌의 회사입금 기준 평가 스냅샷을 모두 삭제한다."""
+
+    _run_with_fallback(
+        supabase_call=lambda: _supabase_delete_valuation_snapshots(account_id),
+        sqlite_call=lambda: sqlite_db.delete_valuation_snapshots(account_id),
+    )
+    mark_data_dirty()
+
+
+def current_backend_name() -> str:
+    """현재 선택된 저장소 이름을 반환한다."""
+
+    return _current_backend()
+
+
 def sync_account_rollup(
     account_id: int,
     *,
@@ -3918,6 +4080,33 @@ def sync_account_rollup(
             total_cost=total_cost,
         )
 
+    valuation_snapshot_count = 0
+    valuation_error = ""
+    try:
+        from src.valuation import (
+            build_price_lookup_for_trade_logs,
+            first_company_deposit_date,
+            rebuild_and_save_daily_valuation_snapshots,
+        )
+
+        price_lookup = build_price_lookup_for_trade_logs(
+            trade_logs,
+            start_date=first_company_deposit_date(trade_logs),
+            end_date=today,
+        )
+        valuation_snapshots = rebuild_and_save_daily_valuation_snapshots(
+            account=account,
+            trade_logs=trade_logs,
+            price_lookup=price_lookup,
+            end_date=today,
+            today_date=today,
+            calculation_reason="daily_rollup",
+        )
+        valuation_snapshot_count = len(valuation_snapshots)
+    except Exception as exc:  # noqa: BLE001
+        valuation_snapshot_count = 0
+        valuation_error = str(exc)
+
     return {
         "interest_rows_added": 0,
         "interest_rows_updated": 0,
@@ -3926,6 +4115,8 @@ def sync_account_rollup(
         "interest_amount_added": 0.0,
         "snapshot_date": snapshot_date,
         "snapshot_updated": snapshot_updated,
+        "valuation_snapshot_count": valuation_snapshot_count,
+        "valuation_error": valuation_error,
     }
 
 

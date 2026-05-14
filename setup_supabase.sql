@@ -9,8 +9,8 @@ CREATE TABLE IF NOT EXISTS public.accounts (
     owner_user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
     account_type TEXT NOT NULL DEFAULT 'retirement',
     cash_balance DOUBLE PRECISION NOT NULL DEFAULT 0,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
+    created_at TIMESTAMPTZ NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS public.holdings (
@@ -22,9 +22,9 @@ CREATE TABLE IF NOT EXISTS public.holdings (
     quantity DOUBLE PRECISION NOT NULL DEFAULT 0,
     avg_cost DOUBLE PRECISION NOT NULL DEFAULT 0,
     current_price DOUBLE PRECISION NOT NULL DEFAULT 0,
-    price_updated_at TEXT,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
+    price_updated_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL,
     UNIQUE(account_id, symbol)
 );
 
@@ -42,9 +42,9 @@ CREATE TABLE IF NOT EXISTS public.trade_logs (
     event_group_id TEXT,
     counterparty_account_id BIGINT REFERENCES public.accounts(id) ON DELETE SET NULL,
     metadata_json JSONB NOT NULL DEFAULT '{}'::jsonb,
-    trade_date TEXT NOT NULL,
+    trade_date DATE NOT NULL,
     notes TEXT NOT NULL DEFAULT '',
-    created_at TEXT NOT NULL
+    created_at TIMESTAMPTZ NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS public.daily_interest (
@@ -52,7 +52,7 @@ CREATE TABLE IF NOT EXISTS public.daily_interest (
     account_id BIGINT NOT NULL REFERENCES public.accounts(id) ON DELETE CASCADE,
     date DATE NOT NULL,
     interest_amount DOUBLE PRECISION NOT NULL,
-    created_at TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL,
     UNIQUE(account_id, date)
 );
 
@@ -64,9 +64,33 @@ CREATE TABLE IF NOT EXISTS public.daily_account_snapshot (
     market_value DOUBLE PRECISION NOT NULL,
     total_value DOUBLE PRECISION NOT NULL,
     total_cost DOUBLE PRECISION NOT NULL,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL,
     UNIQUE(account_id, snapshot_date)
+);
+
+CREATE TABLE IF NOT EXISTS public.daily_valuation_snapshot (
+    id BIGSERIAL PRIMARY KEY,
+    account_id BIGINT NOT NULL REFERENCES public.accounts(id) ON DELETE CASCADE,
+    valuation_date DATE NOT NULL,
+    company_principal DOUBLE PRECISION NOT NULL DEFAULT 0,
+    invested_cost DOUBLE PRECISION NOT NULL DEFAULT 0,
+    implied_cash DOUBLE PRECISION NOT NULL DEFAULT 0,
+    actual_cash_balance DOUBLE PRECISION,
+    cash_value DOUBLE PRECISION NOT NULL DEFAULT 0,
+    cash_source TEXT NOT NULL DEFAULT 'implied',
+    holdings_market_value DOUBLE PRECISION NOT NULL DEFAULT 0,
+    valuation_amount DOUBLE PRECISION NOT NULL DEFAULT 0,
+    profit_loss DOUBLE PRECISION NOT NULL DEFAULT 0,
+    profit_rate DOUBLE PRECISION NOT NULL DEFAULT 0,
+    over_invested_amount DOUBLE PRECISION NOT NULL DEFAULT 0,
+    missing_price_symbols JSONB NOT NULL DEFAULT '[]'::jsonb,
+    source_hash TEXT NOT NULL DEFAULT '',
+    calculation_reason TEXT NOT NULL DEFAULT 'auto',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE(account_id, valuation_date),
+    CHECK (cash_source IN ('implied', 'actual'))
 );
 
 CREATE TABLE IF NOT EXISTS public.realtime_price_ticks (
@@ -78,8 +102,8 @@ CREATE TABLE IF NOT EXISTS public.realtime_price_ticks (
     previous_close DOUBLE PRECISION,
     day_change_rate DOUBLE PRECISION,
     currency TEXT NOT NULL DEFAULT 'KRW',
-    quote_time TEXT NOT NULL,
-    ingested_at TEXT NOT NULL,
+    quote_time TIMESTAMPTZ NOT NULL,
+    ingested_at TIMESTAMPTZ NOT NULL,
     source TEXT NOT NULL DEFAULT 'KIS WebSocket',
     metadata_json JSONB NOT NULL DEFAULT '{}'::jsonb
 );
@@ -89,7 +113,7 @@ CREATE TABLE IF NOT EXISTS public.realtime_price_bars (
     account_id BIGINT NOT NULL REFERENCES public.accounts(id) ON DELETE CASCADE,
     symbol TEXT NOT NULL,
     interval TEXT NOT NULL,
-    bucket_start TEXT NOT NULL,
+    bucket_start TIMESTAMPTZ NOT NULL,
     open_price DOUBLE PRECISION NOT NULL,
     high_price DOUBLE PRECISION NOT NULL,
     low_price DOUBLE PRECISION NOT NULL,
@@ -98,9 +122,9 @@ CREATE TABLE IF NOT EXISTS public.realtime_price_bars (
     day_change_rate DOUBLE PRECISION,
     tick_count INTEGER NOT NULL,
     currency TEXT NOT NULL DEFAULT 'KRW',
-    first_quote_at TEXT NOT NULL,
-    last_quote_at TEXT NOT NULL,
-    aggregated_at TEXT NOT NULL,
+    first_quote_at TIMESTAMPTZ NOT NULL,
+    last_quote_at TIMESTAMPTZ NOT NULL,
+    aggregated_at TIMESTAMPTZ NOT NULL,
     source TEXT NOT NULL DEFAULT 'tick-retention',
     metadata_json JSONB NOT NULL DEFAULT '{}'::jsonb,
     UNIQUE(account_id, symbol, interval, bucket_start),
@@ -111,9 +135,9 @@ CREATE TABLE IF NOT EXISTS public.realtime_worker_status (
     account_id BIGINT PRIMARY KEY REFERENCES public.accounts(id) ON DELETE CASCADE,
     worker_name TEXT NOT NULL,
     connection_state TEXT NOT NULL,
-    last_seen_at TEXT,
-    last_quote_at TEXT,
-    updated_at TEXT NOT NULL,
+    last_seen_at TIMESTAMPTZ,
+    last_quote_at TIMESTAMPTZ,
+    updated_at TIMESTAMPTZ NOT NULL,
     metadata_json JSONB NOT NULL DEFAULT '{}'::jsonb
 );
 
@@ -141,6 +165,7 @@ CREATE INDEX IF NOT EXISTS idx_trade_logs_account_id ON public.trade_logs(accoun
 CREATE INDEX IF NOT EXISTS idx_trade_logs_event_group_id ON public.trade_logs(event_group_id);
 CREATE INDEX IF NOT EXISTS idx_daily_interest_account_date ON public.daily_interest(account_id, date);
 CREATE INDEX IF NOT EXISTS idx_daily_account_snapshot_account_date ON public.daily_account_snapshot(account_id, snapshot_date);
+CREATE INDEX IF NOT EXISTS idx_daily_valuation_snapshot_account_date ON public.daily_valuation_snapshot(account_id, valuation_date);
 CREATE INDEX IF NOT EXISTS idx_realtime_price_ticks_account_quote_time ON public.realtime_price_ticks(account_id, quote_time DESC);
 CREATE INDEX IF NOT EXISTS idx_realtime_price_ticks_symbol_quote_time ON public.realtime_price_ticks(symbol, quote_time DESC);
 CREATE INDEX IF NOT EXISTS idx_realtime_price_bars_account_interval_bucket ON public.realtime_price_bars(account_id, interval, bucket_start DESC);
@@ -186,6 +211,7 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.holdings TO authenticated, 
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.trade_logs TO authenticated, service_role;
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.daily_interest TO authenticated, service_role;
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.daily_account_snapshot TO authenticated, service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.daily_valuation_snapshot TO authenticated, service_role;
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.realtime_price_ticks TO authenticated, service_role;
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.realtime_price_bars TO authenticated, service_role;
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.realtime_worker_status TO authenticated, service_role;
@@ -195,6 +221,7 @@ GRANT USAGE, SELECT ON SEQUENCE public.holdings_id_seq TO authenticated, service
 GRANT USAGE, SELECT ON SEQUENCE public.trade_logs_id_seq TO authenticated, service_role;
 GRANT USAGE, SELECT ON SEQUENCE public.daily_interest_id_seq TO authenticated, service_role;
 GRANT USAGE, SELECT ON SEQUENCE public.daily_account_snapshot_id_seq TO authenticated, service_role;
+GRANT USAGE, SELECT ON SEQUENCE public.daily_valuation_snapshot_id_seq TO authenticated, service_role;
 GRANT USAGE, SELECT ON SEQUENCE public.realtime_price_ticks_id_seq TO authenticated, service_role;
 GRANT USAGE, SELECT ON SEQUENCE public.realtime_price_bars_id_seq TO authenticated, service_role;
 
@@ -203,6 +230,7 @@ ALTER TABLE public.holdings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.trade_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.daily_interest ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.daily_account_snapshot ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.daily_valuation_snapshot ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.realtime_price_ticks ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.realtime_price_bars ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.realtime_worker_status ENABLE ROW LEVEL SECURITY;
@@ -540,6 +568,76 @@ USING (
         SELECT 1
         FROM public.accounts
         WHERE accounts.id = daily_account_snapshot.account_id
+          AND accounts.owner_user_id = (select auth.uid())
+    )
+);
+
+DROP POLICY IF EXISTS daily_valuation_snapshot_select_own ON public.daily_valuation_snapshot;
+DROP POLICY IF EXISTS daily_valuation_snapshot_insert_own ON public.daily_valuation_snapshot;
+DROP POLICY IF EXISTS daily_valuation_snapshot_update_own ON public.daily_valuation_snapshot;
+DROP POLICY IF EXISTS daily_valuation_snapshot_delete_own ON public.daily_valuation_snapshot;
+
+CREATE POLICY daily_valuation_snapshot_select_own
+ON public.daily_valuation_snapshot
+FOR SELECT
+TO authenticated
+USING (
+    (select auth.uid()) IS NOT NULL
+    AND EXISTS (
+        SELECT 1
+        FROM public.accounts
+        WHERE accounts.id = daily_valuation_snapshot.account_id
+          AND accounts.owner_user_id = (select auth.uid())
+    )
+);
+
+CREATE POLICY daily_valuation_snapshot_insert_own
+ON public.daily_valuation_snapshot
+FOR INSERT
+TO authenticated
+WITH CHECK (
+    (select auth.uid()) IS NOT NULL
+    AND EXISTS (
+        SELECT 1
+        FROM public.accounts
+        WHERE accounts.id = daily_valuation_snapshot.account_id
+          AND accounts.owner_user_id = (select auth.uid())
+    )
+);
+
+CREATE POLICY daily_valuation_snapshot_update_own
+ON public.daily_valuation_snapshot
+FOR UPDATE
+TO authenticated
+USING (
+    (select auth.uid()) IS NOT NULL
+    AND EXISTS (
+        SELECT 1
+        FROM public.accounts
+        WHERE accounts.id = daily_valuation_snapshot.account_id
+          AND accounts.owner_user_id = (select auth.uid())
+    )
+)
+WITH CHECK (
+    (select auth.uid()) IS NOT NULL
+    AND EXISTS (
+        SELECT 1
+        FROM public.accounts
+        WHERE accounts.id = daily_valuation_snapshot.account_id
+          AND accounts.owner_user_id = (select auth.uid())
+    )
+);
+
+CREATE POLICY daily_valuation_snapshot_delete_own
+ON public.daily_valuation_snapshot
+FOR DELETE
+TO authenticated
+USING (
+    (select auth.uid()) IS NOT NULL
+    AND EXISTS (
+        SELECT 1
+        FROM public.accounts
+        WHERE accounts.id = daily_valuation_snapshot.account_id
           AND accounts.owner_user_id = (select auth.uid())
     )
 );

@@ -858,11 +858,53 @@ def _fetch_price_history_from_yfinance(symbol: str, period: str = "6mo") -> pd.D
     return frame
 
 
+def _fetch_price_history_range_from_yfinance(symbol: str, *, start_date: date, end_date: date) -> pd.DataFrame:
+    """yfinance에서 지정 날짜 범위의 종가 이력을 조회한다."""
+
+    normalized = normalize_symbol(symbol)
+    if not normalized or yf is None:
+        return pd.DataFrame(columns=["date", "close", "symbol"])
+
+    history = yf.Ticker(normalized).history(
+        start=start_date.isoformat(),
+        end=(end_date + timedelta(days=1)).isoformat(),
+        auto_adjust=False,
+    )
+    closes = history.get("Close")
+    if closes is None or closes.dropna().empty:
+        return pd.DataFrame(columns=["date", "close", "symbol"])
+
+    frame = closes.dropna().reset_index()
+    frame.columns = ["date", "close"]
+    frame["date"] = pd.to_datetime(frame["date"]).dt.date
+    frame["symbol"] = normalized
+    return frame
+
+
 def _fetch_price_history_from_naver(symbol: str, period: str = "6mo") -> pd.DataFrame:
     """Naver 차트 JSON으로 국내 종목의 일봉 종가 이력을 조회한다."""
 
     normalized = normalize_symbol(symbol)
     start_date, end_date = _history_period_range(period)
+    frame = _fetch_naver_sise_frame(
+        normalized,
+        timeframe="day",
+        start_date=start_date,
+        end_date=end_date,
+    )
+    if frame.empty:
+        return pd.DataFrame(columns=["date", "close", "symbol"])
+
+    result = frame.copy()
+    result["date"] = pd.to_datetime(result["datetime"]).dt.date
+    result["symbol"] = normalized
+    return result[["date", "close", "symbol"]].sort_values("date").reset_index(drop=True)
+
+
+def _fetch_price_history_range_from_naver(symbol: str, *, start_date: date, end_date: date) -> pd.DataFrame:
+    """Naver 차트 JSON으로 지정 날짜 범위의 국내 종가 이력을 조회한다."""
+
+    normalized = normalize_symbol(symbol)
     frame = _fetch_naver_sise_frame(
         normalized,
         timeframe="day",
@@ -941,6 +983,21 @@ def _fetch_price_history_from_kis(symbol: str, period: str = "6mo") -> pd.DataFr
     return frame
 
 
+def _fetch_price_history_range_from_kis(symbol: str, *, start_date: date, end_date: date) -> pd.DataFrame:
+    """KIS REST로 지정 날짜 범위의 국내 일봉 종가를 조회한다."""
+
+    client = KisApiClient()
+    frame = client.get_domestic_daily_history(
+        symbol,
+        start_date=start_date.isoformat(),
+        end_date=end_date.isoformat(),
+    )
+    if frame.empty:
+        return pd.DataFrame(columns=["date", "close", "symbol"])
+    frame["symbol"] = normalize_symbol(symbol)
+    return frame
+
+
 @st.cache_data(ttl=900, show_spinner=False)
 def fetch_latest_price(symbol: str) -> dict[str, Any]:
     """최신 가격을 KIS 우선 provider 구조로 조회한다."""
@@ -1006,3 +1063,30 @@ def fetch_price_history(symbol: str, period: str = "6mo") -> pd.DataFrame:
         if not frame.empty:
             return frame
     return _fetch_price_history_from_yfinance(normalized, period=period)
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def fetch_price_history_range(symbol: str, *, start_date: date, end_date: date) -> pd.DataFrame:
+    """지정 날짜 범위의 종가 이력을 KIS/Naver/yfinance 순서로 조회한다."""
+
+    normalized = normalize_symbol(symbol)
+    if not normalized or end_date < start_date:
+        return pd.DataFrame(columns=["date", "close", "symbol"])
+
+    if prefers_kis_quote(normalized):
+        try:
+            frame = _fetch_price_history_range_from_kis(normalized, start_date=start_date, end_date=end_date)
+        except Exception:
+            frame = pd.DataFrame(columns=["date", "close", "symbol"])
+        if not frame.empty:
+            return frame
+
+    if is_krx_symbol(normalized):
+        try:
+            frame = _fetch_price_history_range_from_naver(normalized, start_date=start_date, end_date=end_date)
+        except Exception:
+            frame = pd.DataFrame(columns=["date", "close", "symbol"])
+        if not frame.empty:
+            return frame
+
+    return _fetch_price_history_range_from_yfinance(normalized, start_date=start_date, end_date=end_date)

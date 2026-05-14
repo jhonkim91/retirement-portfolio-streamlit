@@ -12,6 +12,7 @@
 - 자산 배분 대시보드
 - 실현손익 요약
 - 일별 자산 스냅샷 저장
+- 회사입금액 기준 일별 평가액 기록
 - 로컬 SQLite 데이터 CSV 내보내기
 
 ## 기술 구조
@@ -172,11 +173,12 @@ KIS_ENV
 
 ### 일별 스냅샷 자동 실행
 
-일별 자산 스냅샷 저장은 GitHub Actions 워크플로 [`.github/workflows/daily-rollup.yml`](.github/workflows/daily-rollup.yml)로 자동 실행할 수 있습니다.
+일별 자산 스냅샷과 회사입금액 기준 평가액 기록 저장은 GitHub Actions 워크플로 [`.github/workflows/daily-rollup.yml`](.github/workflows/daily-rollup.yml)로 자동 실행할 수 있습니다.
 
 - 기본 스케줄: 한국 시간 기준 매일 00:10
 - 실행 스크립트: `scripts/run_daily_rollup.py`
 - 기본 처리 대상일: 실행 시점의 한국 시간 기준 전일
+- `daily_account_snapshot`은 기존 총자산 스냅샷을 유지하고, `daily_valuation_snapshot`은 회사입금 원금 기준 평가 이력을 별도로 저장합니다.
 - 수동 실행 시 `dry_run=true`로 쓰기 없이 점검 가능
 
 GitHub 저장소의 **Settings > Secrets and variables > Actions** 에 아래 시크릿을 추가하세요.
@@ -221,9 +223,9 @@ python scripts/run_daily_rollup.py --backend supabase --date 2026-05-10 --timezo
 ## 배포 백엔드 참고
 
 - 기본 백엔드 선택값은 `PORTFOLIO_BACKEND=auto`입니다.
-- `SUPABASE_URL`과 `SUPABASE_KEY`가 있으면 앱은 기본적으로 `Supabase`를 우선 사용합니다.
+- 코드에는 기본 Supabase 프로젝트 URL을 두지 않습니다. 환경별 `SUPABASE_URL`과 `SUPABASE_KEY`가 모두 있고 URL이 `https://*.supabase.co` 형식이면 앱은 기본적으로 `Supabase`를 우선 사용합니다.
 - `PORTFOLIO_BACKEND=sqlite`가 설정되어 있으면 배포 환경에서도 로컬 SQLite를 강제로 사용하므로 운영 배포에서는 권장하지 않습니다.
-- 현재 운영 UI는 대시보드와 거래 페이지만 노출합니다. 저장소 상태는 배포 검증 스크립트의 `backend_storage` 결과로 확인합니다.
+- 현재 운영 UI는 대시보드, 거래, 평가액 기록 페이지를 노출합니다. 저장소 상태는 배포 검증 스크립트의 `backend_storage` 결과로 확인합니다.
 
 ## 웹 배포 검증
 

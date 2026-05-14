@@ -24,14 +24,17 @@ DEFAULT_WAIT_MS = 8_000
 PAGE_LABELS = {
     "dashboard": "대시보드",
     "trades": "거래",
+    "valuation": "평가액 기록",
 }
 PAGE_LABEL_INDEX = {
     "dashboard": 2,
     "trades": 3,
+    "valuation": 4,
 }
 PAGE_READY_MARKERS = {
     "dashboard": ("자산 배분", "선택 종목 트렌드"),
     "trades": ("상품 등록", "예상 매입금액", "거래 기록"),
+    "valuation": ("평가액 기록", "회사입금 원금"),
 }
 LOCAL_SECRETS_PATH = Path(".streamlit/secrets.toml")
 

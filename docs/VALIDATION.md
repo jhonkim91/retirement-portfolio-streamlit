@@ -6,77 +6,61 @@
 - 기준일: `2026-05-14`
 
 ## 최신 대표 검증 결과
-- 작업 범위: RetirementPort Soft Wealth 라이트 디자인 적용, Data 페이지 제거, `premium_ui.html` 기준 거래 기록 프리미엄 UI 반영, `returns_chart.html` 기준 보유 종목 수익률 차트 반영
-- 추가 패치: 원격 Dashboard 보유 종목 수익률 차트 footer 잘림 방지를 위한 iframe 높이 보정
+- 작업 범위: 회사입금액 기준 일별 평가액 기록 기능 추가
+- 신규 저장소: Supabase/SQLite `daily_valuation_snapshot` 테이블, RLS/GRANT, batch upsert, 조회/삭제 wrapper 추가
+- 신규 계산: `src/valuation.py`에서 `employer_deposit`만 원금으로 누적하고 FIFO 잔여 매입원가, 현금간주액, 오늘 실제 현금, 가격 fallback 종목을 계산
+- 신규 가격 조회: 거래 로그 종목별 날짜 범위 가격 이력을 KIS/Naver/yfinance 경로로 조회하고 실패 종목은 빈 series로 넘겨 lot 단가 fallback 적용
+- 신규 UI: `평가액 기록` 별도 페이지 추가, Dashboard 상단은 오늘 평가 스냅샷이 있으면 `보유 평가액`/`회사입금 원금` 기준으로 표시
+- 재계산 hook: 거래 저장/수정/삭제, 현금 흐름, CSV import 완료, 수동 가격 refresh, daily rollup에서 계좌별 1회 재계산
+- 배치 연동: `scripts/run_daily_rollup.py`가 기존 `daily_account_snapshot`과 신규 `daily_valuation_snapshot`을 함께 처리
 - 환경: 로컬 Python 3.11, Streamlit, SQLite backend 검증
-- 배포 커밋: `1a3d951` (`Apply Soft Wealth design and remove Data page`), `8a3b688` (`Increase returns chart frame height`)
-- 배포 대상: `origin/main` push 후 Streamlit Cloud 자동 배포
-- 서버 실행:
-```bash
-env -u SUPABASE_URL -u SUPABASE_KEY -u SUPABASE_SERVICE_ROLE_KEY \
-  PORTFOLIO_BACKEND=sqlite \
-  RETIREMENT_DB_PATH=/tmp/retirement-portfolio-trade-log-premium.db \
-  streamlit run app.py \
-  --server.port 8553 \
-  --server.address 127.0.0.1 \
-  --server.headless true \
-  --server.fileWatcherType none
-```
-- 브라우저 검증 후 8501 포트를 같은 포트로 재시작해 최신 CSS를 반영했다.
 
 ## 명령 검증
 - `python -m compileall app.py src scripts tests pages` 성공
-- `python -m pytest tests/test_app_dashboard.py` 성공, 77 tests
-- `python -m compileall src/ui/app_core.py tests/test_app_dashboard.py` 성공
-- `python -m unittest discover -s tests -p "test_*.py"` 성공, 190 tests
-- `git diff --check -- .streamlit/app.css src/ui/app_core.py tests/test_app_dashboard.py Memory.md docs/VALIDATION.md` 성공
+- `python -m pytest tests/test_valuation.py tests/test_db.py tests/test_setup_supabase_sql.py tests/test_app_dashboard.py tests/test_run_daily_rollup.py tests/test_verify_streamlit_deployment.py` 성공, 170 tests
+- `python -m unittest discover -s tests -p "test_*.py"` 성공, 228 tests
+- `git diff --check -- README.md docs/VALIDATION.md setup_supabase.sql migrations/2026-05-14_add_daily_valuation_snapshot.sql src/valuation.py src/market.py src/sqlite_db.py src/db.py src/ui/app_core.py scripts/run_daily_rollup.py scripts/verify_streamlit_deployment.py pages/valuation.py tests/test_valuation.py tests/test_db.py tests/test_setup_supabase_sql.py tests/test_app_dashboard.py tests/test_run_daily_rollup.py tests/test_verify_streamlit_deployment.py` 성공
 - `curl -sS --max-time 5 http://127.0.0.1:8501/_stcore/health` 결과 `ok`
-- `git push origin main` 성공, `9b56788..1a3d951 main -> main`
-- `git push origin main` 성공, `37800dc..8a3b688 main -> main`
-
-## 원격 배포 검증
-- `python scripts/verify_streamlit_deployment.py --page dashboard --expect-backend supabase --wait-ms 20000 ...` 성공
-  - `logged_in=true`, `workspace_visible=true`, `backend_storage=Supabase`, `backend_storage_code=supabase`, `ok=true`
-  - `allocation_status=지연 데이터 표시 중`
-- `python scripts/verify_streamlit_deployment.py --page dashboard --expect-backend supabase --wait-ms 26000 ...` 성공
-  - 원격 스크린샷에서 보유 종목 수익률 차트 footer의 `수익/손실` 범례와 `기준일` 표시 확인
-- `python scripts/verify_streamlit_deployment.py --page trades --expect-backend supabase --wait-ms 20000 ...` 성공
-  - `logged_in=true`, `workspace_visible=true`, `backend_storage=Supabase`, `backend_storage_code=supabase`, `ok=true`
 
 ## 브라우저 검증
-- 사이드바와 Streamlit 기본 multipage에 Data 메뉴 없음
-- Dashboard Soft Wealth Hero/KPI 렌더링 유지
-- Dashboard 보유 종목 수익률 차트는 `returns_chart.html` 스타일의 카드/필터/요약/막대/범례 구조로 렌더링
-- 수익률 차트 `전체`, `수익`, `손실` 필터 버튼 클릭 전환 확인
-- 수익률 차트 `수익률순`, `금액순` 정렬 버튼 클릭 전환 확인
-- 수익률 차트 양수/음수 막대가 track 영역 밖으로 벗어나지 않음
-- Trades 탭 `거래 입력`, `거래 기록`, `실현 손익` 유지
-- 거래 기록 카드에 `거래 기록` 제목과 `↓ CSV 내보내기` 버튼 표시
-- 검색, 유형 필터, 자산 필터, 시작일, 종료일, `~` 날짜 범위 UI 표시
-- 테이블 헤더가 `매입일`, `종목명`, `유형`, `단가`, `수량`, `총금액`, `수익률`, `액션` 순서로 표시
-- 페이지당 5건 표시 및 `5 / ...건 표시 중` 페이지 요약 표시
-- 매수/매도 배지와 양수/음수 수익률 색상 표시
-- 거래 기록 카드 내부 행 배경은 흰색으로 고정
-- 거래 기록 패널 내부 Streamlit wrapper 배경은 흰색으로 고정
-- CSV 내보내기 버튼은 흰색 배경으로 고정
-- 액션 버튼은 단일 flex 액션 컨테이너 안에서 `수정`/`삭제` pill 배지로 표시하고 한 줄 유지
-- 액션 컨테이너 selector는 key class가 wrapper 또는 `stVerticalBlock` 자체에 붙는 경우를 모두 처리
-- 거래 기록 행 padding은 `6px 10px`로 조정
-- 페이지네이션 active 버튼은 검은색 대신 `#5DBB92` 민트로 표시
-- 페이지네이션 컨트롤 표시
-- 390px 모바일 viewport에서 가로 overflow 없음
-- browser console error와 page error 없음
+- 명령:
+```bash
+python scripts/verify_streamlit_deployment.py \
+  --url http://127.0.0.1:8501 \
+  --page valuation \
+  --expect-backend sqlite \
+  --wait-ms 12000 \
+  --screenshot artifacts/local-valuation-page.png \
+  --text-output artifacts/local-valuation-page.txt \
+  --debug-dir artifacts/local-valuation-debug
+```
+- 결과: 성공, `ok=true`
+- 확인값: `target_page=valuation`, `logged_in=true`, `backend_storage=SQLite`, `backend_storage_code=sqlite`, `onboarding_visible=true`
+- 산출물: `artifacts/local-valuation-page.png`, `artifacts/local-valuation-page.txt`, `artifacts/local-valuation-debug/`
 
-## 산출물
-- `artifacts/premium-trade-log-desktop.png`
-- `artifacts/premium-trade-log-mobile.png`
-- `artifacts/returns-chart-interactive-standalone.png`
-- `artifacts/deploy-dashboard-latest.txt`
-- `artifacts/deploy-dashboard-latest.png`
-- `artifacts/deploy-trades-latest.txt`
-- `artifacts/deploy-trades-latest.png`
-- `artifacts/deploy-dashboard-height-fix.txt`
-- `artifacts/deploy-dashboard-height-fix.png`
+## 계산 검증 범위
+- 최초 `employer_deposit` 발생일부터 series 생성
+- 과거 날짜 `implied_cash` 계산
+- 오늘 날짜 `actual` cash 계산
+- `personal_deposit` 원금 제외
+- FIFO 매도 후 잔여 매입원가 차감
+- 직전 영업일 종가 사용
+- 매입가 fallback 및 `missing_price_symbols` 기록
+- 원금 초과 매입 `over_invested_amount`
+- employer deposit 없음 시 빈 결과
+
+## DB/스키마 검증 범위
+- SQLite `record/list/delete_valuation_snapshots()` 저장/조회/삭제와 `missing_price_symbols` JSON list 정규화
+- Supabase batch upsert payload와 `on_conflict=account_id,valuation_date`
+- cache 무효화 경로
+- `setup_supabase.sql` 및 migration의 신규 테이블, 인덱스, RLS, 정책명, 명시적 GRANT
+
+## UI/배치 검증 범위
+- `PAGES`, `PAGE_LABELS`, 사이드바, navigation page name에 `평가액 기록` 연결
+- Dashboard가 오늘 평가 스냅샷을 summary보다 우선 사용
+- Dashboard 문구가 `보유 평가액`, `회사입금 원금`, `현재 보유현금`, `회사입금 대비 손익`, `회사입금 대비 수익률`로 표시
+- `scripts/run_daily_rollup.py`가 기존 daily account snapshot과 신규 valuation snapshot을 함께 처리
 
 ## 미수행 항목
-- 실제 PR 생성은 수행하지 않았다.
+- Supabase 운영/스테이징 DB에는 migration을 직접 적용하지 않았다.
+- 원격 Streamlit Cloud `valuation` 페이지 검증은 수행하지 않았다.

@@ -28,7 +28,7 @@ CASH_EVENT_LABELS = {
     "cash_adjustment": "현금 조정",
 }
 CASH_EVENT_TYPES = set(CASH_EVENT_LABELS)
-EXPORTABLE_TABLES = {"accounts", "holdings", "trade_logs", "daily_account_snapshot"}
+EXPORTABLE_TABLES = {"accounts", "holdings", "trade_logs", "daily_account_snapshot", "daily_valuation_snapshot"}
 
 
 def now_iso() -> str:
@@ -187,6 +187,43 @@ def _ensure_daily_account_snapshot_table(connection: sqlite3.Connection) -> None
     )
 
 
+def _ensure_daily_valuation_snapshot_table(connection: sqlite3.Connection) -> None:
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS daily_valuation_snapshot (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            account_id INTEGER NOT NULL,
+            valuation_date TEXT NOT NULL,
+            company_principal REAL NOT NULL DEFAULT 0,
+            invested_cost REAL NOT NULL DEFAULT 0,
+            implied_cash REAL NOT NULL DEFAULT 0,
+            actual_cash_balance REAL,
+            cash_value REAL NOT NULL DEFAULT 0,
+            cash_source TEXT NOT NULL DEFAULT 'implied',
+            holdings_market_value REAL NOT NULL DEFAULT 0,
+            valuation_amount REAL NOT NULL DEFAULT 0,
+            profit_loss REAL NOT NULL DEFAULT 0,
+            profit_rate REAL NOT NULL DEFAULT 0,
+            over_invested_amount REAL NOT NULL DEFAULT 0,
+            missing_price_symbols TEXT NOT NULL DEFAULT '[]',
+            source_hash TEXT NOT NULL DEFAULT '',
+            calculation_reason TEXT NOT NULL DEFAULT 'auto',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            UNIQUE(account_id, valuation_date),
+            CHECK(cash_source IN ('implied', 'actual')),
+            FOREIGN KEY(account_id) REFERENCES accounts(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_daily_valuation_snapshot_account_date
+        ON daily_valuation_snapshot(account_id, valuation_date)
+        """
+    )
+
+
 def _ensure_realtime_price_ticks_table(connection: sqlite3.Connection) -> None:
     connection.execute(
         """
@@ -337,6 +374,7 @@ def initialize_database() -> None:
         _ensure_trade_log_columns(connection)
         _ensure_daily_interest_table(connection)
         _ensure_daily_account_snapshot_table(connection)
+        _ensure_daily_valuation_snapshot_table(connection)
         _ensure_realtime_price_ticks_table(connection)
         _ensure_realtime_price_bars_table(connection)
         _ensure_realtime_worker_status_table(connection)
@@ -350,6 +388,7 @@ def initialize_database() -> None:
               AND id NOT IN (SELECT account_id FROM trade_logs)
               AND id NOT IN (SELECT account_id FROM daily_interest)
               AND id NOT IN (SELECT account_id FROM daily_account_snapshot)
+              AND id NOT IN (SELECT account_id FROM daily_valuation_snapshot)
               AND id NOT IN (SELECT account_id FROM realtime_price_ticks)
               AND id NOT IN (SELECT account_id FROM realtime_price_bars)
               AND id NOT IN (SELECT account_id FROM realtime_worker_status)
@@ -712,6 +751,48 @@ def list_account_snapshots(account_id: int, start_date: str | None = None) -> li
     )
 
 
+def _decode_missing_price_symbols(value: Any) -> list[str]:
+    """SQLite에 JSON 문자열로 저장된 fallback 종목 목록을 복원한다."""
+
+    if isinstance(value, list):
+        return [str(item) for item in value]
+    try:
+        parsed = json.loads(str(value or "[]"))
+    except json.JSONDecodeError:
+        return []
+    if not isinstance(parsed, list):
+        return []
+    return [str(item) for item in parsed]
+
+
+def list_valuation_snapshots(
+    account_id: int,
+    *,
+    start_date: str | None = None,
+    end_date: str | None = None,
+) -> list[dict[str, Any]]:
+    """회사입금 기준 일별 평가 스냅샷을 조회한다."""
+
+    query = [
+        "SELECT *",
+        "FROM daily_valuation_snapshot",
+        "WHERE account_id = ?",
+    ]
+    parameters: list[Any] = [account_id]
+    if start_date:
+        query.append("AND valuation_date >= ?")
+        parameters.append(str(start_date))
+    if end_date:
+        query.append("AND valuation_date <= ?")
+        parameters.append(str(end_date))
+    query.append("ORDER BY valuation_date ASC, id ASC")
+
+    rows = _fetch_all("\n".join(query), tuple(parameters))
+    for row in rows:
+        row["missing_price_symbols"] = _decode_missing_price_symbols(row.get("missing_price_symbols"))
+    return rows
+
+
 def export_dataframe_rows(table_name: str) -> list[dict[str, Any]]:
     """내보내기 가능한 테이블의 전체 행을 반환한다."""
 
@@ -970,6 +1051,80 @@ def record_account_snapshot(
                 timestamp,
             ),
         )
+        connection.commit()
+
+
+def record_valuation_snapshots(account_id: int, snapshots: list[dict[str, Any]]) -> None:
+    """회사입금 기준 일별 평가 스냅샷을 upsert한다."""
+
+    if not snapshots:
+        return
+
+    timestamp = now_iso()
+    with connect() as connection:
+        _require_account(connection, account_id)
+        for snapshot in snapshots:
+            missing_symbols = snapshot.get("missing_price_symbols") or []
+            connection.execute(
+                """
+                INSERT INTO daily_valuation_snapshot (
+                    account_id, valuation_date, company_principal, invested_cost, implied_cash,
+                    actual_cash_balance, cash_value, cash_source, holdings_market_value,
+                    valuation_amount, profit_loss, profit_rate, over_invested_amount,
+                    missing_price_symbols, source_hash, calculation_reason, created_at, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(account_id, valuation_date) DO UPDATE SET
+                    company_principal = excluded.company_principal,
+                    invested_cost = excluded.invested_cost,
+                    implied_cash = excluded.implied_cash,
+                    actual_cash_balance = excluded.actual_cash_balance,
+                    cash_value = excluded.cash_value,
+                    cash_source = excluded.cash_source,
+                    holdings_market_value = excluded.holdings_market_value,
+                    valuation_amount = excluded.valuation_amount,
+                    profit_loss = excluded.profit_loss,
+                    profit_rate = excluded.profit_rate,
+                    over_invested_amount = excluded.over_invested_amount,
+                    missing_price_symbols = excluded.missing_price_symbols,
+                    source_hash = excluded.source_hash,
+                    calculation_reason = excluded.calculation_reason,
+                    updated_at = excluded.updated_at
+                """,
+                (
+                    account_id,
+                    str(snapshot.get("valuation_date") or ""),
+                    float(snapshot.get("company_principal") or 0),
+                    float(snapshot.get("invested_cost") or 0),
+                    float(snapshot.get("implied_cash") or 0),
+                    (
+                        float(snapshot.get("actual_cash_balance"))
+                        if snapshot.get("actual_cash_balance") is not None
+                        else None
+                    ),
+                    float(snapshot.get("cash_value") or 0),
+                    str(snapshot.get("cash_source") or "implied"),
+                    float(snapshot.get("holdings_market_value") or 0),
+                    float(snapshot.get("valuation_amount") or 0),
+                    float(snapshot.get("profit_loss") or 0),
+                    float(snapshot.get("profit_rate") or 0),
+                    float(snapshot.get("over_invested_amount") or 0),
+                    json.dumps(missing_symbols, ensure_ascii=False, separators=(",", ":")),
+                    str(snapshot.get("source_hash") or ""),
+                    str(snapshot.get("calculation_reason") or "auto"),
+                    str(snapshot.get("created_at") or timestamp),
+                    timestamp,
+                ),
+            )
+        connection.commit()
+
+
+def delete_valuation_snapshots(account_id: int) -> None:
+    """계좌의 회사입금 기준 평가 스냅샷을 모두 삭제한다."""
+
+    with connect() as connection:
+        _require_account(connection, account_id)
+        connection.execute("DELETE FROM daily_valuation_snapshot WHERE account_id = ?", (account_id,))
         connection.commit()
 
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import html
+import io
 import json
 import os
 from dataclasses import dataclass
@@ -92,6 +93,7 @@ import src.auth as app_auth
 _ANALYTICS_MODULE: Any | None = None
 _MARKET_MODULE: Any | None = None
 _DB_MODULE: Any | None = None
+_VALUATION_MODULE: Any | None = None
 
 
 def get_analytics_module() -> Any:
@@ -125,6 +127,17 @@ def get_db_module() -> Any:
 
         _DB_MODULE = db_module
     return _DB_MODULE
+
+
+def get_valuation_module() -> Any:
+    """회사입금 평가 계산 모듈을 실제 계산 시점에 로드한다."""
+
+    global _VALUATION_MODULE
+    if _VALUATION_MODULE is None:
+        import src.valuation as valuation_module
+
+        _VALUATION_MODULE = valuation_module
+    return _VALUATION_MODULE
 
 
 def account_summary(*args: Any, **kwargs: Any) -> Any:
@@ -444,6 +457,12 @@ def list_account_snapshots(*args: Any, **kwargs: Any) -> Any:
     return get_db_module().list_account_snapshots(*args, **kwargs)
 
 
+def list_valuation_snapshots(*args: Any, **kwargs: Any) -> Any:
+    """저장소 모듈의 회사입금 평가 스냅샷 목록 함수를 지연 호출한다."""
+
+    return get_db_module().list_valuation_snapshots(*args, **kwargs)
+
+
 def list_holdings(*args: Any, **kwargs: Any) -> Any:
     """저장소 모듈의 보유 종목 목록 함수를 지연 호출한다."""
 
@@ -522,6 +541,127 @@ def sync_account_rollup(*args: Any, **kwargs: Any) -> Any:
     return get_db_module().sync_account_rollup(*args, **kwargs)
 
 
+def rebuild_and_save_daily_valuation_snapshots(*args: Any, **kwargs: Any) -> Any:
+    """평가액 기록 재계산 함수를 지연 호출한다."""
+
+    return get_valuation_module().rebuild_and_save_daily_valuation_snapshots(*args, **kwargs)
+
+
+def valuation_today() -> date:
+    """평가 스냅샷에서 사용할 KST 기준 오늘 날짜를 반환한다."""
+
+    return datetime.now(KST_TIMEZONE).date()
+
+
+def rebuild_valuation_snapshots_for_account(account_id: int, calculation_reason: str) -> tuple[int, str]:
+    """현재 계좌의 평가액 기록을 재계산하고 결과 건수와 오류 메시지를 반환한다."""
+
+    try:
+        account = get_account(int(account_id))
+        if not account:
+            return 0, "계좌를 찾을 수 없습니다."
+        trade_logs = list_trade_logs(int(account_id))
+        today = valuation_today()
+        price_lookup = get_valuation_module().build_price_lookup_for_trade_logs(
+            trade_logs,
+            start_date=get_valuation_module().first_company_deposit_date(trade_logs),
+            end_date=today,
+        )
+        snapshots = rebuild_and_save_daily_valuation_snapshots(
+            account=account,
+            trade_logs=trade_logs,
+            price_lookup=price_lookup,
+            end_date=today,
+            today_date=today,
+            calculation_reason=calculation_reason,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return 0, str(exc)
+    return len(snapshots), ""
+
+
+def valuation_snapshot_trend_frame(snapshots: list[dict[str, Any]]) -> pd.DataFrame:
+    """평가 스냅샷 목록을 Dashboard 추이용 데이터프레임으로 변환한다."""
+
+    frame = pd.DataFrame(snapshots or [])
+    if frame.empty:
+        return frame
+
+    result = frame.copy()
+    result["date"] = pd.to_datetime(result["valuation_date"], errors="coerce")
+    result = result.dropna(subset=["date"]).sort_values("date").reset_index(drop=True)
+    numeric_columns = {
+        "cash_value": "cash_balance",
+        "holdings_market_value": "market_value",
+        "valuation_amount": "total_value",
+        "invested_cost": "total_cost",
+        "company_principal": "total_principal",
+        "profit_loss": "principal_profit_loss",
+        "profit_rate": "principal_profit_rate",
+    }
+    for source_column, target_column in numeric_columns.items():
+        result[target_column] = pd.to_numeric(result.get(source_column, 0), errors="coerce").fillna(0.0)
+    result["company_principal"] = result["total_principal"]
+    result["date"] = result["date"].dt.strftime("%Y-%m-%d")
+    return result
+
+
+def latest_valuation_snapshot(snapshots: list[dict[str, Any]], *, target_date: date | None = None) -> dict[str, Any] | None:
+    """지정 날짜의 평가 스냅샷 또는 최신 스냅샷을 반환한다."""
+
+    if not snapshots:
+        return None
+    normalized_target = (target_date or valuation_today()).isoformat()
+    dated_rows = [
+        row
+        for row in snapshots
+        if str(row.get("valuation_date") or "").strip() == normalized_target
+    ]
+    if dated_rows:
+        return sorted(dated_rows, key=lambda row: int(row.get("id") or 0))[-1]
+    return sorted(snapshots, key=lambda row: (str(row.get("valuation_date") or ""), int(row.get("id") or 0)))[-1]
+
+
+def dashboard_summary_from_valuation(
+    base_summary: dict[str, Any],
+    valuation_snapshot: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """오늘 평가 스냅샷이 있으면 Dashboard 상단 요약값에 우선 반영한다."""
+
+    summary = dict(base_summary)
+    today_iso = valuation_today().isoformat()
+    if not valuation_snapshot or str(valuation_snapshot.get("valuation_date") or "") != today_iso:
+        summary["_valuation_mode"] = False
+        return summary
+
+    company_principal = float(valuation_snapshot.get("company_principal") or 0)
+    valuation_amount = float(valuation_snapshot.get("valuation_amount") or 0)
+    cash_value = float(valuation_snapshot.get("cash_value") or 0)
+    holdings_market_value = float(valuation_snapshot.get("holdings_market_value") or 0)
+    invested_cost = float(valuation_snapshot.get("invested_cost") or 0)
+
+    summary.update(
+        {
+            "_valuation_mode": True,
+            "total_value": valuation_amount,
+            "market_value": holdings_market_value,
+            "cash": cash_value,
+            "total_cost": invested_cost,
+            "company_principal": company_principal,
+            "total_principal": company_principal,
+            "contribution_principal": company_principal,
+            "principal_profit_loss": float(valuation_snapshot.get("profit_loss") or 0),
+            "principal_profit_rate": float(valuation_snapshot.get("profit_rate") or 0),
+            "actual_profit_loss": float(valuation_snapshot.get("profit_loss") or 0),
+            "actual_profit_rate": float(valuation_snapshot.get("profit_rate") or 0),
+        }
+    )
+    allocation = dict(summary.get("allocation") or {})
+    allocation["cash"] = cash_value
+    summary["allocation"] = allocation
+    return summary
+
+
 def holdings_overview_frame(
     holdings: list[dict[str, Any]],
     *,
@@ -562,7 +702,7 @@ st.set_page_config(
 
 
 DESIGN_TOKENS = load_design_tokens()
-PAGES = ("Dashboard", "Trades")
+PAGES = ("Dashboard", "Trades", "Valuation")
 NAVIGATION_CONTEXT_KEY = "navigation_page_context"
 PENDING_CONFIRMATION_EMAIL_KEY = "pending_confirmation_email"
 AUTH_FEEDBACK_KEY = "auth_feedback"
@@ -575,6 +715,7 @@ TRADE_ASSET_TYPE_KEY = "trade_asset_type"
 TRADE_TYPE_KEY = "trade_type"
 TRADE_QUANTITY_KEY = "trade_quantity"
 TRADE_PRICE_KEY = "trade_price"
+TRADE_PRICE_AUTO_FILLED_KEY = "trade_price_auto_filled"
 TRADE_DATE_KEY = "trade_date"
 TRADE_NOTES_KEY = "trade_notes"
 TRADE_PREFILL_MARKER_KEY = "trade_prefill_marker"
@@ -596,6 +737,7 @@ SIDEBAR_DELETE_ACCOUNT_ID_KEY = "sidebar_delete_account_id"
 PAGE_LABELS = {
     "Dashboard": "대시보드",
     "Trades": "거래",
+    "Valuation": "평가액 기록",
 }
 ACCOUNT_TYPE_LABELS = {
     "retirement": "연금(IRP/퇴직연금)",
@@ -670,11 +812,13 @@ TRADE_LOG_DATE_FILTER_LABELS = {
     "year": "올해",
 }
 TRADE_LOG_PAGE_SIZE = 5
+TRADE_LOG_IMPORT_COLUMNS = ("거래일", "종목명", "코드", "유형", "자산군", "수량", "단가", "총액", "실현수익률", "메모")
 TABLE_LABELS = {
     "accounts": "계좌",
     "holdings": "보유 종목",
     "trade_logs": "거래 기록",
     "daily_account_snapshot": "일별 자산 스냅샷",
+    "daily_valuation_snapshot": "평가액 기록",
 }
 VISIBLE_TRADE_LOG_TYPES = {"buy", "sell", "personal_deposit", "employer_deposit"}
 TRADE_LOG_TABLE_HEADER_LABELS = ["매입일", "종목명", "유형", "단가", "수량", "총금액", "수익률", "액션"]
@@ -701,8 +845,32 @@ TRADE_LOG_TABLE_COLUMN_WEIGHTS = [
     TRADE_LOG_TABLE_COLUMN_WEIGHT_BY_LABEL[label]
     for label in TRADE_LOG_TABLE_HEADER_LABELS
 ]
-TRADE_LOG_INLINE_TRADE_EDIT_COLUMN_WEIGHTS = [1.55, 1.0, 1.1, 0.82, 0.95, 0.95, 1.18, 0.74, 0.74]
-TRADE_LOG_INLINE_CASH_EDIT_COLUMN_WEIGHTS = [1.05, 1.05, 1.2, 1.7, 0.74, 0.74]
+DASHBOARD_OVERVIEW_PERIOD_OPTIONS = ("1W", "1M", "3M", "1Y", "ALL")
+DASHBOARD_OVERVIEW_PERIOD_KEY = "dashboard_overview_period"
+DASHBOARD_OVERVIEW_PERIOD_LIMITS: dict[str, int | None] = {
+    "1W": 7,
+    "1M": 30,
+    "3M": 90,
+    "1Y": 365,
+    "ALL": None,
+}
+
+
+def dashboard_overview_period_limit(period: str) -> int | None:
+    """Dashboard Overview 기간 버튼에 대응하는 sparkline 표시 개수를 반환한다."""
+
+    normalized_period = str(period or "1M").strip().upper()
+    return DASHBOARD_OVERVIEW_PERIOD_LIMITS.get(normalized_period, DASHBOARD_OVERVIEW_PERIOD_LIMITS["1M"])
+
+
+def selected_dashboard_overview_period() -> str:
+    """현재 선택된 Dashboard Overview 기간 버튼 값을 반환한다."""
+
+    period = str(st.session_state.get(DASHBOARD_OVERVIEW_PERIOD_KEY) or "1M").strip().upper()
+    if period not in DASHBOARD_OVERVIEW_PERIOD_OPTIONS:
+        period = "1M"
+        st.session_state[DASHBOARD_OVERVIEW_PERIOD_KEY] = period
+    return period
 RETURNS_CHART_ICON_PALETTE = (
     ("#DBEAFE", "#1D4ED8"),
     ("#F0FDF4", "#166534"),
@@ -1407,7 +1575,14 @@ def paginate_trade_logs(
 def trade_log_default_date_range(logs: list[dict[str, Any]]) -> tuple[date, date]:
     """거래 기록 필터의 기본 시작일과 종료일을 실제 로그 범위에서 계산한다."""
 
-    parsed_dates = [_trade_log_date_value(log) for log in logs if log.get("trade_date")]
+    parsed_dates: list[date] = []
+    for log in logs:
+        if not log.get("trade_date"):
+            continue
+        try:
+            parsed_dates.append(_trade_log_date_value(log))
+        except ValueError:
+            continue
     if not parsed_dates:
         today = date.today()
         return today, today
@@ -1426,7 +1601,10 @@ def filter_trade_logs_by_date_range(
         return []
     filtered: list[dict[str, Any]] = []
     for log in logs:
-        trade_date = _trade_log_date_value(log)
+        try:
+            trade_date = _trade_log_date_value(log)
+        except ValueError:
+            continue
         if start_date is not None and trade_date < start_date:
             continue
         if end_date is not None and trade_date > end_date:
@@ -1455,7 +1633,10 @@ def trade_log_pagination_pages(current_page: int, total_pages: int, *, max_butto
 def compact_trade_log_date_text(log: dict[str, Any]) -> str:
     """거래 기록 테이블의 날짜를 `MM/DD` 형식으로 줄여 표시한다."""
 
-    return _trade_log_date_value(log).strftime("%m/%d")
+    try:
+        return _trade_log_date_value(log).strftime("%m/%d")
+    except ValueError:
+        return str(log.get("trade_date") or "-").strip() or "-"
 
 
 def trade_log_product_cell_html(log: dict[str, Any]) -> str:
@@ -1573,16 +1754,399 @@ def build_trade_log_export_frame(
     return pd.DataFrame(rows)
 
 
+def clean_trade_log_import_text(value: Any) -> str:
+    """거래 기록 CSV 값의 공백과 빈 값 표기를 정리한다."""
+
+    if value is None:
+        return ""
+    if isinstance(value, float) and pd.isna(value):
+        return ""
+    text = str(value).strip()
+    return "" if text in {"", "-", "—", "nan", "NaN", "None"} else text
+
+
+def parse_trade_log_import_number(value: Any) -> float:
+    """CSV 숫자 문자열에서 원화/콤마/단위 표기를 제거하고 실수로 변환한다."""
+
+    text = clean_trade_log_import_text(value)
+    if not text:
+        return 0.0
+    is_parenthesized_negative = text.startswith("(") and text.endswith(")")
+    normalized = (
+        text.strip("()")
+        .replace("&minus;", "-")
+        .replace("−", "-")
+        .replace("₩", "")
+        .replace("원", "")
+        .replace(",", "")
+        .replace("%", "")
+        .replace("주", "")
+        .replace("좌", "")
+        .replace(" ", "")
+    )
+    numeric_value = pd.to_numeric(normalized, errors="coerce")
+    if pd.isna(numeric_value):
+        raise ValueError(f"숫자 형식이 올바르지 않습니다: {text}")
+    parsed_value = float(numeric_value)
+    return -abs(parsed_value) if is_parenthesized_negative else parsed_value
+
+
+def normalize_trade_log_import_type(value: Any) -> str:
+    """CSV의 거래 유형 라벨을 저장소 trade_type 값으로 변환한다."""
+
+    text = clean_trade_log_import_text(value).lower().replace(" ", "").replace("_", "")
+    mapping = {
+        "매수": "buy",
+        "buy": "buy",
+        "매도": "sell",
+        "sell": "sell",
+        "입금": "personal_deposit",
+        "개인입금": "personal_deposit",
+        "개인현금입금": "personal_deposit",
+        "personaldeposit": "personal_deposit",
+        "deposit": "personal_deposit",
+        "회사납입금": "employer_deposit",
+        "회사입금": "employer_deposit",
+        "회사현금입금": "employer_deposit",
+        "employerdeposit": "employer_deposit",
+        "일반출금": "withdraw",
+        "현금출금": "withdraw",
+        "출금": "withdraw",
+        "withdraw": "withdraw",
+    }
+    if text not in mapping:
+        raise ValueError(f"지원하지 않는 거래 유형입니다: {value}")
+    return mapping[text]
+
+
+def normalize_trade_log_import_asset_type(value: Any, trade_type: str) -> str:
+    """CSV의 자산군 라벨을 저장소 asset_type 값으로 변환한다."""
+
+    if normalize_trade_log_type(trade_type) in CASH_FLOW_TYPES:
+        return "cash"
+    text = clean_trade_log_import_text(value).lower().replace(" ", "").replace("_", "")
+    mapping = {
+        "위험자산": "risk",
+        "위험": "risk",
+        "risk": "risk",
+        "안전자산": "safe",
+        "안전": "safe",
+        "safe": "safe",
+        "현금": "cash",
+        "cash": "cash",
+    }
+    if text not in mapping:
+        raise ValueError(f"지원하지 않는 자산군입니다: {value}")
+    return mapping[text]
+
+
+def read_trade_log_import_csv(uploaded_bytes: bytes) -> pd.DataFrame:
+    """업로드된 거래 기록 CSV bytes를 내보내기와 같은 컬럼 프레임으로 읽는다."""
+
+    last_error: Exception | None = None
+    for encoding in ("utf-8-sig", "utf-8", "cp949", "euc-kr"):
+        try:
+            return pd.read_csv(io.BytesIO(uploaded_bytes), dtype=str, encoding=encoding).fillna("")
+        except UnicodeDecodeError as exc:
+            last_error = exc
+    raise ValueError("CSV 인코딩을 읽지 못했습니다. UTF-8 또는 CP949 CSV 파일을 업로드해 주세요.") from last_error
+
+
+def trade_log_import_signature(row: dict[str, Any]) -> tuple[Any, ...]:
+    """거래 기록 import 중복 감지용 키를 만든다."""
+
+    trade_type = normalize_trade_log_type(row.get("trade_type"))
+    return (
+        str(row.get("trade_date") or "").strip(),
+        trade_type,
+        str(row.get("symbol") or "").strip().upper(),
+        str(row.get("product_name") or "").strip(),
+        str(row.get("asset_type") or "").strip(),
+        round(float(row.get("quantity") or 0), 8),
+        round(float(row.get("price") or 0), 4),
+        round(float(row.get("total_amount") or 0), 4),
+        str(row.get("notes") or "").strip(),
+    )
+
+
+def parse_trade_log_import_frame(frame: pd.DataFrame) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """거래 기록 CSV 프레임을 저장 가능한 행과 오류 목록으로 분리한다."""
+
+    missing_columns = [column for column in TRADE_LOG_IMPORT_COLUMNS if column not in frame.columns]
+    if missing_columns:
+        return [], [{"row": "-", "error": f"필수 컬럼 누락: {', '.join(missing_columns)}"}]
+
+    parsed_rows: list[dict[str, Any]] = []
+    errors: list[dict[str, Any]] = []
+    for index, raw_row in frame.loc[:, list(TRADE_LOG_IMPORT_COLUMNS)].iterrows():
+        source_row = int(index) + 2
+        if not any(clean_trade_log_import_text(raw_row.get(column)) for column in TRADE_LOG_IMPORT_COLUMNS):
+            continue
+        try:
+            parsed_date = parse_log_date(raw_row.get("거래일"))
+            if parsed_date is None:
+                raise ValueError("거래일을 확인해 주세요.")
+            trade_type = normalize_trade_log_import_type(raw_row.get("유형"))
+            product_name = clean_trade_log_import_text(raw_row.get("종목명"))
+            symbol = clean_trade_log_import_text(raw_row.get("코드")).upper()
+            asset_type = normalize_trade_log_import_asset_type(raw_row.get("자산군"), trade_type)
+            quantity = parse_trade_log_import_number(raw_row.get("수량"))
+            price = parse_trade_log_import_number(raw_row.get("단가"))
+            total_amount = parse_trade_log_import_number(raw_row.get("총액"))
+            notes = clean_trade_log_import_text(raw_row.get("메모"))
+
+            if trade_type in TRADE_TYPE_LABELS:
+                if not product_name:
+                    raise ValueError("종목명을 입력해 주세요.")
+                if not symbol:
+                    raise ValueError("코드를 입력해 주세요.")
+                if asset_type not in {"risk", "safe"}:
+                    raise ValueError("매수/매도 자산군은 위험자산 또는 안전자산이어야 합니다.")
+                if quantity <= 0:
+                    raise ValueError("수량은 0보다 커야 합니다.")
+                if price <= 0 and total_amount > 0:
+                    price = total_amount / quantity
+                if price <= 0:
+                    raise ValueError("단가는 0보다 커야 합니다.")
+                total_amount = total_amount if total_amount > 0 else quantity * price
+            elif trade_type in CASH_FLOW_TYPES:
+                if total_amount <= 0:
+                    raise ValueError("입금/출금 총액은 0보다 커야 합니다.")
+                product_name = product_name or label_cash_flow_type(trade_type)
+                symbol = ""
+                asset_type = "cash"
+                quantity = 0.0
+                price = 0.0
+            else:
+                raise ValueError("지원하지 않는 거래 유형입니다.")
+
+            parsed_rows.append(
+                {
+                    "source_row": source_row,
+                    "trade_date": parsed_date.isoformat(),
+                    "product_name": product_name,
+                    "symbol": symbol,
+                    "trade_type": trade_type,
+                    "asset_type": asset_type,
+                    "quantity": float(quantity),
+                    "price": float(price),
+                    "total_amount": float(total_amount),
+                    "notes": notes,
+                }
+            )
+        except ValueError as exc:
+            errors.append({"row": source_row, "error": str(exc)})
+    return parsed_rows, errors
+
+
+def mark_trade_log_import_duplicates(
+    rows: list[dict[str, Any]],
+    existing_logs: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """기존 거래 기록과 업로드 파일 내부 중복 여부를 행별로 표시한다."""
+
+    seen_signatures = {trade_log_import_signature(log) for log in existing_logs if is_visible_trade_log(log)}
+    marked_rows: list[dict[str, Any]] = []
+    for row in rows:
+        row_with_status = dict(row)
+        signature = trade_log_import_signature(row)
+        row_with_status["is_duplicate"] = signature in seen_signatures
+        seen_signatures.add(signature)
+        marked_rows.append(row_with_status)
+    return marked_rows
+
+
+def trade_log_import_sort_key(row: dict[str, Any]) -> tuple[str, int]:
+    """CSV 내보내기 최신순 파일을 저장 시 과거순으로 재생하기 위한 정렬 키를 만든다."""
+
+    return (str(row.get("trade_date") or ""), -int(row.get("source_row") or 0))
+
+
+def build_trade_log_import_preview_frame(rows: list[dict[str, Any]]) -> pd.DataFrame:
+    """거래 기록 CSV import 미리보기 프레임을 만든다."""
+
+    preview_rows: list[dict[str, Any]] = []
+    for row in rows:
+        preview_rows.append(
+            {
+                "행": row.get("source_row"),
+                "상태": "중복 제외 예정" if row.get("is_duplicate") else "저장 가능",
+                "거래일": row.get("trade_date"),
+                "종목명": row.get("product_name") or "-",
+                "코드": row.get("symbol") or "-",
+                "유형": label_transaction_type(normalize_trade_log_type(row.get("trade_type"))),
+                "자산군": label_asset_type(row.get("asset_type")),
+                "수량": format_trade_log_cell(row, "quantity", {}),
+                "단가": format_trade_log_cell(row, "price", {}),
+                "총액": format_trade_log_cell(row, "total_amount", {}),
+                "메모": row.get("notes") or "-",
+            }
+        )
+    return pd.DataFrame(preview_rows)
+
+
+def save_trade_log_import_rows(account_id: int, rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """검증된 CSV 거래 기록 행을 기존 저장 함수를 통해 순차 저장한다."""
+
+    saved_count = 0
+    errors: list[dict[str, Any]] = []
+    for row in sorted(rows, key=trade_log_import_sort_key):
+        try:
+            trade_type = normalize_trade_log_type(row.get("trade_type"))
+            if trade_type in TRADE_TYPE_LABELS:
+                record_trade(
+                    account_id,
+                    symbol=str(row.get("symbol") or ""),
+                    product_name=str(row.get("product_name") or ""),
+                    trade_type=trade_type,
+                    asset_type=str(row.get("asset_type") or "risk"),
+                    quantity=float(row.get("quantity") or 0),
+                    price=float(row.get("price") or 0),
+                    trade_date=str(row.get("trade_date") or ""),
+                    notes=str(row.get("notes") or ""),
+                )
+            elif trade_type in CASH_FLOW_TYPES:
+                record_cash_flow(
+                    account_id,
+                    flow_type=trade_type,
+                    amount=float(row.get("total_amount") or 0),
+                    trade_date=str(row.get("trade_date") or ""),
+                    notes=str(row.get("notes") or ""),
+                )
+            else:
+                raise ValueError("지원하지 않는 거래 유형입니다.")
+        except ValueError as exc:
+            errors.append({"row": row.get("source_row", "-"), "error": str(exc)})
+        else:
+            saved_count += 1
+    return {"saved_count": saved_count, "errors": errors}
+
+
+def render_trade_log_import_panel(account: dict[str, Any], existing_logs: list[dict[str, Any]]) -> None:
+    """거래 기록 CSV 내보내기와 같은 양식의 파일을 불러와 기존 저장 로직으로 기록한다."""
+
+    account_id = int(account["id"])
+    st.caption("CSV 내보내기 파일과 같은 컬럼을 사용합니다: 거래일, 종목명, 코드, 유형, 자산군, 수량, 단가, 총액, 실현수익률, 메모")
+    st.download_button(
+        "빈 CSV 양식 다운로드",
+        data=pd.DataFrame(columns=TRADE_LOG_IMPORT_COLUMNS).to_csv(index=False).encode("utf-8-sig"),
+        file_name="trade_logs_import_template.csv",
+        mime="text/csv",
+        key=f"trade-log-csv-import-template:{account_id}",
+        width="stretch",
+    )
+    uploaded_file = st.file_uploader(
+        "거래 기록 CSV 선택",
+        type=["csv"],
+        key=f"trade-log-csv-import:{account_id}",
+        help="현재 화면의 CSV 내보내기 파일을 그대로 다시 불러올 수 있습니다.",
+    )
+    if uploaded_file is None:
+        st.info("내보내기한 CSV 파일을 선택하면 저장 전 미리보기와 중복 여부를 확인합니다.")
+        return
+
+    try:
+        upload_frame = read_trade_log_import_csv(uploaded_file.getvalue())
+    except ValueError as exc:
+        st.error(str(exc))
+        return
+
+    parsed_rows, parse_errors = parse_trade_log_import_frame(upload_frame)
+    marked_rows = mark_trade_log_import_duplicates(parsed_rows, existing_logs)
+    duplicate_count = sum(1 for row in marked_rows if row.get("is_duplicate"))
+    skip_duplicates = st.checkbox(
+        "기존 기록과 파일 내부 중복 행 제외",
+        value=True,
+        key=f"trade-log-csv-import-skip-duplicates:{account_id}",
+    )
+    rows_to_save = [row for row in marked_rows if not (skip_duplicates and row.get("is_duplicate"))]
+
+    metric_cols = st.columns(4, gap="small")
+    metric_cols[0].metric("읽은 행", f"{len(upload_frame):,}건")
+    metric_cols[1].metric("저장 가능", f"{len(rows_to_save):,}건")
+    metric_cols[2].metric("중복", f"{duplicate_count:,}건")
+    metric_cols[3].metric("오류", f"{len(parse_errors):,}건")
+
+    if marked_rows:
+        st.dataframe(
+            build_trade_log_import_preview_frame(marked_rows),
+            width="stretch",
+            hide_index=True,
+            height=min(320, 76 + 36 * max(len(marked_rows), 1)),
+        )
+    if parse_errors:
+        st.dataframe(pd.DataFrame(parse_errors).rename(columns={"row": "행", "error": "오류"}), width="stretch", hide_index=True, height=180)
+
+    import_disabled = not rows_to_save or bool(parse_errors)
+    if parse_errors:
+        st.warning("오류가 있는 행을 수정한 뒤 다시 업로드해 주세요.")
+    if st.button(
+        "CSV 거래 기록 저장",
+        key=f"trade-log-csv-import-save:{account_id}",
+        width="stretch",
+        type="primary",
+        disabled=import_disabled,
+    ):
+        result = save_trade_log_import_rows(account_id, rows_to_save)
+        saved_count = int(result.get("saved_count") or 0)
+        save_errors = result.get("errors") or []
+        if saved_count:
+            mark_rollup_dirty()
+            with st.spinner("평가액 기록 재계산 중..."):
+                _, valuation_error = rebuild_valuation_snapshots_for_account(account_id, "trade_created")
+            st.session_state[TRADE_PAGE_SUCCESS_MESSAGE_KEY] = (
+                f"CSV 거래 기록 {saved_count:,}건을 저장했습니다."
+                + (f" 실패 {len(save_errors):,}건은 제외했습니다." if save_errors else "")
+                + (f" 평가액 기록 재계산 실패: {valuation_error}" if valuation_error else "")
+            )
+            st.rerun()
+        if save_errors:
+            st.error("저장하지 못한 행이 있습니다.")
+            st.dataframe(pd.DataFrame(save_errors).rename(columns={"row": "행", "error": "오류"}), width="stretch", hide_index=True)
+
+
+def render_trade_log_import_action(account: dict[str, Any], existing_logs: list[dict[str, Any]], *, expanded: bool = False) -> None:
+    """CSV 불러오기 패널을 거래 기록 헤더 액션 버튼으로 표시한다."""
+
+    popover = getattr(st, "popover", None)
+    if callable(popover):
+        with popover(
+            "↑ CSV 불러오기",
+            help="CSV 내보내기와 같은 양식의 파일을 불러옵니다.",
+            width="stretch",
+            key=f"trade-log-csv-import-action:{int(account['id'])}",
+        ):
+            render_trade_log_import_panel(account, existing_logs)
+        return
+
+    with st.expander("↑ CSV 불러오기", expanded=expanded):
+        render_trade_log_import_panel(account, existing_logs)
+
+
 def set_session_value(key: str, value: Any) -> None:
     """위젯 콜백에서 세션 상태 값을 갱신한다."""
 
     st.session_state[key] = value
 
 
+def clear_trade_price_autofill() -> None:
+    """종목 전환 또는 조회 실패 시 이전 자동 단가를 안전하게 비운다."""
+
+    st.session_state[TRADE_PRICE_KEY] = 0.0
+    st.session_state[TRADE_PRICE_AUTO_FILLED_KEY] = False
+
+
+def mark_trade_price_manually_edited() -> None:
+    """사용자가 단가를 직접 수정하면 자동 입력 상태를 해제한다."""
+
+    st.session_state[TRADE_PRICE_AUTO_FILLED_KEY] = False
+
+
 def prefill_latest_trade_price(symbol: str) -> bool:
     """상품 후보 선택 시 가능한 경우 최신 가격을 거래 단가에 채운다."""
 
     normalized_symbol = str(symbol or "").strip()
+    clear_trade_price_autofill()
     if not normalized_symbol:
         return False
     try:
@@ -1596,6 +2160,7 @@ def prefill_latest_trade_price(symbol: str) -> bool:
     if price <= 0:
         return False
     st.session_state[TRADE_PRICE_KEY] = price
+    st.session_state[TRADE_PRICE_AUTO_FILLED_KEY] = True
     return True
 
 
@@ -1640,14 +2205,27 @@ def format_trade_log_cell(log: dict[str, Any], field_name: str, account_name_map
     return str(log.get(field_name) or "-").strip() or "-"
 
 
+def _parse_trade_date_for_editor(raw_value: Any) -> date | None:
+    """편집 폼에서 사용할 거래일을 ISO 날짜 또는 ISO datetime 문자열에서 파싱한다."""
+
+    text = str(raw_value or "").strip()
+    if not text:
+        return date.today()
+    for candidate in (text, text[:10]):
+        try:
+            return date.fromisoformat(candidate)
+        except ValueError:
+            continue
+    return None
+
+
 def _trade_log_date_value(log: dict[str, Any]) -> date:
     """거래 로그의 날짜 값을 입력 폼용 date 객체로 변환한다."""
 
-    raw_value = str(log.get("trade_date") or date.today().isoformat()).strip()
-    try:
-        return date.fromisoformat(raw_value)
-    except ValueError:
-        return date.today()
+    parsed = _parse_trade_date_for_editor(log.get("trade_date"))
+    if parsed is None:
+        raise ValueError(f"지원하지 않는 거래일 형식입니다: {log.get('trade_date')}")
+    return parsed
 
 
 def _optional_int(value: Any) -> int | None:
@@ -1660,159 +2238,194 @@ def _optional_int(value: Any) -> int | None:
     return parsed_value if parsed_value > 0 else None
 
 
-def render_trade_log_edit_form(
+def render_trade_log_edit_dialog_body(
     account: dict[str, Any],
     selected_log: dict[str, Any],
     *,
     edit_state_key: str,
-    editing_log_id: int,
 ) -> None:
-    """선택한 거래 기록 행 바로 아래에 수정 폼을 렌더링한다."""
+    """거래 기록 수정 dialog 내부의 입력 폼과 저장 처리를 렌더링한다."""
+
+    try:
+        selected_log_id = int(selected_log.get("id") or 0)
+    except (TypeError, ValueError):
+        selected_log_id = 0
+    if selected_log_id <= 0:
+        st.error("수정할 거래 기록 ID가 올바르지 않습니다.")
+        return
+
+    if not is_trade_log_editable(selected_log):
+        st.info("이 기록은 현재 수정/삭제를 지원하지 않습니다.")
+        return
 
     selected_type = normalize_trade_log_type(selected_log.get("trade_type"))
-    selected_trade_date = _trade_log_date_value(selected_log)
-    with st.container(key="trade-log-inline-editor-shell"):
-        if not is_trade_log_editable(selected_log):
-            st.info("이 기록은 현재 수정/삭제를 지원하지 않습니다.")
-            return
+    try:
+        selected_trade_date = _trade_log_date_value(selected_log)
+    except ValueError as exc:
+        st.error(str(exc))
+        st.caption("거래일을 ISO 형식(YYYY-MM-DD)으로 정리한 뒤 다시 수정하세요.")
+        return
 
-        if selected_type in {"buy", "sell"}:
-            with st.form(f"trade-log-edit-form:{account['id']}:{editing_log_id}", clear_on_submit=False):
-                row_columns = st.columns(TRADE_LOG_INLINE_TRADE_EDIT_COLUMN_WEIGHTS, gap="small")
-                with row_columns[0]:
-                    edit_product_name = st.text_input(
-                        "상품명",
-                        value=str(selected_log.get("product_name") or "").strip(),
-                        placeholder="상품명",
-                        label_visibility="collapsed",
-                    )
-                with row_columns[1]:
-                    edit_symbol = st.text_input(
-                        "상품 코드",
-                        value=str(selected_log.get("symbol") or "").strip(),
-                        placeholder="코드",
-                        label_visibility="collapsed",
-                    )
-                with row_columns[2]:
-                    edit_trade_date = st.date_input(
-                        trade_date_label(selected_type),
-                        value=selected_trade_date,
-                        label_visibility="collapsed",
-                    )
-                with row_columns[3]:
-                    edit_quantity = st.number_input(
-                        "수량/좌수",
-                        min_value=0.0,
-                        step=1.0,
-                        value=float(selected_log.get("quantity") or 0),
-                        label_visibility="collapsed",
-                    )
-                with row_columns[4]:
-                    edit_price = st.number_input(
-                        trade_price_label(selected_type),
-                        min_value=0.0,
-                        step=100.0,
-                        value=float(selected_log.get("price") or 0),
-                        label_visibility="collapsed",
-                    )
-                with row_columns[5]:
-                    edit_asset_type = st.selectbox(
-                        "자산 구분",
-                        ["risk", "safe"],
-                        index=0 if str(selected_log.get("asset_type") or "risk").strip().lower() == "risk" else 1,
-                        format_func=label_asset_type,
-                        label_visibility="collapsed",
-                    )
-                with row_columns[6]:
-                    edit_notes = st.text_input(
-                        "메모",
-                        value=str(selected_log.get("notes") or "").strip(),
-                        placeholder="메모",
-                        label_visibility="collapsed",
-                    )
-                with row_columns[7]:
-                    submitted = st.form_submit_button("저장", width="stretch", type="primary")
-                with row_columns[8]:
-                    cancelled = st.form_submit_button("취소", width="stretch")
-            if submitted:
-                try:
-                    update_trade_log(
-                        int(account["id"]),
-                        int(editing_log_id),
-                        trade_type=selected_type,
-                        symbol=edit_symbol,
-                        product_name=edit_product_name,
-                        asset_type=edit_asset_type,
-                        quantity=edit_quantity,
-                        price=edit_price,
-                        trade_date=edit_trade_date.isoformat(),
-                        notes=edit_notes,
-                    )
-                except ValueError as exc:
-                    st.error(str(exc))
-                else:
-                    st.session_state.pop(edit_state_key, None)
-                    mark_rollup_dirty()
-                    st.session_state[TRADE_PAGE_SUCCESS_MESSAGE_KEY] = "거래 기록을 수정했습니다."
-                    st.rerun()
-            if cancelled:
-                st.session_state.pop(edit_state_key, None)
-                st.rerun()
-            return
+    st.caption("목록은 유지하고 선택한 기록만 모달에서 수정합니다.")
 
-        flow_options = ["personal_deposit", "employer_deposit"]
-        selected_flow_index = flow_options.index(selected_type) if selected_type in flow_options else 0
-        with st.form(f"cash-log-edit-form:{account['id']}:{editing_log_id}", clear_on_submit=False):
-            row_columns = st.columns(TRADE_LOG_INLINE_CASH_EDIT_COLUMN_WEIGHTS, gap="small")
-            with row_columns[0]:
-                edit_flow_type = st.selectbox(
-                    "현금 흐름",
-                    flow_options,
-                    index=selected_flow_index,
-                    format_func=label_cash_flow_type,
-                    label_visibility="collapsed",
+    if selected_type in {"buy", "sell"}:
+        with st.form(f"trade-log-edit-dialog:{account['id']}:{selected_log_id}", clear_on_submit=False):
+            name_col, symbol_col = st.columns(2, gap="small")
+            with name_col:
+                edit_product_name = st.text_input(
+                    "상품명",
+                    value=str(selected_log.get("product_name") or "").strip(),
+                    placeholder="상품명",
                 )
-            with row_columns[1]:
-                edit_trade_date = st.date_input("처리일", value=selected_trade_date, label_visibility="collapsed")
-            with row_columns[2]:
-                edit_amount = st.number_input(
-                    "금액",
-                    min_value=0,
-                    step=100000,
-                    value=int(round(float(selected_log.get("total_amount") or 0))),
-                    label_visibility="collapsed",
+            with symbol_col:
+                edit_symbol = st.text_input(
+                    "상품 코드",
+                    value=str(selected_log.get("symbol") or "").strip(),
+                    placeholder="005930.KS",
                 )
-            with row_columns[3]:
-                edit_notes = st.text_input(
-                    "메모",
-                    value=str(selected_log.get("notes") or ""),
-                    placeholder="메모",
-                    label_visibility="collapsed",
+
+            date_col, quantity_col = st.columns(2, gap="small")
+            with date_col:
+                edit_trade_date = st.date_input(trade_date_label(selected_type), value=selected_trade_date)
+            with quantity_col:
+                edit_quantity = st.number_input(
+                    "수량/좌수",
+                    min_value=0.0,
+                    step=1.0,
+                    value=float(selected_log.get("quantity") or 0),
                 )
-            with row_columns[4]:
-                submitted = st.form_submit_button("저장", width="stretch", type="primary")
-            with row_columns[5]:
+
+            price_col, asset_col = st.columns(2, gap="small")
+            with price_col:
+                edit_price = st.number_input(
+                    trade_price_label(selected_type),
+                    min_value=0.0,
+                    step=100.0,
+                    value=float(selected_log.get("price") or 0),
+                )
+            with asset_col:
+                edit_asset_type = st.selectbox(
+                    "자산 구분",
+                    ["risk", "safe"],
+                    index=0 if str(selected_log.get("asset_type") or "risk").strip().lower() == "risk" else 1,
+                    format_func=label_asset_type,
+                )
+
+            edit_notes = st.text_input(
+                "메모",
+                value=str(selected_log.get("notes") or "").strip(),
+                placeholder="메모",
+            )
+
+            action_col_1, action_col_2 = st.columns((1, 1), gap="small")
+            with action_col_1:
                 cancelled = st.form_submit_button("취소", width="stretch")
+            with action_col_2:
+                submitted = st.form_submit_button("저장", width="stretch", type="primary")
+
         if submitted:
             try:
                 update_trade_log(
                     int(account["id"]),
-                    int(editing_log_id),
-                    trade_type=edit_flow_type,
-                    amount=edit_amount,
+                    selected_log_id,
+                    trade_type=selected_type,
+                    symbol=edit_symbol,
+                    product_name=edit_product_name,
+                    asset_type=edit_asset_type,
+                    quantity=edit_quantity,
+                    price=edit_price,
                     trade_date=edit_trade_date.isoformat(),
                     notes=edit_notes,
                 )
             except ValueError as exc:
                 st.error(str(exc))
             else:
+                with st.spinner("평가액 기록 재계산 중..."):
+                    _, valuation_error = rebuild_valuation_snapshots_for_account(int(account["id"]), "trade_updated")
                 st.session_state.pop(edit_state_key, None)
                 mark_rollup_dirty()
-                st.session_state[TRADE_PAGE_SUCCESS_MESSAGE_KEY] = "거래 기록을 수정했습니다."
+                st.session_state[TRADE_PAGE_SUCCESS_MESSAGE_KEY] = (
+                    "거래 기록을 수정했습니다."
+                    + (f" 평가액 기록 재계산 실패: {valuation_error}" if valuation_error else "")
+                )
                 st.rerun()
         if cancelled:
             st.session_state.pop(edit_state_key, None)
             st.rerun()
+        return
+
+    flow_options = ["personal_deposit", "employer_deposit"]
+    selected_flow_index = flow_options.index(selected_type) if selected_type in flow_options else 0
+    with st.form(f"cash-log-edit-dialog:{account['id']}:{selected_log_id}", clear_on_submit=False):
+        flow_col, date_col = st.columns(2, gap="small")
+        with flow_col:
+            edit_flow_type = st.selectbox(
+                "현금 흐름",
+                flow_options,
+                index=selected_flow_index,
+                format_func=label_cash_flow_type,
+            )
+        with date_col:
+            edit_trade_date = st.date_input("처리일", value=selected_trade_date)
+
+        amount_col, notes_col = st.columns(2, gap="small")
+        with amount_col:
+            edit_amount = st.number_input(
+                "금액",
+                min_value=0,
+                step=100000,
+                value=int(round(float(selected_log.get("total_amount") or 0))),
+            )
+        with notes_col:
+            edit_notes = st.text_input(
+                "메모",
+                value=str(selected_log.get("notes") or ""),
+                placeholder="메모",
+            )
+
+        action_col_1, action_col_2 = st.columns((1, 1), gap="small")
+        with action_col_1:
+            cancelled = st.form_submit_button("취소", width="stretch")
+        with action_col_2:
+            submitted = st.form_submit_button("저장", width="stretch", type="primary")
+
+    if submitted:
+        try:
+            update_trade_log(
+                int(account["id"]),
+                selected_log_id,
+                trade_type=edit_flow_type,
+                amount=edit_amount,
+                trade_date=edit_trade_date.isoformat(),
+                notes=edit_notes,
+            )
+        except ValueError as exc:
+            st.error(str(exc))
+        else:
+            with st.spinner("평가액 기록 재계산 중..."):
+                _, valuation_error = rebuild_valuation_snapshots_for_account(int(account["id"]), "trade_updated")
+            st.session_state.pop(edit_state_key, None)
+            mark_rollup_dirty()
+            st.session_state[TRADE_PAGE_SUCCESS_MESSAGE_KEY] = (
+                "거래 기록을 수정했습니다."
+                + (f" 평가액 기록 재계산 실패: {valuation_error}" if valuation_error else "")
+            )
+            st.rerun()
+    if cancelled:
+        st.session_state.pop(edit_state_key, None)
+        st.rerun()
+
+
+@st.dialog("거래 기록 수정", width="large")
+def render_trade_log_edit_dialog(
+    account: dict[str, Any],
+    selected_log: dict[str, Any],
+    *,
+    edit_state_key: str,
+) -> None:
+    """선택한 거래 기록을 모달에서 수정한다."""
+
+    render_trade_log_edit_dialog_body(account, selected_log, edit_state_key=edit_state_key)
 
 
 @st.dialog("거래 기록 삭제 확인")
@@ -1836,9 +2449,14 @@ def render_trade_log_delete_dialog(
             except ValueError as exc:
                 st.error(str(exc))
             else:
+                with st.spinner("평가액 기록 재계산 중..."):
+                    _, valuation_error = rebuild_valuation_snapshots_for_account(int(account_id), "trade_deleted")
                 st.session_state.pop(delete_state_key, None)
                 mark_rollup_dirty()
-                st.session_state[TRADE_PAGE_SUCCESS_MESSAGE_KEY] = "거래 기록을 삭제했습니다."
+                st.session_state[TRADE_PAGE_SUCCESS_MESSAGE_KEY] = (
+                    "거래 기록을 삭제했습니다."
+                    + (f" 평가액 기록 재계산 실패: {valuation_error}" if valuation_error else "")
+                )
                 st.rerun()
     with action_col_2:
         if st.button("취소", key=f"trade-log-delete-cancel:{account_id}:{log_id}", width="stretch"):
@@ -1986,6 +2604,7 @@ def init_state() -> None:
     st.session_state.setdefault(TRADE_TYPE_KEY, "buy")
     st.session_state.setdefault(TRADE_QUANTITY_KEY, 1.0)
     st.session_state.setdefault(TRADE_PRICE_KEY, 0.0)
+    st.session_state.setdefault(TRADE_PRICE_AUTO_FILLED_KEY, False)
     st.session_state.setdefault(TRADE_DATE_KEY, date.today())
     st.session_state.setdefault(TRADE_NOTES_KEY, "")
     st.session_state.setdefault(TRADE_PREFILL_MARKER_KEY, "")
@@ -2407,6 +3026,7 @@ def render_sidebar_navigation() -> None:
     with st.container(key="sidebar-page-links"):
         st.page_link("pages/dashboard.py", label=PAGE_LABELS["Dashboard"], icon="📊", width="stretch")
         st.page_link("pages/trades.py", label=PAGE_LABELS["Trades"], icon="🔄", width="stretch")
+        st.page_link("pages/valuation.py", label=PAGE_LABELS["Valuation"], icon="📈", width="stretch")
 
 
 def render_dashboard_metric_strip(cards: list[dict[str, str]]) -> None:
@@ -2447,29 +3067,366 @@ def render_dashboard_metric_strip(cards: list[dict[str, str]]) -> None:
             st.markdown(card_html, unsafe_allow_html=True)
 
 
+def dashboard_safe_float(value: Any, default: float = 0.0) -> float:
+    """대시보드 표시용 숫자를 안전하게 float으로 변환한다."""
+
+    try:
+        if value is None:
+            return default
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def dashboard_format_won(value: Any) -> str:
+    """대시보드 Overview 카드용 원화 표시 문자열을 만든다."""
+
+    return f"₩{dashboard_safe_float(value):,.0f}"
+
+
+def dashboard_format_rate(value: Any, *, signed: bool = False) -> str:
+    """대시보드 Overview 카드용 퍼센트 표시 문자열을 만든다."""
+
+    number = dashboard_safe_float(value)
+    sign = "+" if signed and number > 0 else ""
+    return f"{sign}{number:.2f}%"
+
+
+def dashboard_tone_from_value(value: Any) -> str:
+    """값의 부호에 따라 Overview tone class를 결정한다."""
+
+    number = dashboard_safe_float(value)
+    if number > 0:
+        return "positive"
+    if number < 0:
+        return "negative"
+    return "neutral"
+
+
+def dashboard_trend_values(
+    trend_frame: pd.DataFrame | None,
+    column: str = "total_value",
+    *,
+    limit: int | None = 24,
+) -> list[float]:
+    """trend dataframe에서 Overview sparkline용 값을 추출한다."""
+
+    if trend_frame is None or trend_frame.empty or column not in trend_frame.columns:
+        return []
+    numeric_values = pd.to_numeric(trend_frame[column], errors="coerce").dropna()
+    if len(numeric_values) < 2 and column == "total_value" and "total_principal" in trend_frame.columns:
+        principal_values = pd.to_numeric(trend_frame["total_principal"], errors="coerce").dropna()
+        if len(principal_values) >= 2:
+            numeric_values = principal_values
+    if limit is None:
+        selected_values = numeric_values
+    else:
+        selected_values = numeric_values.tail(max(int(limit), 1))
+    return [float(value) for value in selected_values.tolist()]
+
+
+def format_dashboard_overview_reference_time(value: Any) -> str:
+    """Overview toolbar 기준시각을 `YYYY.MM.DD HH:MM` 형태로 줄여 표시한다."""
+
+    formatted = format_dashboard_reference_time(value)
+    parsed = pd.to_datetime(formatted, errors="coerce")
+    if pd.isna(parsed):
+        return formatted
+    return parsed.strftime("%Y.%m.%d %H:%M")
+
+
+def build_dashboard_sparkline_svg(
+    values: list[float],
+    *,
+    tone: str = "neutral",
+    width: int = 180,
+    height: int = 42,
+) -> str:
+    """Overview 카드 하단에 넣을 inline SVG sparkline을 생성한다."""
+
+    clean_values = [float(value) for value in values if value is not None]
+    if len(clean_values) < 2:
+        return ""
+
+    min_value = min(clean_values)
+    max_value = max(clean_values)
+    value_range = max(max_value - min_value, 1.0)
+    x_step = width / max(len(clean_values) - 1, 1)
+    points: list[str] = []
+    for index, value in enumerate(clean_values):
+        x = index * x_step
+        y = height - ((value - min_value) / value_range * (height - 6)) - 3
+        points.append(f"{x:.1f},{y:.1f}")
+
+    point_text = " ".join(points)
+    escaped_tone = html.escape(str(tone or "neutral"))
+    chart_layers = f'<polyline class="dashboard-overview-sparkline__line" points="{point_text}" />'
+    if escaped_tone == "hero":
+        last_x, last_y = points[-1].split(",", maxsplit=1)
+        chart_layers = (
+            f'<polyline class="dashboard-overview-sparkline__glow" points="{point_text}" />'
+            f'<polyline class="dashboard-overview-sparkline__line" points="{point_text}" />'
+            f'<circle class="dashboard-overview-sparkline__endpoint" cx="{last_x}" cy="{last_y}" r="4.6" />'
+        )
+
+    return (
+        f'<svg class="dashboard-overview-sparkline dashboard-overview-sparkline--{escaped_tone}" '
+        f'viewBox="0 0 {int(width)} {int(height)}" preserveAspectRatio="none" aria-hidden="true">'
+        f"{chart_layers}"
+        "</svg>"
+    )
+
+
+def dashboard_metric_icon_html(icon_key: str) -> str:
+    """Overview KPI 카드에 사용할 단순 inline SVG 아이콘을 반환한다."""
+
+    icons = {
+        "principal": (
+            '<svg viewBox="0 0 24 24" aria-hidden="true">'
+            '<path d="M3 7.5h18v12H3z" />'
+            '<path d="M3 9.5l5-5h13" />'
+            '<path d="M16 14h4" />'
+            "</svg>"
+        ),
+        "cash": (
+            '<svg viewBox="0 0 24 24" aria-hidden="true">'
+            '<path d="M4 7h16v10H4z" />'
+            '<path d="M8 12h8" />'
+            '<circle cx="12" cy="12" r="2.2" />'
+            "</svg>"
+        ),
+        "profit": (
+            '<svg viewBox="0 0 24 24" aria-hidden="true">'
+            '<path d="M4 17l5-5 4 3 7-9" />'
+            '<path d="M16 6h4v4" />'
+            "</svg>"
+        ),
+        "goal": (
+            '<svg viewBox="0 0 24 24" aria-hidden="true">'
+            '<circle cx="12" cy="12" r="8" />'
+            '<circle cx="12" cy="12" r="4" />'
+            '<path d="M15 9l5-5" />'
+            '<path d="M17.5 4H20v2.5" />'
+            "</svg>"
+        ),
+    }
+    return icons.get(str(icon_key or "").strip(), icons["profit"])
+
+
+def build_dashboard_metric_specs(
+    summary: dict[str, Any],
+    *,
+    trend_values: list[float],
+) -> list[dict[str, Any]]:
+    """제안 2번 Overview KPI 카드 4개의 표시 데이터를 구성한다."""
+
+    total_value = dashboard_safe_float(summary.get("total_value"))
+    total_principal = dashboard_safe_float(summary.get("total_principal") or summary.get("contribution_principal"))
+    cash = dashboard_safe_float(summary.get("cash"))
+    principal_profit_loss = dashboard_safe_float(summary.get("principal_profit_loss") or summary.get("actual_profit_loss"))
+    principal_profit_rate = dashboard_safe_float(summary.get("principal_profit_rate") or summary.get("actual_profit_rate"))
+    cash_ratio = (cash / total_value * 100) if total_value else 0.0
+    profit_tone = dashboard_tone_from_value(principal_profit_loss)
+    valuation_mode = bool(summary.get("_valuation_mode"))
+
+    return [
+        {
+            "key": "principal",
+            "label": "회사입금 원금" if valuation_mode else "입금 원금",
+            "value": dashboard_format_won(total_principal),
+            "caption": "",
+            "tone": "primary",
+            "trend_values": trend_values,
+            "show_sparkline": False,
+        },
+        {
+            "key": "cash",
+            "label": "현재 보유현금" if valuation_mode else "보유 현금",
+            "value": dashboard_format_won(cash),
+            "caption": f"전체의 {cash_ratio:.1f}%",
+            "tone": "info",
+            "trend_values": trend_values,
+            "show_sparkline": False,
+        },
+        {
+            "key": "profit",
+            "label": "회사입금 대비 손익" if valuation_mode else "평가 손익",
+            "value": dashboard_format_won(principal_profit_loss),
+            "caption": "",
+            "tone": profit_tone,
+            "trend_values": trend_values,
+            "show_sparkline": True,
+        },
+        {
+            "key": "goal",
+            "label": "회사입금 대비 수익률" if valuation_mode else "수익률",
+            "value": dashboard_format_rate(principal_profit_rate),
+            "caption": "",
+            "tone": "warning" if principal_profit_rate >= 0 else "negative",
+            "trend_values": trend_values,
+            "show_sparkline": True,
+        },
+    ]
+
+
+def render_dashboard_metric_card_option2(spec: dict[str, Any]) -> str:
+    """제안 2번 Overview KPI 카드 HTML을 만든다."""
+
+    key = str(spec.get("key") or "profit")
+    label = html.escape(str(spec.get("label") or ""))
+    value = html.escape(str(spec.get("value") or ""))
+    caption = html.escape(str(spec.get("caption") or ""))
+    tone = html.escape(str(spec.get("tone") or "neutral"))
+    show_sparkline = bool(spec.get("show_sparkline", True))
+    sparkline = build_dashboard_sparkline_svg(spec.get("trend_values") or [], tone=tone) if show_sparkline else ""
+    caption_html = f'<div class="dashboard-overview-card__caption">{caption}</div>' if caption else ""
+    sparkline_html = f'<div class="dashboard-overview-card__sparkline">{sparkline}</div>' if sparkline else ""
+    no_sparkline_class = "" if sparkline else " dashboard-overview-card--no-sparkline"
+
+    return (
+        f'<article class="dashboard-overview-card dashboard-overview-card--{tone} '
+        f'dashboard-overview-card--{html.escape(key)}{no_sparkline_class}">'
+        '<div class="dashboard-overview-card__header">'
+        f'<div class="dashboard-overview-card__icon dashboard-overview-card__icon--{html.escape(key)}">'
+        f"{dashboard_metric_icon_html(key)}"
+        "</div>"
+        f'<div class="dashboard-overview-card__label">{label}</div>'
+        "</div>"
+        f'<div class="dashboard-overview-card__value">{value}</div>'
+        f"{caption_html}"
+        f"{sparkline_html}"
+        "</article>"
+    )
+
+
+def render_dashboard_top_overview_option2(
+    *,
+    account_name: str,
+    summary: dict[str, Any],
+    trend_frame: pd.DataFrame | None = None,
+    reference_time_text: str = "",
+    is_live: bool = False,
+    refresh_disabled: bool = False,
+) -> bool:
+    """제안 2번 디자인의 대시보드 상단 통합 Overview Panel을 렌더링한다."""
+
+    total_value = dashboard_safe_float(summary.get("total_value"))
+    principal_profit_loss = dashboard_safe_float(summary.get("principal_profit_loss") or summary.get("actual_profit_loss"))
+    principal_profit_rate = dashboard_safe_float(summary.get("principal_profit_rate") or summary.get("actual_profit_rate"))
+    hero_tone = dashboard_tone_from_value(principal_profit_loss)
+    hero_arrow = "▲" if principal_profit_loss >= 0 else "▼"
+    hero_label = "보유 평가액" if bool(summary.get("_valuation_mode")) else "총 자산 평가액"
+    selected_period = selected_dashboard_overview_period()
+    trend_values = dashboard_trend_values(
+        trend_frame,
+        "total_value",
+        limit=dashboard_overview_period_limit(selected_period),
+    )
+    hero_sparkline = build_dashboard_sparkline_svg(trend_values, tone="hero", width=420, height=120)
+    metric_cards = "".join(
+        render_dashboard_metric_card_option2(spec)
+        for spec in build_dashboard_metric_specs(summary, trend_values=trend_values)
+    )
+    live_class = "live" if is_live else "stale"
+    live_label = "실시간 가격 갱신" if is_live else "가격 갱신 필요"
+    escaped_account_name = html.escape(account_name or "선택 계좌")
+    escaped_reference_time = html.escape(reference_time_text or "-")
+    refresh_clicked = False
+
+    with st.container(key="dashboard-overview-option2"):
+        toolbar_cols = st.columns((1, 0.38, 0.05), gap="small", vertical_alignment="center")
+        with toolbar_cols[1]:
+            st.markdown(
+                (
+                    '<div class="dashboard-overview-toolbar__combined">'
+                    f'<div class="dashboard-overview-toolbar__status dashboard-overview-toolbar__status--{live_class}">'
+                    f"<span></span>{html.escape(live_label)}</div>"
+                    '<div class="dashboard-overview-toolbar__divider"></div>'
+                    f'<div class="dashboard-overview-toolbar__time">{escaped_reference_time} 기준</div>'
+                    "</div>"
+                ),
+                unsafe_allow_html=True,
+            )
+        with toolbar_cols[2]:
+            refresh_clicked = st.button(
+                "↻",
+                key="dashboard-overview-refresh",
+                help="실시간 가격 갱신",
+                disabled=refresh_disabled,
+            )
+
+        overview_cols = st.columns((0.4, 0.6), gap="small", vertical_alignment="top")
+        with overview_cols[0]:
+            with st.container(key="dashboard-overview-hero-shell"):
+                with st.container(key="dashboard-overview-period-controls"):
+                    period_cols = st.columns(len(DASHBOARD_OVERVIEW_PERIOD_OPTIONS), gap="small")
+                    for period, period_col in zip(DASHBOARD_OVERVIEW_PERIOD_OPTIONS, period_cols, strict=True):
+                        with period_col:
+                            if st.button(
+                                period,
+                                key=f"dashboard-overview-period-button:{period}",
+                                type="primary" if period == selected_period else "secondary",
+                                help=f"{period} 기준 그래프",
+                            ):
+                                st.session_state[DASHBOARD_OVERVIEW_PERIOD_KEY] = period
+                                st.rerun()
+
+                st.markdown(
+                    (
+                        f'<section class="soft-wealth-hero dashboard-overview-hero dashboard-overview-hero--{hero_tone}">'
+                        '<div class="dashboard-overview-hero__top">'
+                        f'<div class="dashboard-overview-hero__broker">{escaped_account_name}</div>'
+                        "</div>"
+                        f'<div class="dashboard-overview-hero__label">{html.escape(hero_label)}</div>'
+                        f'<div class="soft-wealth-hero__value dashboard-overview-hero__value">{dashboard_format_won(total_value)}</div>'
+                        f'<div class="dashboard-overview-hero__delta dashboard-overview-hero__delta--{hero_tone}">'
+                        f"{hero_arrow} {dashboard_format_won(abs(principal_profit_loss))} "
+                        f"({dashboard_format_rate(principal_profit_rate, signed=True)})"
+                        "</div>"
+                        '<div class="dashboard-overview-hero__caption">전일 대비</div>'
+                        f'<div class="dashboard-overview-hero__chart">{hero_sparkline}</div>'
+                        "</section>"
+                    ),
+                    unsafe_allow_html=True,
+                )
+        with overview_cols[1]:
+            st.markdown(
+                f'<section class="dashboard-overview-card-grid">{metric_cards}</section>',
+                unsafe_allow_html=True,
+            )
+
+    return refresh_clicked
+
+
 def render_soft_wealth_dashboard_hero(
     account: dict[str, Any],
+    summary: dict[str, Any] | None = None,
     *,
-    total_value: float,
-    profit_loss: float,
-    profit_rate: float,
-) -> None:
-    """Soft Wealth 대시보드 Hero 카드를 렌더링한다."""
+    total_value: float | None = None,
+    profit_loss: float | None = None,
+    profit_rate: float | None = None,
+    trend_frame: pd.DataFrame | None = None,
+    reference_time_text: str = "",
+    is_live: bool = False,
+    refresh_disabled: bool = False,
+) -> bool:
+    """기존 함수명을 유지하고 제안 2번 Overview Panel 렌더러로 위임한다."""
 
-    account_name = str(account.get("name") or "선택 계좌").strip() or "선택 계좌"
-    delta_tone = "positive" if float(profit_loss or 0) >= 0 else "negative"
-    st.markdown(
-        (
-            '<section class="soft-wealth-hero">'
-            f'<div class="soft-wealth-hero__account">{html.escape(account_name)}</div>'
-            '<div class="soft-wealth-hero__label">총 자산 평가액</div>'
-            f'<div class="soft-wealth-hero__value">{html.escape(format_won(total_value))}</div>'
-            f'<div class="soft-wealth-hero__delta soft-wealth-hero__delta--{delta_tone}">'
-            f'{html.escape(format_won(profit_loss))} · {html.escape(format_pct(profit_rate))}'
-            "</div>"
-            "</section>"
-        ),
-        unsafe_allow_html=True,
+    overview_summary = dict(summary or {})
+    if summary is None:
+        overview_summary = {
+            "total_value": dashboard_safe_float(total_value),
+            "principal_profit_loss": dashboard_safe_float(profit_loss),
+            "principal_profit_rate": dashboard_safe_float(profit_rate),
+        }
+    account_name = str(account.get("name") or account.get("broker_name") or account.get("provider") or "선택 계좌").strip()
+    return render_dashboard_top_overview_option2(
+        account_name=account_name or "선택 계좌",
+        summary=overview_summary,
+        trend_frame=trend_frame,
+        reference_time_text=reference_time_text,
+        is_live=is_live,
+        refresh_disabled=refresh_disabled,
     )
 
 
@@ -2551,6 +3508,8 @@ def render_dashboard_cash_card(account_id: int, display_cash: float, display_tot
                     else:
                         st.session_state[cash_edit_state_key] = False
                         mark_rollup_dirty()
+                        with st.spinner("평가액 기록 재계산 중..."):
+                            rebuild_valuation_snapshots_for_account(account_id, "cash_updated")
                         st.rerun()
             with cancel_col:
                 if st.button("취소", key=f"dashboard-cash-cancel:{account_id}", width="stretch"):
@@ -5674,17 +6633,17 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]], roll
     frame = holdings_frame(holdings)
     trade_logs = list_trade_logs(int(account["id"]))
     summary = account_summary(account, holdings, trade_logs=trade_logs)
-    display_cash = float(summary["cash"] or 0)
-    display_total_value = float(summary["total_value"] or 0)
-    display_principal_profit_loss = float(summary["principal_profit_loss"] or 0)
+    account_id = int(account["id"])
+    valuation_rows = list_valuation_snapshots(account_id)
+    latest_valuation = latest_valuation_snapshot(valuation_rows, target_date=valuation_today())
+    overview_summary = dashboard_summary_from_valuation(summary, latest_valuation)
+    display_total_value = float(overview_summary["total_value"] or 0)
+    display_principal_profit_loss = float(overview_summary["principal_profit_loss"] or 0)
     display_principal_profit_rate = (
-        display_principal_profit_loss / float(summary["total_principal"] or 0) * 100
-        if float(summary["total_principal"] or 0)
+        display_principal_profit_loss / float(overview_summary["total_principal"] or 0) * 100
+        if float(overview_summary["total_principal"] or 0)
         else 0.0
     )
-    profit_tone = dashboard_return_metric_tone(display_principal_profit_loss)
-    profit_rate_tone = dashboard_return_metric_tone(display_principal_profit_rate)
-    account_id = int(account["id"])
     echarts_error = ""
     try:
         echarts_available = load_echarts_runtime()
@@ -5710,34 +6669,50 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]], roll
     if str(st.session_state.get(trend_measure_key) or "").strip() not in DETAIL_MEASURE_LABELS:
         st.session_state[trend_measure_key] = DEFAULT_SELECTED_TREND_MEASURE
     overview_frame = holdings_overview_frame(holdings, selected_symbol=selected_symbol or None, limit=10)
+    snapshot_rows = list_account_snapshots(account_id)
+    snapshot_date = str((rollup_state or {}).get("snapshot_date") or date.today().isoformat()).strip()
+    valuation_trend_frame = valuation_snapshot_trend_frame(valuation_rows)
+    if not valuation_trend_frame.empty:
+        overview_trend_frame = valuation_trend_frame
+    else:
+        overview_trend_frame = cumulative_contribution_frame(
+            trade_logs,
+            snapshots=snapshot_rows,
+            current_total_value=float(summary.get("total_value") or 0),
+            current_market_value=float(summary.get("market_value") or 0),
+            current_cash_balance=float(summary.get("cash") or 0),
+            current_total_cost=float(summary.get("total_cost") or 0),
+            current_date=snapshot_date,
+        )
+    latest_quote_time = latest_realtime_quote_time(account_id)
+    overview_summary["principal_profit_rate"] = display_principal_profit_rate
+    overview_summary["principal_profit_loss"] = display_principal_profit_loss
 
-    render_soft_wealth_dashboard_hero(
+    refresh_clicked = render_soft_wealth_dashboard_hero(
         account,
-        total_value=display_total_value,
-        profit_loss=display_principal_profit_loss,
-        profit_rate=display_principal_profit_rate,
+        overview_summary,
+        trend_frame=overview_trend_frame,
+        reference_time_text=format_dashboard_overview_reference_time(latest_quote_time),
+        is_live=is_recent_realtime_quote(latest_quote_time),
+        refresh_disabled=not bool(holdings),
     )
-    render_dashboard_price_refresh_action(account_id, holdings)
-
-    with st.container(key="dashboard-summary-strip"):
-        principal_col, cash_col, profit_col, goal_col = st.columns((1.0, 1.0, 1.0, 1.0), gap="small", vertical_alignment="top")
-
-        with principal_col:
-            with st.container(border=True, key="dashboard-card-principal"):
-                render_dashboard_summary_card("입금 원금", format_won(summary["total_principal"]), tone="accent")
-
-        with cash_col:
-            render_dashboard_cash_card(account_id, display_cash, display_total_value)
-
-        with profit_col:
-            with st.container(border=True, key="dashboard-card-profit"):
-                render_dashboard_summary_card("평가 손익", format_won(display_principal_profit_loss), tone=profit_tone)
-
-        with goal_col:
-            with st.container(border=True, key="dashboard-card-profit-rate"):
-                render_dashboard_summary_card("목표 달성률", format_pct(display_principal_profit_rate), tone=profit_rate_tone)
-
-    render_dashboard_reference_time_fragment(account_id)
+    if refresh_clicked:
+        with st.status("현재가 갱신 중...", expanded=True) as refresh_status:
+            updated, errors = refresh_prices(holdings)
+            if errors:
+                refresh_status.update(label="현재가 갱신 일부 실패", state="error")
+            else:
+                refresh_status.update(label="현재가 갱신 완료", state="complete")
+        if updated:
+            mark_rollup_dirty()
+            with st.spinner("평가액 기록 재계산 중..."):
+                _, valuation_error = rebuild_valuation_snapshots_for_account(account_id, "price_updated")
+            st.success(f"{updated}개 종목 가격을 갱신했습니다.")
+            if valuation_error:
+                st.warning(f"평가액 기록 재계산을 건너뛰었습니다: {valuation_error}")
+        if errors:
+            st.warning("\n".join(errors))
+        st.rerun()
 
     if not echarts_available:
         st.warning(echarts_error or "현재 환경에서는 ECharts 모듈을 불러오지 못해 대시보드 차트를 표시할 수 없습니다.")
@@ -5897,6 +6872,7 @@ def trade_entry_page(account: dict[str, Any], holdings: list[dict[str, Any]], ac
             TRADE_SEARCH_QUERY_KEY: "",
             TRADE_QUANTITY_KEY: 1.0,
             TRADE_PRICE_KEY: 0.0,
+            TRADE_PRICE_AUTO_FILLED_KEY: False,
             TRADE_NOTES_KEY: "",
             TRADE_PREFILL_MARKER_KEY: "",
         },
@@ -6001,7 +6977,13 @@ def trade_entry_page(account: dict[str, Any], holdings: list[dict[str, Any]], ac
 
                 trade_value_col, quantity_unit_col = st.columns(2, gap="medium")
                 with trade_value_col:
-                    price = st.number_input(trade_price_label(current_trade_type), min_value=0.0, step=100.0, key=TRADE_PRICE_KEY)
+                    price = st.number_input(
+                        trade_price_label(current_trade_type),
+                        min_value=0.0,
+                        step=100.0,
+                        key=TRADE_PRICE_KEY,
+                        on_change=mark_trade_price_manually_edited,
+                    )
                 with quantity_unit_col:
                     quantity_col, unit_col = st.columns((2.2, 0.8), gap="small", vertical_alignment="bottom")
                     with quantity_col:
@@ -6058,8 +7040,16 @@ def trade_entry_page(account: dict[str, Any], holdings: list[dict[str, Any]], ac
                         st.error(str(exc))
                     else:
                         mark_rollup_dirty()
+                        with st.spinner("평가액 기록 재계산 중..."):
+                            _, valuation_error = rebuild_valuation_snapshots_for_account(
+                                int(account["id"]),
+                                "trade_created",
+                            )
                         st.session_state[TRADE_FORM_RESET_PENDING_KEY] = True
-                        st.session_state[TRADE_PAGE_SUCCESS_MESSAGE_KEY] = "거래를 저장했습니다."
+                        st.session_state[TRADE_PAGE_SUCCESS_MESSAGE_KEY] = (
+                            "거래를 저장했습니다."
+                            + (f" 평가액 기록 재계산 실패: {valuation_error}" if valuation_error else "")
+                        )
                         st.rerun()
 
         with cash_flow_col:
@@ -6125,8 +7115,16 @@ def trade_entry_page(account: dict[str, Any], holdings: list[dict[str, Any]], ac
                                 st.error(str(exc))
                             else:
                                 mark_rollup_dirty()
+                                with st.spinner("평가액 기록 재계산 중..."):
+                                    _, valuation_error = rebuild_valuation_snapshots_for_account(
+                                        int(account["id"]),
+                                        "company_deposit_created" if flow_type == "employer_deposit" else "trade_created",
+                                    )
                                 st.session_state[CASH_FLOW_FORM_RESET_PENDING_KEY] = True
-                                st.session_state[TRADE_PAGE_SUCCESS_MESSAGE_KEY] = "현금 흐름을 기록했습니다."
+                                st.session_state[TRADE_PAGE_SUCCESS_MESSAGE_KEY] = (
+                                    "현금 흐름을 기록했습니다."
+                                    + (f" 평가액 기록 재계산 실패: {valuation_error}" if valuation_error else "")
+                                )
                                 st.rerun()
 
     visible_logs = [row for row in logs if is_visible_trade_log(row)]
@@ -6259,9 +7257,11 @@ def trade_entry_page(account: dict[str, Any], holdings: list[dict[str, Any]], ac
             editing_log_id = _optional_int(st.session_state.get(edit_state_key))
             delete_log_id = _optional_int(st.session_state.get(delete_state_key))
             with st.container(border=True, key="trade-log-panel"):
-                header_cols = st.columns((1, 0.24), gap="small", vertical_alignment="center")
+                header_cols = st.columns((1, 0.34, 0.34), gap="small", vertical_alignment="center")
                 with header_cols[0]:
                     st.markdown('<div class="trade-log-premium-title">거래 기록</div>', unsafe_allow_html=True)
+                with header_cols[1]:
+                    render_trade_log_import_action(account, visible_logs)
 
                 with st.container(key="trade-log-filter-panel"):
                     filter_cols = st.columns((2.85, 1.0, 1.0, 1.05, 0.12, 1.05), gap="small", vertical_alignment="center")
@@ -6322,7 +7322,7 @@ def trade_entry_page(account: dict[str, Any], holdings: list[dict[str, Any]], ac
                     end_date=range_end_date,
                 )
                 export_frame = build_trade_log_export_frame(filtered_logs, realized_rate_map)
-                with header_cols[1]:
+                with header_cols[2]:
                     st.download_button(
                         "↓ CSV 내보내기",
                         data=export_frame.to_csv(index=False).encode("utf-8-sig"),
@@ -6383,14 +7383,6 @@ def trade_entry_page(account: dict[str, Any], holdings: list[dict[str, Any]], ac
                                             st.rerun()
                                 else:
                                     st.markdown('<span class="trade-log-action-empty">-</span>', unsafe_allow_html=True)
-                            if editing_log_id == log_id:
-                                render_trade_log_edit_form(
-                                    account,
-                                    row,
-                                    edit_state_key=edit_state_key,
-                                    editing_log_id=log_id,
-                                )
-
                     st.markdown('<div class="trade-log-pagination-divider"></div>', unsafe_allow_html=True)
                     pagination_cols = st.columns((1, 0.56), gap="small", vertical_alignment="center")
                     with pagination_cols[0]:
@@ -6432,7 +7424,16 @@ def trade_entry_page(account: dict[str, Any], holdings: list[dict[str, Any]], ac
 
             if editing_log_id is not None and editing_log_id not in log_by_id:
                 st.session_state.pop(edit_state_key, None)
-            if delete_log_id in log_by_id:
+                editing_log_id = None
+            if delete_log_id is not None and delete_log_id not in log_by_id:
+                st.session_state.pop(delete_state_key, None)
+                delete_log_id = None
+
+            if editing_log_id in log_by_id:
+                st.session_state.pop(delete_state_key, None)
+                selected_log = log_by_id[int(editing_log_id)]
+                render_trade_log_edit_dialog(account, selected_log, edit_state_key=edit_state_key)
+            elif delete_log_id in log_by_id:
                 selected_log = log_by_id[int(delete_log_id)]
                 render_trade_log_delete_dialog(
                     int(account["id"]),
@@ -6440,10 +7441,99 @@ def trade_entry_page(account: dict[str, Any], holdings: list[dict[str, Any]], ac
                     selected_log,
                     delete_state_key=delete_state_key,
                 )
-            elif delete_log_id is not None:
-                st.session_state.pop(delete_state_key, None)
         else:
-            st.info("아직 기록된 거래가 없습니다.")
+            with st.container(border=True, key="trade-log-panel"):
+                header_cols = st.columns((1, 0.34), gap="small", vertical_alignment="center")
+                with header_cols[0]:
+                    st.markdown('<div class="trade-log-premium-title">거래 기록</div>', unsafe_allow_html=True)
+                with header_cols[1]:
+                    render_trade_log_import_action(account, visible_logs, expanded=True)
+                st.info("아직 기록된 거래가 없습니다. CSV 파일을 불러와 거래 기록을 만들 수 있습니다.")
+
+
+def valuation_page(account: dict[str, Any], rollup_state: dict[str, Any] | None = None) -> None:
+    """회사입금액 기준 일별 평가액 기록 페이지를 렌더링한다."""
+
+    del rollup_state
+    account_id = int(account["id"])
+    st.title("평가액 기록")
+    st.caption("회사 납입금을 원금으로 보고, 보유상품 평가액과 현금간주액을 더해 일별 보유 평가액을 기록합니다.")
+
+    action_cols = st.columns((1, 0.26), gap="medium", vertical_alignment="center")
+    with action_cols[1]:
+        if st.button("재계산", key=f"valuation-rebuild:{account_id}", width="stretch"):
+            with st.spinner("평가액 기록 재계산 중..."):
+                count, error = rebuild_valuation_snapshots_for_account(account_id, "manual_rebuild")
+            if error:
+                st.warning(f"평가액 기록 재계산을 완료하지 못했습니다: {error}")
+            else:
+                st.success(f"평가액 기록 {count:,}건을 재계산했습니다.")
+                st.rerun()
+
+    snapshots = list_valuation_snapshots(account_id)
+    if not snapshots:
+        st.info("회사 납입금 기록이 아직 없어 평가액 기록을 만들 수 없습니다. 거래 페이지에서 회사 납입금을 먼저 등록해 주세요.")
+        return
+
+    latest_row = latest_valuation_snapshot(snapshots) or snapshots[-1]
+    metric_cols = st.columns(4, gap="small")
+    metric_cols[0].metric("보유 평가액", format_won(latest_row.get("valuation_amount")))
+    metric_cols[1].metric("회사입금 원금", format_won(latest_row.get("company_principal")))
+    metric_cols[2].metric("회사입금 대비 손익", format_won(latest_row.get("profit_loss")))
+    metric_cols[3].metric("회사입금 대비 수익률", format_pct(latest_row.get("profit_rate")))
+
+    trend_frame = valuation_snapshot_trend_frame(snapshots)
+    if not trend_frame.empty:
+        chart_source = trend_frame[["date", "total_value", "total_principal", "principal_profit_rate"]].copy()
+        chart_source["date"] = pd.to_datetime(chart_source["date"])
+        value_frame = chart_source.melt(
+            id_vars=["date"],
+            value_vars=["total_value", "total_principal"],
+            var_name="series",
+            value_name="amount",
+        )
+        value_frame["series"] = value_frame["series"].map(
+            {
+                "total_value": "보유 평가액",
+                "total_principal": "회사입금 원금",
+            }
+        )
+        line_chart = (
+            alt.Chart(value_frame)
+            .mark_line(point=True)
+            .encode(
+                x=alt.X("date:T", title="기준일"),
+                y=alt.Y("amount:Q", title="금액", axis=alt.Axis(format=",.0f")),
+                color=alt.Color("series:N", title="구분"),
+                tooltip=[
+                    alt.Tooltip("date:T", title="기준일", format="%Y-%m-%d"),
+                    alt.Tooltip("series:N", title="구분"),
+                    alt.Tooltip("amount:Q", title="금액", format=",.0f"),
+                ],
+            )
+            .properties(height=320)
+        )
+        st.altair_chart(line_chart, width="stretch")
+
+    display_rows: list[dict[str, Any]] = []
+    for row in snapshots:
+        missing_symbols = row.get("missing_price_symbols") or []
+        display_rows.append(
+            {
+                "기준일": row.get("valuation_date"),
+                "보유 평가액": format_won(row.get("valuation_amount")),
+                "회사입금 원금": format_won(row.get("company_principal")),
+                "상품 평가액": format_won(row.get("holdings_market_value")),
+                "잔여 매입원가": format_won(row.get("invested_cost")),
+                "현금값": format_won(row.get("cash_value")),
+                "현금 기준": "실제" if row.get("cash_source") == "actual" else "간주",
+                "손익": format_won(row.get("profit_loss")),
+                "수익률": format_pct(row.get("profit_rate")),
+                "원금초과 매입": format_won(row.get("over_invested_amount")),
+                "가격 fallback": ", ".join(map(str, missing_symbols)) if missing_symbols else "-",
+            }
+        )
+    st.dataframe(pd.DataFrame(display_rows), width="stretch", hide_index=True, height=420)
 
 
 @st.fragment(run_every=REALTIME_STATUS_FRAGMENT_INTERVAL)
@@ -6631,7 +7721,7 @@ def data_page(account: dict[str, Any], rollup_state: dict[str, Any] | None = Non
             display_frame["원금 대비 수익률(%)"] = display_frame["원금 대비 수익률(%)"].map(_format_optional_pct)
             st.dataframe(display_frame, width="stretch", hide_index=True, height=320)
 
-    for table_name in ("accounts", "holdings", "trade_logs", "daily_account_snapshot"):
+    for table_name in ("accounts", "holdings", "trade_logs", "daily_account_snapshot", "daily_valuation_snapshot"):
         rows = export_dataframe_rows(table_name)
         frame = pd.DataFrame(rows)
         csv_bytes = frame.to_csv(index=False).encode("utf-8-sig") if not frame.empty else b""
@@ -6684,6 +7774,8 @@ def render_navigation_page(page_name: str) -> None:
         dashboard_page(account, holdings, rollup_state)
     elif page_name == "Trades":
         trade_entry_page(account, holdings, accounts)
+    elif page_name == "Valuation":
+        valuation_page(account, rollup_state)
     else:
         dashboard_page(account, holdings, rollup_state)
 
@@ -6694,6 +7786,7 @@ def build_navigation_pages() -> list[Any]:
     return [
         st.Page("pages/dashboard.py", title=PAGE_LABELS["Dashboard"], icon=":material/dashboard:", default=True),
         st.Page("pages/trades.py", title=PAGE_LABELS["Trades"], icon=":material/swap_horiz:"),
+        st.Page("pages/valuation.py", title=PAGE_LABELS["Valuation"], icon=":material/monitoring:"),
     ]
 
 
@@ -6706,6 +7799,8 @@ def navigation_page_name(page: Any) -> str:
         current_url = ""
     if current_url.endswith("/trades"):
         return "Trades"
+    if current_url.endswith("/valuation"):
+        return "Valuation"
 
     page_title = str(getattr(page, "title", "") or "").strip()
     for page_name, label in PAGE_LABELS.items():
@@ -6715,6 +7810,8 @@ def navigation_page_name(page: Any) -> str:
     page_path = str(getattr(page, "url_path", "") or "").strip().strip("/")
     if page_path == "trades":
         return "Trades"
+    if page_path == "valuation":
+        return "Valuation"
     return PAGES[0]
 
 
@@ -6785,6 +7882,8 @@ def main() -> None:
             st.warning(f"당일 자산 스냅샷 저장을 건너뛰었습니다: {exc}")
         else:
             mark_rollup_synced(int(account["id"]))
+            if rollup_state.get("valuation_error"):
+                st.warning(f"평가액 기록 재계산을 건너뛰었습니다: {rollup_state['valuation_error']}")
     st.session_state[NAVIGATION_CONTEXT_KEY] = {
         "account": account,
         "accounts": accounts,

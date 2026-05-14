@@ -24,6 +24,7 @@ from src.db import (
     _should_fallback,
     _supabase_create_account,
     _supabase_record_trade,
+    _supabase_record_valuation_snapshots,
     _supabase_replace_interest_history,
     _supabase_update_trade_log,
     clear_data_cache,
@@ -127,6 +128,71 @@ class SupabaseCreateAccountTests(unittest.TestCase):
 class BackendFallbackPolicyTests(unittest.TestCase):
     """Supabase 오류별 SQLite fallback 정책을 검증한다."""
 
+    def test_default_supabase_url_is_empty(self) -> None:
+        """운영 Supabase URL은 코드 기본값으로 하드코딩하지 않는다."""
+
+        self.assertEqual(db_module.DEFAULT_SUPABASE_URL, "")
+
+    def test_has_supabase_config_requires_valid_url_and_key(self) -> None:
+        """Supabase 활성화는 유효한 프로젝트 URL과 키가 모두 있을 때만 허용한다."""
+
+        with (
+            patch("src.db._supabase_url", return_value=""),
+            patch("src.db._supabase_key", return_value="configured-key"),
+        ):
+            self.assertFalse(db_module._has_supabase_config())
+
+        with (
+            patch("src.db._supabase_url", return_value="http://demo.supabase.co"),
+            patch("src.db._supabase_key", return_value="configured-key"),
+        ):
+            self.assertFalse(db_module._has_supabase_config())
+
+        with (
+            patch("src.db._supabase_url", return_value="https://demo.supabase.co"),
+            patch("src.db._supabase_key", return_value="configured-key"),
+        ):
+            self.assertTrue(db_module._has_supabase_config())
+
+    @patch("src.db._sqlite_has_user_data", return_value=False)
+    @patch("src.db._has_supabase_config", return_value=False)
+    @patch("src.db._normalized_backend_override", return_value=BACKEND_SUPABASE)
+    @patch("src.db.app_auth.is_demo_user", return_value=False)
+    def test_select_initial_backend_disables_forced_supabase_without_config(
+        self,
+        _is_demo_user_mock,
+        _backend_override_mock,
+        _has_supabase_config_mock,
+        _sqlite_has_user_data_mock,
+    ) -> None:
+        """강제 Supabase 설정이어도 URL/키가 유효하지 않으면 SQLite로 남긴다."""
+
+        backend, reason = _select_initial_backend()
+
+        self.assertEqual(backend, BACKEND_SQLITE)
+        self.assertIn("Supabase URL 또는 키", reason)
+
+    def test_backend_status_marks_missing_url_when_only_key_exists(self) -> None:
+        """SUPABASE_KEY만 있는 환경은 Supabase 설정 미완성으로 진단한다."""
+
+        def fake_read_config(name: str, default: str = "") -> tuple[str, str]:
+            values = {
+                "SUPABASE_URL": ("", "missing"),
+                "SUPABASE_KEY": ("configured-key", "env"),
+                "PORTFOLIO_BACKEND": ("auto", "default"),
+            }
+            return values.get(name, (default, "default" if default else "missing"))
+
+        with (
+            patch("src.db._read_config_value", side_effect=fake_read_config),
+            patch("src.db._current_backend", return_value=BACKEND_SQLITE),
+        ):
+            status = db_module.backend_status()
+
+        self.assertFalse(status["has_supabase_config"])
+        self.assertIn("SUPABASE_URL", status["missing_config"])
+        self.assertIn("비활성화", " ".join(status["notices"]))
+
     @patch("src.db.app_auth.is_demo_user", return_value=True)
     def test_select_initial_backend_prefers_sqlite_for_demo_session(self, _is_demo_user_mock) -> None:
         """로컬 데모 세션이면 Supabase 설정이 있어도 SQLite를 우선 사용한다."""
@@ -189,6 +255,67 @@ class BackendFallbackPolicyTests(unittest.TestCase):
         self.assertEqual(result, "sqlite-ok")
         self.assertTrue(sqlite_called["value"])
         activate_sqlite_mock.assert_called_once()
+
+
+class TemporalSchemaTests(unittest.TestCase):
+    """Supabase 날짜/시각 컬럼 타입과 앱 파서를 검증한다."""
+
+    def test_setup_supabase_uses_native_temporal_types(self) -> None:
+        """신규 Supabase 스키마는 핵심 날짜/시각 컬럼을 TEXT로 만들지 않는다."""
+
+        setup_sql = (Path(__file__).resolve().parents[1] / "setup_supabase.sql").read_text(encoding="utf-8")
+
+        expected_fragments = [
+            "created_at TIMESTAMPTZ NOT NULL",
+            "updated_at TIMESTAMPTZ NOT NULL",
+            "price_updated_at TIMESTAMPTZ",
+            "trade_date DATE NOT NULL",
+            "quote_time TIMESTAMPTZ NOT NULL",
+            "ingested_at TIMESTAMPTZ NOT NULL",
+            "bucket_start TIMESTAMPTZ NOT NULL",
+            "last_seen_at TIMESTAMPTZ",
+            "last_quote_at TIMESTAMPTZ",
+        ]
+        forbidden_fragments = [
+            "created_at TEXT NOT NULL",
+            "updated_at TEXT NOT NULL",
+            "price_updated_at TEXT",
+            "trade_date TEXT NOT NULL",
+            "quote_time TEXT NOT NULL",
+            "ingested_at TEXT NOT NULL",
+            "bucket_start TEXT NOT NULL",
+            "last_seen_at TEXT",
+            "last_quote_at TEXT",
+        ]
+
+        for fragment in expected_fragments:
+            self.assertIn(fragment, setup_sql)
+        for fragment in forbidden_fragments:
+            self.assertNotIn(fragment, setup_sql)
+
+    def test_temporal_normalization_migration_is_present(self) -> None:
+        """기존 Supabase DB용 temporal 컬럼 변환 migration을 보관한다."""
+
+        migration_sql = (
+            Path(__file__).resolve().parents[1] / "migrations" / "2026-05-14_normalize_temporal_columns.sql"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("ALTER TABLE public.trade_logs", migration_sql)
+        self.assertIn("ALTER COLUMN trade_date TYPE DATE USING left(trade_date, 10)::date", migration_sql)
+        self.assertIn("ALTER TABLE public.realtime_price_ticks", migration_sql)
+        self.assertIn("ALTER COLUMN quote_time TYPE TIMESTAMPTZ USING quote_time::timestamptz", migration_sql)
+        self.assertIn("ALTER TABLE public.realtime_worker_status", migration_sql)
+        self.assertIn("nullif(last_quote_at, '')::timestamptz", migration_sql)
+
+    def test_parse_iso_date_uses_timestamp_parser(self) -> None:
+        """앱 날짜 파서는 ISO date/datetime/timestamptz 값을 같은 날짜로 해석한다."""
+
+        self.assertEqual(db_module._parse_iso_date("2026-05-14"), date(2026, 5, 14))
+        self.assertEqual(db_module._parse_iso_date("2026-05-14T09:00:00+09:00"), date(2026, 5, 14))
+        self.assertEqual(db_module._parse_iso_date("2026/05/14 09:00:00"), date(2026, 5, 14))
+        self.assertIsNone(db_module._parse_iso_date(""))
+        self.assertIsNone(db_module._parse_iso_date(None))
+        self.assertIsNone(db_module._parse_iso_date("not-a-date"))
 
 
 class DeleteAccountTests(unittest.TestCase):
@@ -498,6 +625,100 @@ class ExportTradeLogFilterTests(unittest.TestCase):
         filtered = db_module._filter_exportable_trade_logs(rows)
 
         self.assertEqual([row["id"] for row in filtered], [1, 2, 3, 4, 5])
+
+
+class ValuationSnapshotStorageTests(unittest.TestCase):
+    """회사입금 기준 평가 스냅샷 저장 계층을 검증한다."""
+
+    def test_sqlite_records_lists_and_deletes_valuation_snapshots(self) -> None:
+        """SQLite는 평가 스냅샷을 upsert하고 fallback 종목 JSON을 list로 복원한다."""
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            database_path = Path(temp_dir) / "valuation.db"
+            with patch.object(sqlite_db, "DB_PATH", database_path):
+                sqlite_db.initialize_database()
+                account_id = sqlite_db.create_account("user-1::평가 테스트", opening_cash=0)
+                snapshots = [
+                    {
+                        "account_id": account_id,
+                        "valuation_date": "2026-01-01",
+                        "company_principal": 10000,
+                        "invested_cost": 6000,
+                        "implied_cash": 4000,
+                        "actual_cash_balance": None,
+                        "cash_value": 4000,
+                        "cash_source": "implied",
+                        "holdings_market_value": 6100,
+                        "valuation_amount": 10100,
+                        "profit_loss": 100,
+                        "profit_rate": 1.0,
+                        "over_invested_amount": 0,
+                        "missing_price_symbols": ["AAA"],
+                        "source_hash": "hash-1",
+                        "calculation_reason": "test",
+                    }
+                ]
+
+                sqlite_db.record_valuation_snapshots(account_id, snapshots)
+                rows = sqlite_db.list_valuation_snapshots(account_id)
+
+                self.assertEqual(len(rows), 1)
+                self.assertEqual(rows[0]["valuation_date"], "2026-01-01")
+                self.assertEqual(rows[0]["missing_price_symbols"], ["AAA"])
+
+                updated = dict(snapshots[0], valuation_amount=10200, missing_price_symbols=[])
+                sqlite_db.record_valuation_snapshots(account_id, [updated])
+                rows = sqlite_db.list_valuation_snapshots(account_id)
+
+                self.assertEqual(len(rows), 1)
+                self.assertEqual(rows[0]["valuation_amount"], 10200)
+                self.assertEqual(rows[0]["missing_price_symbols"], [])
+
+                sqlite_db.delete_valuation_snapshots(account_id)
+                self.assertEqual(sqlite_db.list_valuation_snapshots(account_id), [])
+
+    @patch("src.db._supabase_get_account", return_value={"id": 7, "name": "IRP"})
+    @patch("src.db.now_iso", return_value="2026-05-14T00:00:00")
+    @patch("src.db._supabase_request")
+    def test_supabase_record_valuation_snapshots_uses_batch_upsert(
+        self,
+        request_mock,
+        _now_iso_mock,
+        _get_account_mock,
+    ) -> None:
+        """Supabase 저장은 on_conflict 기반 batch upsert를 사용한다."""
+
+        _supabase_record_valuation_snapshots(
+            7,
+            [
+                {
+                    "account_id": 7,
+                    "valuation_date": "2026-01-01",
+                    "company_principal": 10000,
+                    "invested_cost": 0,
+                    "implied_cash": 10000,
+                    "actual_cash_balance": None,
+                    "cash_value": 10000,
+                    "cash_source": "implied",
+                    "holdings_market_value": 0,
+                    "valuation_amount": 10000,
+                    "profit_loss": 0,
+                    "profit_rate": 0,
+                    "over_invested_amount": 0,
+                    "missing_price_symbols": [],
+                    "source_hash": "hash-1",
+                    "calculation_reason": "test",
+                }
+            ],
+        )
+
+        request_mock.assert_called_once()
+        call_args = request_mock.call_args
+        self.assertEqual(call_args.args[:2], ("POST", "daily_valuation_snapshot"))
+        self.assertEqual(call_args.kwargs["filters"], {"on_conflict": "account_id,valuation_date"})
+        self.assertEqual(call_args.kwargs["prefer_resolution"], "merge-duplicates")
+        self.assertEqual(call_args.kwargs["prefer_return"], "minimal")
+        self.assertEqual(call_args.kwargs["data"][0]["updated_at"], "2026-05-14T00:00:00")
 
 
 class SyncAccountRollupTests(unittest.TestCase):

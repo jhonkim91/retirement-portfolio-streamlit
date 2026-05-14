@@ -9,6 +9,32 @@ from src import auth
 class DemoAuthHelperTests(unittest.TestCase):
     """초기 화면 데모 접속용 인증 helper를 검증한다."""
 
+    def test_default_supabase_url_is_empty(self) -> None:
+        """인증 클라이언트도 운영 Supabase URL을 코드 기본값으로 갖지 않는다."""
+
+        self.assertEqual(auth.DEFAULT_SUPABASE_URL, "")
+
+    def test_is_enabled_requires_valid_supabase_url_and_key(self) -> None:
+        """SUPABASE_KEY만 있거나 URL 형식이 틀리면 인증을 비활성화한다."""
+
+        with (
+            patch("src.auth._supabase_url", return_value=""),
+            patch("src.auth._supabase_key", return_value="configured-key"),
+        ):
+            self.assertFalse(auth.is_enabled())
+
+        with (
+            patch("src.auth._supabase_url", return_value="http://demo.supabase.co"),
+            patch("src.auth._supabase_key", return_value="configured-key"),
+        ):
+            self.assertFalse(auth.is_enabled())
+
+        with (
+            patch("src.auth._supabase_url", return_value="https://demo.supabase.co"),
+            patch("src.auth._supabase_key", return_value="configured-key"),
+        ):
+            self.assertTrue(auth.is_enabled())
+
     def test_get_demo_credentials_prefers_demo_login_keys(self) -> None:
         """전용 데모 자격 증명이 있으면 검증용 자격 증명보다 우선 사용한다."""
 

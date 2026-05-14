@@ -8,6 +8,7 @@ import sys
 import tempfile
 import types
 import unittest
+from unittest.mock import patch
 
 import pandas as pd
 
@@ -168,7 +169,8 @@ class ThemeStylesheetTests(unittest.TestCase):
         self.assertIn('.st-key-trade-product-entry [data-testid="stHorizontalBlock"],\n    .st-key-trade-cash-flow-entry [data-testid="stHorizontalBlock"]', stylesheet)
         self.assertIn('@media (max-width: 640px) {\n    .st-key-dashboard-panel-holdings-table .holdings-table-shell--desktop', stylesheet)
         self.assertIn(".st-key-dashboard-panel-holdings-table .holdings-mobile-card-list {\n        display: grid !important;", stylesheet)
-        self.assertIn(".st-key-trade-log-inline-editor-shell", stylesheet)
+        self.assertIn('div[role="dialog"] [data-testid="stForm"]', stylesheet)
+        self.assertNotIn(".st-key-trade-log-inline-editor-shell", stylesheet)
         self.assertNotIn("${theme_primary_color}", stylesheet)
 
     def test_stylesheet_keeps_soft_wealth_light_surfaces(self) -> None:
@@ -300,6 +302,68 @@ class TradeFormResetTests(unittest.TestCase):
         self.assertEqual(first, "거래를 저장했습니다.")
         self.assertEqual(second, "")
 
+    def test_prefill_latest_trade_price_clears_stale_price_before_failed_lookup(self) -> None:
+        """새 종목 현재가 조회에 실패하면 이전 종목의 자동 단가를 남기지 않는다."""
+
+        fake_st = types.SimpleNamespace(
+            session_state={
+                dashboard_app.TRADE_PRICE_KEY: 12345.0,
+                dashboard_app.TRADE_PRICE_AUTO_FILLED_KEY: True,
+            }
+        )
+        original_st = dashboard_app.st
+        dashboard_app.st = fake_st
+        try:
+            with patch.object(dashboard_app, "fetch_latest_price", side_effect=RuntimeError("quote unavailable")):
+                result = dashboard_app.prefill_latest_trade_price("UNSUPPORTED")
+        finally:
+            dashboard_app.st = original_st
+
+        self.assertFalse(result)
+        self.assertEqual(fake_st.session_state[dashboard_app.TRADE_PRICE_KEY], 0.0)
+        self.assertFalse(fake_st.session_state[dashboard_app.TRADE_PRICE_AUTO_FILLED_KEY])
+
+    def test_prefill_latest_trade_price_marks_successful_autofill(self) -> None:
+        """현재가 조회에 성공한 경우에만 단가와 자동 입력 플래그를 채운다."""
+
+        fake_st = types.SimpleNamespace(
+            session_state={
+                dashboard_app.TRADE_PRICE_KEY: 12345.0,
+                dashboard_app.TRADE_PRICE_AUTO_FILLED_KEY: False,
+            }
+        )
+        original_st = dashboard_app.st
+        dashboard_app.st = fake_st
+        try:
+            with patch.object(dashboard_app, "fetch_latest_price", return_value={"price": "67890"}):
+                result = dashboard_app.prefill_latest_trade_price("005930")
+        finally:
+            dashboard_app.st = original_st
+
+        self.assertTrue(result)
+        self.assertEqual(fake_st.session_state[dashboard_app.TRADE_PRICE_KEY], 67890.0)
+        self.assertTrue(fake_st.session_state[dashboard_app.TRADE_PRICE_AUTO_FILLED_KEY])
+
+    def test_trade_price_manual_edit_callback_clears_autofill_flag(self) -> None:
+        """사용자가 단가를 직접 수정하면 자동 입력 상태를 해제한다."""
+
+        fake_st = types.SimpleNamespace(session_state={dashboard_app.TRADE_PRICE_AUTO_FILLED_KEY: True})
+        original_st = dashboard_app.st
+        dashboard_app.st = fake_st
+        try:
+            dashboard_app.mark_trade_price_manually_edited()
+        finally:
+            dashboard_app.st = original_st
+
+        self.assertFalse(fake_st.session_state[dashboard_app.TRADE_PRICE_AUTO_FILLED_KEY])
+
+    def test_trade_price_number_input_uses_manual_edit_callback(self) -> None:
+        """거래 단가 입력 위젯은 수동 수정 callback을 연결한다."""
+
+        source = inspect.getsource(dashboard_app.trade_entry_page)
+
+        self.assertIn("on_change=mark_trade_price_manually_edited", source)
+
     def test_is_visible_trade_log_keeps_core_transaction_types_only(self) -> None:
         """거래 기록 화면에는 입금/매수/매도 핵심 유형만 남긴다."""
 
@@ -427,30 +491,151 @@ class TradeFormResetTests(unittest.TestCase):
         self.assertIn("st.navigation(build_navigation_pages(), expanded=True)", main_source)
         self.assertIn('[data-testid="stSidebarNav"] {\n    display: none;', stylesheet)
         self.assertIn('st.page_link("pages/trades.py"', sidebar_nav_source)
+        self.assertIn('st.page_link("pages/valuation.py"', sidebar_nav_source)
         self.assertNotIn('st.page_link("pages/data.py"', sidebar_nav_source)
 
     def test_navigation_pages_exclude_data_page(self) -> None:
-        """현재 앱 내비게이션은 대시보드와 거래 페이지만 노출한다."""
+        """현재 앱 내비게이션은 대시보드, 거래, 평가액 기록만 노출한다."""
 
         pages_source = inspect.getsource(dashboard_app.build_navigation_pages)
         page_name_source = inspect.getsource(dashboard_app.navigation_page_name)
 
-        self.assertEqual(dashboard_app.PAGES, ("Dashboard", "Trades"))
+        self.assertEqual(dashboard_app.PAGES, ("Dashboard", "Trades", "Valuation"))
         self.assertNotIn("Data", dashboard_app.PAGE_LABELS)
         self.assertIn('st.Page("pages/dashboard.py"', pages_source)
         self.assertIn('st.Page("pages/trades.py"', pages_source)
+        self.assertIn('st.Page("pages/valuation.py"', pages_source)
         self.assertNotIn('st.Page("pages/data.py"', pages_source)
+        self.assertIn('endswith("/valuation")', page_name_source)
         self.assertNotIn('endswith("/data")', page_name_source)
 
     def test_soft_wealth_dashboard_hero_renderer_exists(self) -> None:
-        """대시보드에는 Soft Wealth Hero 렌더러가 포함된다."""
+        """대시보드에는 제안 2번 Overview Panel 렌더러가 포함된다."""
 
         dashboard_source = inspect.getsource(dashboard_app.dashboard_page)
         hero_source = inspect.getsource(dashboard_app.render_soft_wealth_dashboard_hero)
+        overview_source = inspect.getsource(dashboard_app.render_dashboard_top_overview_option2)
+        stylesheet = dashboard_app.render_app_stylesheet()
 
         self.assertIn("render_soft_wealth_dashboard_hero(", dashboard_source)
-        self.assertIn("soft-wealth-hero__value", hero_source)
-        self.assertIn("총 자산 평가액", hero_source)
+        self.assertIn("render_dashboard_top_overview_option2(", hero_source)
+        self.assertIn("dashboard-overview-option2", overview_source)
+        self.assertIn("dashboard-overview-hero", overview_source)
+        self.assertIn("dashboard-overview-card-grid", overview_source)
+        self.assertIn("dashboard-overview-period-button", overview_source)
+        self.assertIn("보유 평가액", overview_source)
+        self.assertIn("총 자산 평가액", overview_source)
+        self.assertIn("dashboard-overview-card", stylesheet)
+        self.assertIn("dashboard-overview-sparkline", stylesheet)
+        self.assertIn("dashboard-overview-sparkline__glow", stylesheet)
+        self.assertIn("dashboard-overview-toolbar__combined", overview_source)
+        self.assertIn("dashboard-overview-toolbar__combined", stylesheet)
+        self.assertIn("dashboard-overview-toolbar__status", stylesheet)
+        self.assertIn("dashboard-overview-card--no-sparkline", stylesheet)
+
+    def test_dashboard_overview_metric_labels_use_profit_rate(self) -> None:
+        """Overview KPI는 목표 달성률 대신 수익률 라벨을 사용한다."""
+
+        specs = dashboard_app.build_dashboard_metric_specs(
+            {
+                "total_value": 12_000_000,
+                "total_principal": 10_000_000,
+                "cash": 1_500_000,
+                "principal_profit_loss": 2_000_000,
+                "principal_profit_rate": 20.0,
+            },
+            trend_values=[10_000_000, 11_000_000, 12_000_000],
+        )
+        labels = [str(spec["label"]) for spec in specs]
+
+        self.assertIn("수익률", labels)
+        self.assertNotIn("목표 달성률", labels)
+
+    def test_dashboard_overview_metric_labels_use_company_valuation_mode(self) -> None:
+        """평가 스냅샷 기준 Dashboard는 회사입금 기준 문구를 사용한다."""
+
+        specs = dashboard_app.build_dashboard_metric_specs(
+            {
+                "_valuation_mode": True,
+                "total_value": 12_000_000,
+                "total_principal": 10_000_000,
+                "cash": 1_500_000,
+                "principal_profit_loss": 2_000_000,
+                "principal_profit_rate": 20.0,
+            },
+            trend_values=[10_000_000, 11_000_000, 12_000_000],
+        )
+        labels = [str(spec["label"]) for spec in specs]
+
+        self.assertEqual(labels, ["회사입금 원금", "현재 보유현금", "회사입금 대비 손익", "회사입금 대비 수익률"])
+
+    def test_dashboard_summary_from_valuation_prefers_today_snapshot(self) -> None:
+        """오늘 평가 스냅샷이 있으면 Dashboard 상단 요약값을 평가액 기준으로 바꾼다."""
+
+        with patch.object(dashboard_app, "valuation_today", return_value=date(2026, 5, 14)):
+            summary = dashboard_app.dashboard_summary_from_valuation(
+                {
+                    "total_value": 1,
+                    "market_value": 1,
+                    "cash": 1,
+                    "total_cost": 1,
+                    "total_principal": 1,
+                    "principal_profit_loss": 0,
+                    "principal_profit_rate": 0,
+                    "allocation": {"cash": 1},
+                },
+                {
+                    "valuation_date": "2026-05-14",
+                    "valuation_amount": 12000,
+                    "holdings_market_value": 9000,
+                    "cash_value": 3000,
+                    "invested_cost": 8000,
+                    "company_principal": 10000,
+                    "profit_loss": 2000,
+                    "profit_rate": 20.0,
+                },
+            )
+
+        self.assertTrue(summary["_valuation_mode"])
+        self.assertEqual(summary["total_value"], 12000)
+        self.assertEqual(summary["total_principal"], 10000)
+        self.assertEqual(summary["cash"], 3000)
+        self.assertEqual(summary["principal_profit_loss"], 2000)
+
+    def test_dashboard_overview_period_limits(self) -> None:
+        """Overview 기간 버튼은 그래프 표시 범위만 선택한다."""
+
+        self.assertEqual(dashboard_app.dashboard_overview_period_limit("1W"), 7)
+        self.assertEqual(dashboard_app.dashboard_overview_period_limit("1M"), 30)
+        self.assertEqual(dashboard_app.dashboard_overview_period_limit("3M"), 90)
+        self.assertEqual(dashboard_app.dashboard_overview_period_limit("1Y"), 365)
+        self.assertIsNone(dashboard_app.dashboard_overview_period_limit("ALL"))
+        self.assertEqual(dashboard_app.dashboard_overview_period_limit("unknown"), 30)
+
+    def test_dashboard_overview_principal_and_cash_cards_hide_sparkline(self) -> None:
+        """입금 원금과 보유 현금 KPI는 sparkline 없이 중앙 금액형 카드로 렌더링한다."""
+
+        specs = dashboard_app.build_dashboard_metric_specs(
+            {
+                "total_value": 12_000_000,
+                "total_principal": 10_000_000,
+                "cash": 1_500_000,
+                "principal_profit_loss": 2_000_000,
+                "principal_profit_rate": 20.0,
+            },
+            trend_values=[10_000_000, 11_000_000, 12_000_000],
+        )
+        principal_html = dashboard_app.render_dashboard_metric_card_option2(specs[0])
+        cash_html = dashboard_app.render_dashboard_metric_card_option2(specs[1])
+        profit_html = dashboard_app.render_dashboard_metric_card_option2(specs[2])
+
+        self.assertFalse(specs[0]["show_sparkline"])
+        self.assertFalse(specs[1]["show_sparkline"])
+        self.assertIn("dashboard-overview-card--no-sparkline", principal_html)
+        self.assertIn("dashboard-overview-card--no-sparkline", cash_html)
+        self.assertNotIn("dashboard-overview-card__sparkline", principal_html)
+        self.assertNotIn("dashboard-overview-card__sparkline", cash_html)
+        self.assertIn("dashboard-overview-card__sparkline", profit_html)
 
     def test_trade_page_uses_three_soft_wealth_tabs(self) -> None:
         """거래 페이지는 입력/기록/실현 손익 3개 탭을 사용한다."""
@@ -599,6 +784,69 @@ class TradeFormResetTests(unittest.TestCase):
         self.assertEqual(dashboard_app.trade_log_pagination_pages(5, 9), [3, 4, 5, 6, 7])
         self.assertEqual(dashboard_app.compact_trade_log_date_text({"trade_date": "2026-05-12"}), "05/12")
 
+    def test_trade_log_editor_date_parser_accepts_iso_date_and_datetime(self) -> None:
+        """거래 기록 편집 날짜는 ISO 날짜와 ISO datetime의 날짜 부분만 허용한다."""
+
+        self.assertEqual(dashboard_app._parse_trade_date_for_editor("2026-05-14"), date(2026, 5, 14))
+        self.assertEqual(dashboard_app._parse_trade_date_for_editor("2026-05-14T09:00:00+09:00"), date(2026, 5, 14))
+        self.assertIsNone(dashboard_app._parse_trade_date_for_editor("2026/05/14"))
+
+    def test_trade_log_date_value_raises_on_invalid_date(self) -> None:
+        """잘못된 거래일은 오늘 날짜로 대체하지 않고 명시적으로 실패한다."""
+
+        with self.assertRaisesRegex(ValueError, "지원하지 않는 거래일 형식"):
+            dashboard_app._trade_log_date_value({"trade_date": "not-a-date"})
+
+    def test_trade_log_list_helpers_do_not_hide_invalid_date_as_today(self) -> None:
+        """목록 helper는 잘못된 날짜를 오늘로 위장하지 않고 원문 표시 또는 필터 제외한다."""
+
+        logs = [
+            {"id": 1, "trade_date": "2026-05-12"},
+            {"id": 2, "trade_date": "not-a-date"},
+        ]
+
+        self.assertEqual(dashboard_app.trade_log_default_date_range(logs), (date(2026, 5, 12), date(2026, 5, 12)))
+        self.assertEqual(
+            [row["id"] for row in dashboard_app.filter_trade_logs_by_date_range(logs, start_date=date(2026, 5, 1), end_date=date(2026, 5, 31))],
+            [1],
+        )
+        self.assertEqual(dashboard_app.compact_trade_log_date_text(logs[1]), "not-a-date")
+
+    def test_trade_log_edit_dialog_blocks_invalid_trade_date(self) -> None:
+        """수정 모달은 파싱할 수 없는 거래일을 오늘 날짜로 보여 주지 않고 저장 경로를 차단한다."""
+
+        fake_st = types.SimpleNamespace(errors=[], captions=[])
+        fake_st.error = fake_st.errors.append
+        fake_st.caption = fake_st.captions.append
+        original_st = dashboard_app.st
+        dashboard_app.st = fake_st
+        try:
+            dashboard_app.render_trade_log_edit_dialog_body(
+                {"id": 1},
+                {"id": 9, "trade_date": "broken-date", "trade_type": "buy"},
+                edit_state_key="editing",
+            )
+        finally:
+            dashboard_app.st = original_st
+
+        self.assertIn("지원하지 않는 거래일 형식입니다: broken-date", fake_st.errors)
+        self.assertIn("거래일을 ISO 형식(YYYY-MM-DD)으로 정리한 뒤 다시 수정하세요.", fake_st.captions)
+
+    def test_trade_log_edit_flow_uses_dialog_not_inline_editor(self) -> None:
+        """거래 기록 수정은 행 아래 inline editor 대신 dialog 호출 경로를 사용한다."""
+
+        edit_dialog_source = inspect.getsource(dashboard_app.render_trade_log_edit_dialog)
+        edit_body_source = inspect.getsource(dashboard_app.render_trade_log_edit_dialog_body)
+        trade_page_source = inspect.getsource(dashboard_app.trade_entry_page)
+
+        self.assertIn('@st.dialog("거래 기록 수정", width="large")', edit_dialog_source)
+        self.assertIn("render_trade_log_edit_dialog_body(account, selected_log, edit_state_key=edit_state_key)", edit_dialog_source)
+        self.assertIn("render_trade_log_edit_dialog(account, selected_log, edit_state_key=edit_state_key)", trade_page_source)
+        self.assertIn("st.form_submit_button(\"취소\"", edit_body_source)
+        self.assertIn("st.form_submit_button(\"저장\"", edit_body_source)
+        self.assertNotIn("render_trade_log_edit_form", trade_page_source)
+        self.assertNotIn("trade-log-inline-editor-shell", trade_page_source)
+
     def test_trade_log_premium_cells_match_reference_markup(self) -> None:
         """거래 기록 행 셀은 premium_ui.html 스타일의 아이콘, 배지, 원화 표기를 만든다."""
 
@@ -627,6 +875,125 @@ class TradeFormResetTests(unittest.TestCase):
         self.assertIn('help="거래 기록 수정"', source)
         self.assertIn('st.button("삭제"', source)
         self.assertIn('help="거래 기록 삭제"', source)
+
+    def test_trade_log_import_parses_export_csv_format(self) -> None:
+        """CSV 불러오기는 내보내기와 같은 컬럼을 저장 가능한 행으로 변환한다."""
+
+        frame = pd.DataFrame(
+            [
+                {
+                    "거래일": "2026-05-12",
+                    "종목명": "KODEX AI반도체",
+                    "코드": "KODEX",
+                    "유형": "매수",
+                    "자산군": "위험자산",
+                    "수량": "10",
+                    "단가": "15,200",
+                    "총액": "152,000",
+                    "실현수익률": "-",
+                    "메모": "신규",
+                },
+                {
+                    "거래일": "2026-05-13",
+                    "종목명": "회사 납입금",
+                    "코드": "",
+                    "유형": "회사 납입금",
+                    "자산군": "현금",
+                    "수량": "0",
+                    "단가": "0",
+                    "총액": "1,000,000",
+                    "실현수익률": "-",
+                    "메모": "월 납입",
+                },
+            ]
+        )
+
+        rows, errors = dashboard_app.parse_trade_log_import_frame(frame)
+
+        self.assertEqual(errors, [])
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(rows[0]["trade_type"], "buy")
+        self.assertEqual(rows[0]["asset_type"], "risk")
+        self.assertEqual(rows[0]["price"], 15200)
+        self.assertEqual(rows[1]["trade_type"], "employer_deposit")
+        self.assertEqual(rows[1]["asset_type"], "cash")
+        self.assertEqual(rows[1]["total_amount"], 1_000_000)
+
+    def test_trade_log_import_detects_duplicates_and_replays_export_order(self) -> None:
+        """CSV import는 기존/파일 내부 중복을 표시하고 최신순 export를 과거순으로 저장한다."""
+
+        rows = [
+            {
+                "source_row": 2,
+                "trade_date": "2026-05-12",
+                "product_name": "삼성전자",
+                "symbol": "005930",
+                "trade_type": "sell",
+                "asset_type": "risk",
+                "quantity": 1,
+                "price": 80000,
+                "total_amount": 80000,
+                "notes": "",
+            },
+            {
+                "source_row": 3,
+                "trade_date": "2026-05-12",
+                "product_name": "삼성전자",
+                "symbol": "005930",
+                "trade_type": "buy",
+                "asset_type": "risk",
+                "quantity": 1,
+                "price": 70000,
+                "total_amount": 70000,
+                "notes": "",
+            },
+            {
+                "source_row": 4,
+                "trade_date": "2026-05-12",
+                "product_name": "삼성전자",
+                "symbol": "005930",
+                "trade_type": "buy",
+                "asset_type": "risk",
+                "quantity": 1,
+                "price": 70000,
+                "total_amount": 70000,
+                "notes": "",
+            },
+        ]
+
+        marked = dashboard_app.mark_trade_log_import_duplicates(rows, existing_logs=[])
+        sorted_rows = sorted(rows[:2], key=dashboard_app.trade_log_import_sort_key)
+        preview = dashboard_app.build_trade_log_import_preview_frame(marked)
+
+        self.assertFalse(marked[1]["is_duplicate"])
+        self.assertTrue(marked[2]["is_duplicate"])
+        self.assertEqual([row["trade_type"] for row in sorted_rows], ["buy", "sell"])
+        self.assertIn("중복 제외 예정", set(preview["상태"]))
+
+    def test_trade_log_import_requires_export_columns(self) -> None:
+        """CSV import는 내보내기 양식의 필수 컬럼 누락을 오류로 안내한다."""
+
+        rows, errors = dashboard_app.parse_trade_log_import_frame(pd.DataFrame([{"거래일": "2026-05-12"}]))
+
+        self.assertEqual(rows, [])
+        self.assertIn("필수 컬럼 누락", errors[0]["error"])
+
+    def test_trade_page_source_includes_trade_log_csv_import(self) -> None:
+        """거래 기록 탭은 CSV 불러오기 업로드와 저장 흐름을 제공한다."""
+
+        page_source = inspect.getsource(dashboard_app.trade_entry_page)
+        import_source = inspect.getsource(dashboard_app.render_trade_log_import_panel)
+        action_source = inspect.getsource(dashboard_app.render_trade_log_import_action)
+
+        self.assertIn("header_cols = st.columns((1, 0.34, 0.34)", page_source)
+        self.assertIn("render_trade_log_import_action(account, visible_logs)", page_source)
+        self.assertNotIn('with st.expander("↑ CSV 불러오기", expanded=False):', page_source)
+        self.assertIn("↑ CSV 불러오기", action_source)
+        self.assertIn("popover", action_source)
+        self.assertIn("render_trade_log_import_panel(account, existing_logs)", action_source)
+        self.assertIn("st.file_uploader", import_source)
+        self.assertIn("trade_logs_import_template.csv", import_source)
+        self.assertIn("save_trade_log_import_rows(account_id, rows_to_save)", import_source)
 
     def test_trade_log_realized_profit_rate_cell_uses_sell_log_lookup(self) -> None:
         """거래 기록의 실현수익률 컬럼은 매도 거래 ID lookup으로 표시한다."""
@@ -1617,7 +1984,8 @@ class RealtimeStatusFragmentTests(unittest.TestCase):
         dashboard_source = inspect.getsource(dashboard_app.dashboard_page)
 
         self.assertNotIn("render_dashboard_fragment", navigation_source)
-        self.assertIn("render_dashboard_reference_time_fragment(account_id)", dashboard_source)
+        self.assertIn("reference_time_text=format_dashboard_overview_reference_time(latest_quote_time)", dashboard_source)
+        self.assertIn("is_live=is_recent_realtime_quote(latest_quote_time)", dashboard_source)
         self.assertIn("render_dashboard_allocation_status_header_fragment(", dashboard_source)
 
     def test_data_page_worker_status_uses_fragment(self) -> None:

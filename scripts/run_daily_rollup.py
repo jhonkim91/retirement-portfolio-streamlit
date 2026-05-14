@@ -17,6 +17,11 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 from src import sqlite_db  # noqa: E402
+from src.valuation import (  # noqa: E402
+    build_price_lookup_for_trade_logs,
+    first_company_deposit_date,
+    rebuild_daily_valuation_snapshots,
+)
 
 
 DEFAULT_SUPABASE_URL = "https://iyszkybxostbjfzbbymq.supabase.co"
@@ -34,6 +39,7 @@ class RollupResult:
     market_value: float
     total_value: float
     snapshot_updated: bool
+    valuation_snapshot_count: int = 0
     dry_run: bool = False
 
 
@@ -174,6 +180,13 @@ class SupabaseAdminClient:
         rows = self.request("GET", "holdings", filters={"account_id": f"eq.{account_id}"}) or []
         return list(rows) if isinstance(rows, list) else []
 
+    def list_trade_logs(self, account_id: int) -> list[dict[str, Any]]:
+        """계좌의 거래 원장을 조회한다."""
+
+        rows = self.request("GET", "trade_logs", filters={"account_id": f"eq.{account_id}"}) or []
+        logs = list(rows) if isinstance(rows, list) else []
+        return sorted(logs, key=lambda row: (str(row.get("trade_date") or ""), int(row.get("id") or 0)))
+
     def upsert_snapshot(
         self,
         account_id: int,
@@ -216,6 +229,92 @@ class SupabaseAdminClient:
         payload["created_at"] = timestamp
         self.request("POST", "daily_account_snapshot", data=payload)
 
+    def delete_valuation_snapshots(self, account_id: int) -> None:
+        """계좌의 기존 회사입금 기준 평가 스냅샷을 삭제한다."""
+
+        self.request("DELETE", "daily_valuation_snapshot", filters={"account_id": f"eq.{account_id}"})
+
+    def upsert_valuation_snapshots(self, account_id: int, snapshots: list[dict[str, Any]]) -> None:
+        """회사입금 기준 평가 스냅샷을 batch upsert한다."""
+
+        if not snapshots:
+            return
+
+        timestamp = now_iso()
+        rows: list[dict[str, Any]] = []
+        for snapshot in snapshots:
+            row = dict(snapshot)
+            row["account_id"] = account_id
+            row["updated_at"] = timestamp
+            row.setdefault("created_at", timestamp)
+            rows.append(row)
+
+        headers = dict(self.headers)
+        headers["Prefer"] = "resolution=merge-duplicates,return=minimal"
+        response = requests.post(
+            f"{self.url}/rest/v1/daily_valuation_snapshot",
+            json=rows,
+            params={"on_conflict": "account_id,valuation_date"},
+            headers=headers,
+            timeout=20,
+        )
+        response.raise_for_status()
+
+
+def rebuild_sqlite_valuation_snapshots(account: dict[str, Any], target_date: date, dry_run: bool = False) -> int:
+    """SQLite 계좌의 회사입금 평가 스냅샷을 재계산한다."""
+
+    account_id = int(account["id"])
+    trade_logs = sqlite_db.list_trade_logs(account_id)
+    price_lookup = build_price_lookup_for_trade_logs(
+        trade_logs,
+        start_date=first_company_deposit_date(trade_logs),
+        end_date=target_date,
+    )
+    snapshots = rebuild_daily_valuation_snapshots(
+        account=account,
+        trade_logs=trade_logs,
+        price_lookup=price_lookup,
+        end_date=target_date,
+        today_date=datetime.now(ZoneInfo(DEFAULT_ROLLUP_TIMEZONE)).date(),
+        calculation_reason="daily_rollup",
+    )
+    if not dry_run:
+        sqlite_db.delete_valuation_snapshots(account_id)
+        if snapshots:
+            sqlite_db.record_valuation_snapshots(account_id, snapshots)
+    return len(snapshots)
+
+
+def rebuild_supabase_valuation_snapshots(
+    client: SupabaseAdminClient,
+    account: dict[str, Any],
+    target_date: date,
+    dry_run: bool = False,
+) -> int:
+    """Supabase 계좌의 회사입금 평가 스냅샷을 재계산한다."""
+
+    account_id = int(account["id"])
+    trade_logs = client.list_trade_logs(account_id)
+    price_lookup = build_price_lookup_for_trade_logs(
+        trade_logs,
+        start_date=first_company_deposit_date(trade_logs),
+        end_date=target_date,
+    )
+    snapshots = rebuild_daily_valuation_snapshots(
+        account=account,
+        trade_logs=trade_logs,
+        price_lookup=price_lookup,
+        end_date=target_date,
+        today_date=datetime.now(ZoneInfo(DEFAULT_ROLLUP_TIMEZONE)).date(),
+        calculation_reason="daily_rollup",
+    )
+    if not dry_run:
+        client.delete_valuation_snapshots(account_id)
+        if snapshots:
+            client.upsert_valuation_snapshots(account_id, snapshots)
+    return len(snapshots)
+
 
 def run_sqlite_rollup(target_date: date, dry_run: bool = False) -> list[RollupResult]:
     """SQLite 백엔드에 대해 일별 스냅샷 저장을 수행한다."""
@@ -256,6 +355,7 @@ def run_sqlite_rollup(target_date: date, dry_run: bool = False) -> list[RollupRe
                 total_value=total_value,
                 total_cost=total_cost,
             )
+        valuation_snapshot_count = rebuild_sqlite_valuation_snapshots(account, target_date, dry_run=dry_run)
         results.append(
             RollupResult(
                 account_id=account_id,
@@ -264,6 +364,7 @@ def run_sqlite_rollup(target_date: date, dry_run: bool = False) -> list[RollupRe
                 market_value=market_value,
                 total_value=total_value,
                 snapshot_updated=snapshot_updated,
+                valuation_snapshot_count=valuation_snapshot_count,
                 dry_run=dry_run,
             )
         )
@@ -309,6 +410,7 @@ def run_supabase_rollup(target_date: date, dry_run: bool = False) -> list[Rollup
                 total_value=total_value,
                 total_cost=total_cost,
             )
+        valuation_snapshot_count = rebuild_supabase_valuation_snapshots(client, account, target_date, dry_run=dry_run)
         results.append(
             RollupResult(
                 account_id=account_id,
@@ -317,6 +419,7 @@ def run_supabase_rollup(target_date: date, dry_run: bool = False) -> list[Rollup
                 market_value=market_value,
                 total_value=total_value,
                 snapshot_updated=snapshot_updated,
+                valuation_snapshot_count=valuation_snapshot_count,
                 dry_run=dry_run,
             )
         )
@@ -338,6 +441,7 @@ def print_results(results: list[RollupResult], target_date: date, backend: str, 
                     f"market_value={item.market_value:.4f}",
                     f"total_value={item.total_value:.4f}",
                     f"snapshot_updated={'yes' if item.snapshot_updated else 'no'}",
+                    f"valuation_snapshots={item.valuation_snapshot_count}",
                 ]
             )
         )
