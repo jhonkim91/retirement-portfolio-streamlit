@@ -6912,7 +6912,6 @@ def sidebar(accounts: list[dict[str, Any]], selected_account_id: int | None, use
                 st.markdown(sidebar_account_name_html(single_account), unsafe_allow_html=True)
             st.session_state["selected_account_id"] = selected_account_id
             selected_account = next(account for account in accounts if int(account["id"]) == int(selected_account_id))
-            st.markdown(account_type_badge_html(selected_account), unsafe_allow_html=True)
 
             if st.button(
                 "⚙ 계좌 설정",

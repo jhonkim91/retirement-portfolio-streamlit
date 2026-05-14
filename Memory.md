@@ -15,7 +15,7 @@
 - [x] 평가액 기록 시작일과 원금을 회사 납입금 단독 기준에서 개인 입금 포함 입금성 거래 기준으로 변경
 - [x] Supabase 평가 스냅샷 저장 전 중복 계좌 재조회로 발생하던 “계좌를 찾을 수 없습니다” 경고 방지
 - [x] 평가액 기록 CSV 저장/불러오기와 화면 수정 저장 기능 추가
-- [x] 단일 계좌 사이드바 체크 표시 제거, Dashboard 히어로 전일 대비 증감 표시, 손익/수익률 KPI 차트 확대
+- [x] 사이드바 연금 유형 뱃지 제거, Dashboard 히어로 전일 대비 증감 표시, 손익/수익률 KPI 차트 확대
 - [x] 계산/DB/스키마/UI/배치 회귀 테스트 추가 및 통과
 - [x] Supabase 운영 DB에 `migrations/2026-05-14_add_daily_valuation_snapshot.sql` 적용 및 평가 스냅샷 재계산
 - [ ] 기존 `migrations/2026-05-14_normalize_temporal_columns.sql` 적용 전 cast 실패 행 여부 점검
@@ -41,7 +41,7 @@
 - `src/db.py`: Supabase/SQLite 공통 wrapper, Supabase batch upsert, cache 무효화, export table 반영
 - `src/ui/app_core.py`: Dashboard 스냅샷 우선 표시, 평가액 기록 페이지, 거래/CSV/가격 갱신 후 재계산 hook 추가
 - `src/ui/app_core.py`: 평가액 기록 CSV 저장/불러오기, `data_editor` 기반 수동 수정 저장 추가
-- `src/ui/app_core.py`: 단일 계좌 사이드바는 selectbox 대신 이름 박스로 표시하고, Dashboard 히어로는 전일 대비 총자산 증감을 표시
+- `src/ui/app_core.py`: 사이드바 계좌 카드의 연금 유형 뱃지 렌더링 제거, Dashboard 히어로는 전일 대비 총자산 증감을 표시
 - `.streamlit/app.css`: 사이드바 단일 계좌 이름 박스 스타일과 손익/수익률 KPI sparkline 확대 스타일 추가
 - `pages/valuation.py`: Streamlit 평가액 기록 페이지 진입점 추가
 - `scripts/run_daily_rollup.py`: 기존 일별 계좌 스냅샷 저장 후 평가 스냅샷도 재계산 저장
@@ -62,7 +62,7 @@
 - realtime tick마다 재계산하지 않고 거래 UI, CSV import 완료, 수동 가격 refresh, daily rollup에서 계좌별 1회 재계산한다.
 - Dashboard는 오늘 평가 스냅샷이 있으면 `보유 평가액`, `입금 원금`, `현재 보유현금`, `입금 대비 손익`, `입금 대비 수익률`을 우선 표시한다.
 - Dashboard 히어로의 `전일 대비` 값은 입금 대비 손익이 아니라 추이 데이터의 마지막 두 `total_value` 차이로 계산한다.
-- 사이드바 계좌가 1개뿐이면 Streamlit selectbox를 사용하지 않아 선택 체크 표시가 보이지 않게 한다.
+- 사이드바 계좌 카드에서는 계좌명만 표시하고 `연금(IRP/퇴직연금)` 유형 뱃지는 표시하지 않는다.
 - 스냅샷이 없으면 기존 summary와 `daily_account_snapshot` 기반 표시로 fallback한다.
 
 ## 실행 명령

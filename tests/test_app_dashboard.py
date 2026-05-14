@@ -481,6 +481,7 @@ class TradeFormResetTests(unittest.TestCase):
         self.assertIn("render_account_delete_dialog(selected_account, account_ids)", sidebar_source)
         self.assertIn("if len(account_ids) > 1:", sidebar_source)
         self.assertIn("sidebar_account_name_html(single_account)", sidebar_source)
+        self.assertNotIn("account_type_badge_html(selected_account)", sidebar_source)
         self.assertIn('@st.dialog("계좌 삭제 확인")', dialog_source)
 
     def test_navigation_uses_custom_sidebar_links(self) -> None:

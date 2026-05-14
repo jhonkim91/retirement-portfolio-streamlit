@@ -7,7 +7,7 @@
 
 ## 최신 대표 검증 결과
 - 작업 범위: 입금액 기준 일별 평가액 기록 기능 추가
-- 추가 UI 조정: 단일 계좌 사이드바 체크 표시 제거, Dashboard 히어로 전일 대비 자산 증감 표시, 입금 대비 손익/수익률 KPI 차트 확대
+- 추가 UI 조정: 사이드바 연금 유형 뱃지 제거, Dashboard 히어로 전일 대비 자산 증감 표시, 입금 대비 손익/수익률 KPI 차트 확대
 - 신규 저장소: Supabase/SQLite `daily_valuation_snapshot` 테이블, RLS/GRANT, batch upsert, 조회/삭제 wrapper 추가
 - 신규 계산: `src/valuation.py`에서 `employer_deposit`, `personal_deposit`, legacy `deposit`, `opening_cash`를 입금 원금으로 누적하고 FIFO 잔여 매입원가, 현금간주액, 오늘 실제 현금, 가격 fallback 종목을 계산
 - 경고 수정: Supabase 평가 스냅샷 저장 전 중복 계좌 재조회로 정상 계좌에서도 “계좌를 찾을 수 없습니다”가 표시될 수 있는 경로를 제거
@@ -68,7 +68,7 @@ python scripts/verify_streamlit_deployment.py \
 - Dashboard가 오늘 평가 스냅샷을 summary보다 우선 사용
 - Dashboard 문구가 `보유 평가액`, `입금 원금`, `현재 보유현금`, `입금 대비 손익`, `입금 대비 수익률`로 표시
 - Dashboard 히어로가 입금 대비 손익 대신 전일 대비 총자산 증감을 표시
-- 단일 계좌 사이드바가 selectbox 대신 이름 박스를 렌더링해 체크 표시를 노출하지 않음
+- 사이드바 계좌 카드가 `연금(IRP/퇴직연금)` 유형 뱃지를 렌더링하지 않음
 - 입금 대비 손익/수익률 KPI 카드의 sparkline 표시 영역 확대
 - 평가액 기록 페이지가 CSV 저장, CSV 불러오기, 화면 수정 저장 UI를 제공
 - `scripts/run_daily_rollup.py`가 기존 daily account snapshot과 신규 valuation snapshot을 함께 처리
