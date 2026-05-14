@@ -85,13 +85,14 @@ python -m unittest discover -s tests -p "test_*.py"
 - 페이지네이션 active 버튼은 검은색 대신 `#5DBB92` 민트로 표시한다.
 - 브라우저 산출물: `artifacts/premium-trade-log-desktop.png`, `artifacts/premium-trade-log-mobile.png`, `artifacts/returns-chart-interactive-standalone.png`
 - 현재 8501 Streamlit 서버는 사용자 확인을 위해 실행 상태로 유지 중
-- 배포 커밋: `1a3d951` (`Apply Soft Wealth design and remove Data page`)
+- 주요 배포 커밋: `1a3d951` (`Apply Soft Wealth design and remove Data page`), `8a3b688` (`Increase returns chart frame height`)
 - 원격 배포 검증: Streamlit Cloud `dashboard`/`trades` 모두 로그인 성공, workspace 표시, Supabase backend 확인, `ok=true`
-- 원격 검증 산출물: `artifacts/deploy-dashboard-latest.txt`, `artifacts/deploy-dashboard-latest.png`, `artifacts/deploy-trades-latest.txt`, `artifacts/deploy-trades-latest.png`
+- 원격 Dashboard 수익률 차트 footer 표시 확인: `artifacts/deploy-dashboard-height-fix.png`
+- 원격 검증 산출물: `artifacts/deploy-dashboard-latest.txt`, `artifacts/deploy-dashboard-latest.png`, `artifacts/deploy-trades-latest.txt`, `artifacts/deploy-trades-latest.png`, `artifacts/deploy-dashboard-height-fix.txt`, `artifacts/deploy-dashboard-height-fix.png`
 
 ## Git/GitHub 상태
 - 기본 브랜치: `main`
-- `origin/main`에 배포 커밋 `1a3d951`을 push했다.
+- `origin/main`에 Soft Wealth 배포 커밋과 수익률 차트 높이 보정 커밋을 push했다.
 - 실제 PR 생성은 하지 않았다.
 - 워크트리에는 이번 요청 전부터 `data/portfolio.db`, 문서, 산출물, 로컬 도구 디렉터리 등 여러 변경/미추적 파일이 있었다.
 - 커밋 시 요청 관련 파일만 선별하고 `data/portfolio.db`, `.local/`, `.playtools*/`, `.playwright-browsers/`, `.vscode/`, `artifacts/`, `data/kis_cache/` 등 로컬 산출물은 제외한다.
