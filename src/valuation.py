@@ -8,6 +8,7 @@ from typing import Any
 
 
 COMPANY_DEPOSIT_TYPE = "employer_deposit"
+PRINCIPAL_DEPOSIT_TYPES = {"employer_deposit", "personal_deposit", "deposit", "opening_cash"}
 BUY_SELL_TYPES = {"buy", "sell"}
 
 
@@ -80,17 +81,29 @@ def trade_amount(log: dict[str, Any]) -> float:
     return quantity * price
 
 
-def first_company_deposit_date(trade_logs: list[dict[str, Any]]) -> date | None:
-    """최초 회사입금일을 찾는다."""
+def is_principal_deposit_log(log: dict[str, Any]) -> bool:
+    """평가 원금에 포함할 입금성 거래인지 반환한다."""
+
+    return str(log.get("trade_type") or "").strip().lower() in PRINCIPAL_DEPOSIT_TYPES
+
+
+def first_principal_deposit_date(trade_logs: list[dict[str, Any]]) -> date | None:
+    """최초 입금성 거래일을 찾는다."""
 
     deposit_dates = [
         parsed_date
         for log in trade_logs
-        if str(log.get("trade_type") or "").strip().lower() == COMPANY_DEPOSIT_TYPE
+        if is_principal_deposit_log(log)
         for parsed_date in [parse_iso_date(log.get("trade_date"))]
         if parsed_date is not None
     ]
     return min(deposit_dates) if deposit_dates else None
+
+
+def first_company_deposit_date(trade_logs: list[dict[str, Any]]) -> date | None:
+    """이전 호출부 호환을 위해 최초 입금성 거래일을 반환한다."""
+
+    return first_principal_deposit_date(trade_logs)
 
 
 def _canonical_price_lookup(price_lookup: dict[str, dict[str, float]]) -> dict[str, dict[str, float]]:
@@ -278,9 +291,9 @@ def build_company_principal_valuation_snapshots(
     today_date: date | None = None,
     calculation_reason: str = "auto",
 ) -> list[dict[str, Any]]:
-    """회사입금액 기준 일별 평가 스냅샷을 생성한다."""
+    """입금액 기준 일별 평가 스냅샷을 생성한다."""
 
-    start_date = first_company_deposit_date(trade_logs)
+    start_date = first_principal_deposit_date(trade_logs)
     if start_date is None:
         return []
 
@@ -324,7 +337,7 @@ def build_company_principal_valuation_snapshots(
         for log in logs_by_date.get(valuation_date, []):
             trade_type = str(log.get("trade_type") or "").strip().lower()
 
-            if trade_type == COMPANY_DEPOSIT_TYPE:
+            if trade_type in PRINCIPAL_DEPOSIT_TYPES:
                 company_principal += trade_amount(log)
             elif trade_type == "buy":
                 apply_buy(lots_by_symbol, log)
@@ -390,7 +403,7 @@ def build_price_lookup_for_trade_logs(
 
     from src.market import fetch_price_history_range, normalize_symbol as market_normalize_symbol
 
-    range_start = start_date or first_company_deposit_date(trade_logs)
+    range_start = start_date or first_principal_deposit_date(trade_logs)
     range_end = end_date or date.today()
     symbols = sorted(
         {
@@ -435,7 +448,7 @@ def rebuild_daily_valuation_snapshots(
     today_date: date | None = None,
     calculation_reason: str,
 ) -> list[dict[str, Any]]:
-    """계좌의 회사입금 기준 평가액 기록을 전체 재계산한다."""
+    """계좌의 입금 기준 평가액 기록을 전체 재계산한다."""
 
     return build_company_principal_valuation_snapshots(
         account=account,

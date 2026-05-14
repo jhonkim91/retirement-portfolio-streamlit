@@ -19,7 +19,7 @@ if str(ROOT_DIR) not in sys.path:
 from src import sqlite_db  # noqa: E402
 from src.valuation import (  # noqa: E402
     build_price_lookup_for_trade_logs,
-    first_company_deposit_date,
+    first_principal_deposit_date,
     rebuild_daily_valuation_snapshots,
 )
 
@@ -230,12 +230,12 @@ class SupabaseAdminClient:
         self.request("POST", "daily_account_snapshot", data=payload)
 
     def delete_valuation_snapshots(self, account_id: int) -> None:
-        """계좌의 기존 회사입금 기준 평가 스냅샷을 삭제한다."""
+        """계좌의 기존 입금 기준 평가 스냅샷을 삭제한다."""
 
         self.request("DELETE", "daily_valuation_snapshot", filters={"account_id": f"eq.{account_id}"})
 
     def upsert_valuation_snapshots(self, account_id: int, snapshots: list[dict[str, Any]]) -> None:
-        """회사입금 기준 평가 스냅샷을 batch upsert한다."""
+        """입금 기준 평가 스냅샷을 batch upsert한다."""
 
         if not snapshots:
             return
@@ -262,13 +262,13 @@ class SupabaseAdminClient:
 
 
 def rebuild_sqlite_valuation_snapshots(account: dict[str, Any], target_date: date, dry_run: bool = False) -> int:
-    """SQLite 계좌의 회사입금 평가 스냅샷을 재계산한다."""
+    """SQLite 계좌의 입금 기준 평가 스냅샷을 재계산한다."""
 
     account_id = int(account["id"])
     trade_logs = sqlite_db.list_trade_logs(account_id)
     price_lookup = build_price_lookup_for_trade_logs(
         trade_logs,
-        start_date=first_company_deposit_date(trade_logs),
+        start_date=first_principal_deposit_date(trade_logs),
         end_date=target_date,
     )
     snapshots = rebuild_daily_valuation_snapshots(
@@ -292,13 +292,13 @@ def rebuild_supabase_valuation_snapshots(
     target_date: date,
     dry_run: bool = False,
 ) -> int:
-    """Supabase 계좌의 회사입금 평가 스냅샷을 재계산한다."""
+    """Supabase 계좌의 입금 기준 평가 스냅샷을 재계산한다."""
 
     account_id = int(account["id"])
     trade_logs = client.list_trade_logs(account_id)
     price_lookup = build_price_lookup_for_trade_logs(
         trade_logs,
-        start_date=first_company_deposit_date(trade_logs),
+        start_date=first_principal_deposit_date(trade_logs),
         end_date=target_date,
     )
     snapshots = rebuild_daily_valuation_snapshots(

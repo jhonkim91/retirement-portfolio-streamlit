@@ -12,7 +12,7 @@
 - 자산 배분 대시보드
 - 실현손익 요약
 - 일별 자산 스냅샷 저장
-- 회사입금액 기준 일별 평가액 기록
+- 입금액 기준 일별 평가액 기록
 - 로컬 SQLite 데이터 CSV 내보내기
 
 ## 기술 구조
@@ -173,12 +173,12 @@ KIS_ENV
 
 ### 일별 스냅샷 자동 실행
 
-일별 자산 스냅샷과 회사입금액 기준 평가액 기록 저장은 GitHub Actions 워크플로 [`.github/workflows/daily-rollup.yml`](.github/workflows/daily-rollup.yml)로 자동 실행할 수 있습니다.
+일별 자산 스냅샷과 입금액 기준 평가액 기록 저장은 GitHub Actions 워크플로 [`.github/workflows/daily-rollup.yml`](.github/workflows/daily-rollup.yml)로 자동 실행할 수 있습니다.
 
 - 기본 스케줄: 한국 시간 기준 매일 00:10
 - 실행 스크립트: `scripts/run_daily_rollup.py`
 - 기본 처리 대상일: 실행 시점의 한국 시간 기준 전일
-- `daily_account_snapshot`은 기존 총자산 스냅샷을 유지하고, `daily_valuation_snapshot`은 회사입금 원금 기준 평가 이력을 별도로 저장합니다.
+- `daily_account_snapshot`은 기존 총자산 스냅샷을 유지하고, `daily_valuation_snapshot`은 개인 입금과 회사 납입금을 합산한 입금 원금 기준 평가 이력을 별도로 저장합니다.
 - 수동 실행 시 `dry_run=true`로 쓰기 없이 점검 가능
 
 GitHub 저장소의 **Settings > Secrets and variables > Actions** 에 아래 시크릿을 추가하세요.

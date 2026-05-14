@@ -628,7 +628,7 @@ class ExportTradeLogFilterTests(unittest.TestCase):
 
 
 class ValuationSnapshotStorageTests(unittest.TestCase):
-    """회사입금 기준 평가 스냅샷 저장 계층을 검증한다."""
+    """입금 기준 평가 스냅샷 저장 계층을 검증한다."""
 
     def test_sqlite_records_lists_and_deletes_valuation_snapshots(self) -> None:
         """SQLite는 평가 스냅샷을 upsert하고 fallback 종목 JSON을 list로 복원한다."""
@@ -677,14 +677,12 @@ class ValuationSnapshotStorageTests(unittest.TestCase):
                 sqlite_db.delete_valuation_snapshots(account_id)
                 self.assertEqual(sqlite_db.list_valuation_snapshots(account_id), [])
 
-    @patch("src.db._supabase_get_account", return_value={"id": 7, "name": "IRP"})
     @patch("src.db.now_iso", return_value="2026-05-14T00:00:00")
     @patch("src.db._supabase_request")
     def test_supabase_record_valuation_snapshots_uses_batch_upsert(
         self,
         request_mock,
         _now_iso_mock,
-        _get_account_mock,
     ) -> None:
         """Supabase 저장은 on_conflict 기반 batch upsert를 사용한다."""
 

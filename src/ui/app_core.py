@@ -130,7 +130,7 @@ def get_db_module() -> Any:
 
 
 def get_valuation_module() -> Any:
-    """회사입금 평가 계산 모듈을 실제 계산 시점에 로드한다."""
+    """입금 기준 평가 계산 모듈을 실제 계산 시점에 로드한다."""
 
     global _VALUATION_MODULE
     if _VALUATION_MODULE is None:
@@ -458,7 +458,7 @@ def list_account_snapshots(*args: Any, **kwargs: Any) -> Any:
 
 
 def list_valuation_snapshots(*args: Any, **kwargs: Any) -> Any:
-    """저장소 모듈의 회사입금 평가 스냅샷 목록 함수를 지연 호출한다."""
+    """저장소 모듈의 입금 기준 평가 스냅샷 목록 함수를 지연 호출한다."""
 
     return get_db_module().list_valuation_snapshots(*args, **kwargs)
 
@@ -564,7 +564,7 @@ def rebuild_valuation_snapshots_for_account(account_id: int, calculation_reason:
         today = valuation_today()
         price_lookup = get_valuation_module().build_price_lookup_for_trade_logs(
             trade_logs,
-            start_date=get_valuation_module().first_company_deposit_date(trade_logs),
+            start_date=get_valuation_module().first_principal_deposit_date(trade_logs),
             end_date=today,
         )
         snapshots = rebuild_and_save_daily_valuation_snapshots(
@@ -3232,7 +3232,7 @@ def build_dashboard_metric_specs(
     return [
         {
             "key": "principal",
-            "label": "회사입금 원금" if valuation_mode else "입금 원금",
+            "label": "입금 원금",
             "value": dashboard_format_won(total_principal),
             "caption": "",
             "tone": "primary",
@@ -3250,7 +3250,7 @@ def build_dashboard_metric_specs(
         },
         {
             "key": "profit",
-            "label": "회사입금 대비 손익" if valuation_mode else "평가 손익",
+            "label": "입금 대비 손익" if valuation_mode else "평가 손익",
             "value": dashboard_format_won(principal_profit_loss),
             "caption": "",
             "tone": profit_tone,
@@ -3259,7 +3259,7 @@ def build_dashboard_metric_specs(
         },
         {
             "key": "goal",
-            "label": "회사입금 대비 수익률" if valuation_mode else "수익률",
+            "label": "입금 대비 수익률" if valuation_mode else "수익률",
             "value": dashboard_format_rate(principal_profit_rate),
             "caption": "",
             "tone": "warning" if principal_profit_rate >= 0 else "negative",
@@ -7452,12 +7452,12 @@ def trade_entry_page(account: dict[str, Any], holdings: list[dict[str, Any]], ac
 
 
 def valuation_page(account: dict[str, Any], rollup_state: dict[str, Any] | None = None) -> None:
-    """회사입금액 기준 일별 평가액 기록 페이지를 렌더링한다."""
+    """입금액 기준 일별 평가액 기록 페이지를 렌더링한다."""
 
     del rollup_state
     account_id = int(account["id"])
     st.title("평가액 기록")
-    st.caption("회사 납입금을 원금으로 보고, 보유상품 평가액과 현금간주액을 더해 일별 보유 평가액을 기록합니다.")
+    st.caption("개인 입금과 회사 납입금을 원금으로 보고, 보유상품 평가액과 현금간주액을 더해 일별 보유 평가액을 기록합니다.")
 
     action_cols = st.columns((1, 0.26), gap="medium", vertical_alignment="center")
     with action_cols[1]:
@@ -7472,15 +7472,15 @@ def valuation_page(account: dict[str, Any], rollup_state: dict[str, Any] | None 
 
     snapshots = list_valuation_snapshots(account_id)
     if not snapshots:
-        st.info("회사 납입금 기록이 아직 없어 평가액 기록을 만들 수 없습니다. 거래 페이지에서 회사 납입금을 먼저 등록해 주세요.")
+        st.info("입금 기록이 아직 없어 평가액 기록을 만들 수 없습니다. 거래 페이지에서 개인 입금 또는 회사 납입금을 먼저 등록해 주세요.")
         return
 
     latest_row = latest_valuation_snapshot(snapshots) or snapshots[-1]
     metric_cols = st.columns(4, gap="small")
     metric_cols[0].metric("보유 평가액", format_won(latest_row.get("valuation_amount")))
-    metric_cols[1].metric("회사입금 원금", format_won(latest_row.get("company_principal")))
-    metric_cols[2].metric("회사입금 대비 손익", format_won(latest_row.get("profit_loss")))
-    metric_cols[3].metric("회사입금 대비 수익률", format_pct(latest_row.get("profit_rate")))
+    metric_cols[1].metric("입금 원금", format_won(latest_row.get("company_principal")))
+    metric_cols[2].metric("입금 대비 손익", format_won(latest_row.get("profit_loss")))
+    metric_cols[3].metric("입금 대비 수익률", format_pct(latest_row.get("profit_rate")))
 
     trend_frame = valuation_snapshot_trend_frame(snapshots)
     if not trend_frame.empty:
@@ -7495,7 +7495,7 @@ def valuation_page(account: dict[str, Any], rollup_state: dict[str, Any] | None 
         value_frame["series"] = value_frame["series"].map(
             {
                 "total_value": "보유 평가액",
-                "total_principal": "회사입금 원금",
+                "total_principal": "입금 원금",
             }
         )
         line_chart = (
@@ -7522,7 +7522,7 @@ def valuation_page(account: dict[str, Any], rollup_state: dict[str, Any] | None 
             {
                 "기준일": row.get("valuation_date"),
                 "보유 평가액": format_won(row.get("valuation_amount")),
-                "회사입금 원금": format_won(row.get("company_principal")),
+                "입금 원금": format_won(row.get("company_principal")),
                 "상품 평가액": format_won(row.get("holdings_market_value")),
                 "잔여 매입원가": format_won(row.get("invested_cost")),
                 "현금값": format_won(row.get("cash_value")),

@@ -76,7 +76,7 @@ class SetupSupabaseSqlTests(unittest.TestCase):
         self.assertIn("ALTER TABLE public.realtime_price_bars ENABLE ROW LEVEL SECURITY", sql_text)
 
     def test_daily_valuation_snapshot_schema_and_access_policy_exist(self) -> None:
-        """회사입금 기준 평가 스냅샷 테이블은 RLS와 명시적 GRANT를 함께 둔다."""
+        """입금 기준 평가 스냅샷 테이블은 RLS와 명시적 GRANT를 함께 둔다."""
 
         sql_text = read_setup_sql()
 

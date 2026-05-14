@@ -6,12 +6,14 @@
 - 기준일: `2026-05-14`
 
 ## 작업 상태
-- [x] 회사입금액 기준 일별 평가액 기록 기능 추가
+- [x] 입금액 기준 일별 평가액 기록 기능 추가
 - [x] Supabase/SQLite `daily_valuation_snapshot` 테이블, 인덱스, RLS, 정책, GRANT 정의
 - [x] `src/valuation.py` 순수 계산 로직과 재계산/저장 서비스 함수 추가
 - [x] `src/db.py`, `src/sqlite_db.py` 평가 스냅샷 저장/조회/삭제 wrapper 추가
 - [x] 거래 UI, CSV import, 수동 가격 갱신, daily rollup 재계산 hook 추가
 - [x] Dashboard 스냅샷 우선 표시와 `평가액 기록` 페이지 추가
+- [x] 평가액 기록 시작일과 원금을 회사 납입금 단독 기준에서 개인 입금 포함 입금성 거래 기준으로 변경
+- [x] Supabase 평가 스냅샷 저장 전 중복 계좌 재조회로 발생하던 “계좌를 찾을 수 없습니다” 경고 방지
 - [x] 계산/DB/스키마/UI/배치 회귀 테스트 추가 및 통과
 - [ ] Supabase 운영/스테이징 DB에 `migrations/2026-05-14_add_daily_valuation_snapshot.sql` 적용
 - [ ] 기존 `migrations/2026-05-14_normalize_temporal_columns.sql` 적용 전 cast 실패 행 여부 점검
@@ -31,7 +33,7 @@
 ## 최근 변경 파일
 - `setup_supabase.sql`: `daily_valuation_snapshot` 테이블, 인덱스, RLS 정책 4종, 명시적 GRANT 추가
 - `migrations/2026-05-14_add_daily_valuation_snapshot.sql`: 신규 평가 스냅샷 테이블 migration 추가
-- `src/valuation.py`: 회사입금 원금 기준 일별 평가 스냅샷 계산, 가격 lookup 구성, 재계산/저장 서비스 추가
+- `src/valuation.py`: 개인 입금과 회사 납입금을 합산한 입금 원금 기준 일별 평가 스냅샷 계산, 가격 lookup 구성, 재계산/저장 서비스 추가
 - `src/market.py`: 날짜 범위 가격 이력 조회 helper 추가
 - `src/sqlite_db.py`: SQLite 평가 스냅샷 테이블 생성 및 저장/조회/삭제 구현
 - `src/db.py`: Supabase/SQLite 공통 wrapper, Supabase batch upsert, cache 무효화, export table 반영
@@ -44,8 +46,8 @@
 - `README.md`, `docs/VALIDATION.md`: 기능/검증 문서 갱신
 
 ## 핵심 설계 결정
-- 기존 `account_summary`와 `daily_account_snapshot` 계산은 유지하고, 회사입금 기준 이력은 별도 `daily_valuation_snapshot`에 저장한다.
-- `company_principal`은 `employer_deposit`만 누적하며 `personal_deposit`, `withdraw`, `opening_cash`는 원금에 포함하지 않는다.
+- 기존 `account_summary`와 `daily_account_snapshot` 계산은 유지하고, 입금 기준 이력은 별도 `daily_valuation_snapshot`에 저장한다.
+- `company_principal` 컬럼은 기존 스키마명을 유지하되 `employer_deposit`, `personal_deposit`, legacy `deposit`, `opening_cash`를 입금 원금으로 누적한다.
 - 매수 lot은 FIFO로 쌓고 매도는 FIFO 기준으로 잔여 수량과 잔여 매입원가를 차감한다.
 - 과거 날짜 현금은 `max(company_principal - invested_cost, 0)` 현금간주액을 사용하고, 오늘 날짜는 `account.cash_balance` 실제 현금을 사용한다.
 - UI/배치에서 넘기는 오늘 기준일은 Asia/Seoul 날짜를 사용한다.
@@ -53,7 +55,7 @@
 - `source_hash`에는 거래 원장, 가격 lookup 요약, 오늘 실제 현금, 기준 날짜를 포함해 가격 갱신 재계산도 구분한다.
 - `rebuild_and_save_daily_valuation_snapshots()`는 stale row 방지를 위해 계좌의 기존 평가 스냅샷을 삭제한 뒤 전체 series를 다시 저장한다.
 - realtime tick마다 재계산하지 않고 거래 UI, CSV import 완료, 수동 가격 refresh, daily rollup에서 계좌별 1회 재계산한다.
-- Dashboard는 오늘 평가 스냅샷이 있으면 `보유 평가액`, `회사입금 원금`, `현재 보유현금`, `회사입금 대비 손익`, `회사입금 대비 수익률`을 우선 표시한다.
+- Dashboard는 오늘 평가 스냅샷이 있으면 `보유 평가액`, `입금 원금`, `현재 보유현금`, `입금 대비 손익`, `입금 대비 수익률`을 우선 표시한다.
 - 스냅샷이 없으면 기존 summary와 `daily_account_snapshot` 기반 표시로 fallback한다.
 
 ## 실행 명령
@@ -68,8 +70,8 @@ streamlit run app.py --server.port 8501 --server.address 0.0.0.0 --server.fileWa
 
 ## 최신 검증 결과
 - `python -m compileall app.py src scripts tests pages` 성공
-- `python -m pytest tests/test_valuation.py tests/test_db.py tests/test_setup_supabase_sql.py tests/test_app_dashboard.py tests/test_run_daily_rollup.py tests/test_verify_streamlit_deployment.py` 성공, 170 tests
-- `python -m unittest discover -s tests -p "test_*.py"` 성공, 228 tests
+- `python -m pytest tests/test_valuation.py tests/test_db.py tests/test_app_dashboard.py tests/test_run_daily_rollup.py tests/test_verify_streamlit_deployment.py` 성공, 164 tests
+- `python -m unittest discover -s tests -p "test_*.py"` 성공, 229 tests
 - `git diff --check -- README.md docs/VALIDATION.md setup_supabase.sql migrations/2026-05-14_add_daily_valuation_snapshot.sql src/valuation.py src/market.py src/sqlite_db.py src/db.py src/ui/app_core.py scripts/run_daily_rollup.py scripts/verify_streamlit_deployment.py pages/valuation.py tests/test_valuation.py tests/test_db.py tests/test_setup_supabase_sql.py tests/test_app_dashboard.py tests/test_run_daily_rollup.py tests/test_verify_streamlit_deployment.py` 성공
 - 로컬 Streamlit 서버 `http://127.0.0.1:8501` health `ok`
 - `python scripts/verify_streamlit_deployment.py --url http://127.0.0.1:8501 --page valuation --expect-backend sqlite --wait-ms 12000 ...` 성공, `ok=true`

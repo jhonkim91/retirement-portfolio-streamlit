@@ -7,10 +7,10 @@ from src.valuation import build_company_principal_valuation_snapshots
 
 
 class CompanyPrincipalValuationTests(unittest.TestCase):
-    """회사입금액 기준 일별 평가 스냅샷 계산을 검증한다."""
+    """입금액 기준 일별 평가 스냅샷 계산을 검증한다."""
 
     def test_company_principal_valuation_uses_implied_cash_until_today(self) -> None:
-        """과거 날짜는 회사입금 원금과 잔여 매입원가 차이를 현금간주액으로 사용한다."""
+        """과거 날짜는 입금 원금과 잔여 매입원가 차이를 현금간주액으로 사용한다."""
 
         account = {"id": 1, "cash_balance": 2000}
         trade_logs = [
@@ -79,8 +79,8 @@ class CompanyPrincipalValuationTests(unittest.TestCase):
         self.assertEqual(today_snapshot["cash_value"], 1500)
         self.assertEqual(today_snapshot["valuation_amount"], 7700)
 
-    def test_personal_deposit_is_excluded_from_company_principal(self) -> None:
-        """개인 입금은 회사입금 원금에 포함하지 않는다."""
+    def test_personal_deposit_starts_series_and_counts_as_principal(self) -> None:
+        """개인 입금도 최초 시작일과 원금 누적에 포함한다."""
 
         snapshots = build_company_principal_valuation_snapshots(
             account={"id": 1, "cash_balance": 0},
@@ -94,9 +94,10 @@ class CompanyPrincipalValuationTests(unittest.TestCase):
             calculation_reason="test",
         )
 
-        self.assertEqual(len(snapshots), 1)
-        self.assertEqual(snapshots[0]["valuation_date"], "2026-01-02")
-        self.assertEqual(snapshots[0]["company_principal"], 10000)
+        self.assertEqual(len(snapshots), 2)
+        self.assertEqual(snapshots[0]["valuation_date"], "2026-01-01")
+        self.assertEqual(snapshots[0]["company_principal"], 5000)
+        self.assertEqual(snapshots[1]["company_principal"], 15000)
 
     def test_sell_reduces_remaining_cost_by_fifo(self) -> None:
         """매도는 FIFO lot 기준으로 잔여 매입원가를 차감한다."""
@@ -142,7 +143,7 @@ class CompanyPrincipalValuationTests(unittest.TestCase):
         self.assertEqual(snapshots[-1]["missing_price_symbols"], ["BBB"])
 
     def test_over_invested_amount_tracks_cost_above_company_principal(self) -> None:
-        """잔여 매입원가가 회사입금 원금을 넘으면 초과 매입액을 따로 기록한다."""
+        """잔여 매입원가가 입금 원금을 넘으면 초과 매입액을 따로 기록한다."""
 
         snapshots = build_company_principal_valuation_snapshots(
             account={"id": 1, "cash_balance": 0},
@@ -159,12 +160,27 @@ class CompanyPrincipalValuationTests(unittest.TestCase):
         self.assertEqual(snapshots[-1]["implied_cash"], 0)
         self.assertEqual(snapshots[-1]["over_invested_amount"], 2000)
 
-    def test_returns_empty_without_company_deposit(self) -> None:
-        """회사입금 기록이 없으면 스냅샷을 생성하지 않는다."""
+    def test_personal_deposit_only_creates_snapshots(self) -> None:
+        """회사 납입금이 없어도 개인 입금이 있으면 스냅샷을 생성한다."""
 
         snapshots = build_company_principal_valuation_snapshots(
             account={"id": 1, "cash_balance": 1000},
             trade_logs=[{"id": 1, "trade_date": "2026-01-01", "trade_type": "personal_deposit", "total_amount": 1000}],
+            price_lookup={},
+            end_date=date(2026, 1, 3),
+            today_date=date(2026, 1, 4),
+            calculation_reason="test",
+        )
+
+        self.assertEqual([row["valuation_date"] for row in snapshots], ["2026-01-01", "2026-01-02", "2026-01-03"])
+        self.assertEqual(snapshots[0]["company_principal"], 1000)
+
+    def test_returns_empty_without_deposit(self) -> None:
+        """입금성 거래가 없으면 스냅샷을 생성하지 않는다."""
+
+        snapshots = build_company_principal_valuation_snapshots(
+            account={"id": 1, "cash_balance": 0},
+            trade_logs=[{"id": 1, "trade_date": "2026-01-01", "trade_type": "buy", "symbol": "AAA", "quantity": 1, "price": 1000}],
             price_lookup={},
             end_date=date(2026, 1, 3),
             today_date=date(2026, 1, 4),

@@ -771,7 +771,7 @@ def list_valuation_snapshots(
     start_date: str | None = None,
     end_date: str | None = None,
 ) -> list[dict[str, Any]]:
-    """회사입금 기준 일별 평가 스냅샷을 조회한다."""
+    """입금 기준 일별 평가 스냅샷을 조회한다."""
 
     query = [
         "SELECT *",
@@ -1055,7 +1055,7 @@ def record_account_snapshot(
 
 
 def record_valuation_snapshots(account_id: int, snapshots: list[dict[str, Any]]) -> None:
-    """회사입금 기준 일별 평가 스냅샷을 upsert한다."""
+    """입금 기준 일별 평가 스냅샷을 upsert한다."""
 
     if not snapshots:
         return
@@ -1120,7 +1120,7 @@ def record_valuation_snapshots(account_id: int, snapshots: list[dict[str, Any]])
 
 
 def delete_valuation_snapshots(account_id: int) -> None:
-    """계좌의 회사입금 기준 평가 스냅샷을 모두 삭제한다."""
+    """계좌의 입금 기준 평가 스냅샷을 모두 삭제한다."""
 
     with connect() as connection:
         _require_account(connection, account_id)

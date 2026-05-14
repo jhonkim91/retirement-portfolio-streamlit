@@ -551,8 +551,8 @@ class TradeFormResetTests(unittest.TestCase):
         self.assertIn("수익률", labels)
         self.assertNotIn("목표 달성률", labels)
 
-    def test_dashboard_overview_metric_labels_use_company_valuation_mode(self) -> None:
-        """평가 스냅샷 기준 Dashboard는 회사입금 기준 문구를 사용한다."""
+    def test_dashboard_overview_metric_labels_use_deposit_valuation_mode(self) -> None:
+        """평가 스냅샷 기준 Dashboard는 입금 기준 문구를 사용한다."""
 
         specs = dashboard_app.build_dashboard_metric_specs(
             {
@@ -567,7 +567,7 @@ class TradeFormResetTests(unittest.TestCase):
         )
         labels = [str(spec["label"]) for spec in specs]
 
-        self.assertEqual(labels, ["회사입금 원금", "현재 보유현금", "회사입금 대비 손익", "회사입금 대비 수익률"])
+        self.assertEqual(labels, ["입금 원금", "현재 보유현금", "입금 대비 손익", "입금 대비 수익률"])
 
     def test_dashboard_summary_from_valuation_prefers_today_snapshot(self) -> None:
         """오늘 평가 스냅샷이 있으면 Dashboard 상단 요약값을 평가액 기준으로 바꾼다."""

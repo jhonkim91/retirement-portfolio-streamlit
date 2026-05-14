@@ -2645,8 +2645,6 @@ def _supabase_record_valuation_snapshots(account_id: int, snapshots: list[dict[s
 
     if not snapshots:
         return
-    if not _supabase_get_account(account_id):
-        raise ValueError("계좌를 찾을 수 없습니다.")
 
     timestamp = now_iso()
     rows: list[dict[str, Any]] = []
@@ -2668,10 +2666,8 @@ def _supabase_record_valuation_snapshots(account_id: int, snapshots: list[dict[s
 
 
 def _supabase_delete_valuation_snapshots(account_id: int) -> None:
-    """Supabase 계좌의 회사입금 기준 평가 스냅샷을 삭제한다."""
+    """Supabase 계좌의 입금 기준 평가 스냅샷을 삭제한다."""
 
-    if not _supabase_get_account(account_id):
-        raise ValueError("계좌를 찾을 수 없습니다.")
     _supabase_request(
         "DELETE",
         "daily_valuation_snapshot",
@@ -2906,7 +2902,7 @@ def _read_valuation_snapshots_once(
     start_date: str | None,
     end_date: str | None,
 ) -> list[dict[str, Any]]:
-    """현재 백엔드 기준 회사입금 평가 스냅샷을 한 번 조회한다."""
+    """현재 백엔드 기준 입금 평가 스냅샷을 한 번 조회한다."""
 
     if backend_name == BACKEND_SQLITE:
         return _sqlite_list_valuation_snapshots(account_id, start_date=start_date, end_date=end_date)
@@ -2985,7 +2981,7 @@ def _cached_list_valuation_snapshots(
     end_date: str | None,
     refresh_token: int,
 ) -> list[dict[str, Any]]:
-    """사용자/세션 범위의 회사입금 평가 스냅샷 조회를 캐시한다."""
+    """사용자/세션 범위의 입금 평가 스냅샷 조회를 캐시한다."""
 
     return _read_valuation_snapshots_once(backend_name, account_id, start_date, end_date)
 
@@ -3702,7 +3698,7 @@ def list_valuation_snapshots(
     start_date: str | None = None,
     end_date: str | None = None,
 ) -> list[dict[str, Any]]:
-    """계좌의 회사입금 기준 일별 평가 스냅샷을 조회한다."""
+    """계좌의 입금 기준 일별 평가 스냅샷을 조회한다."""
 
     backend_name = _current_backend()
     return _cached_list_valuation_snapshots(
@@ -3980,7 +3976,7 @@ def record_account_snapshot(
 
 
 def record_valuation_snapshots(account_id: int, snapshots: list[dict[str, Any]]) -> None:
-    """계좌의 회사입금 기준 일별 평가 스냅샷을 저장한다."""
+    """계좌의 입금 기준 일별 평가 스냅샷을 저장한다."""
 
     _run_with_fallback(
         supabase_call=lambda: _supabase_record_valuation_snapshots(account_id, snapshots),
@@ -3990,7 +3986,7 @@ def record_valuation_snapshots(account_id: int, snapshots: list[dict[str, Any]])
 
 
 def delete_valuation_snapshots(account_id: int) -> None:
-    """계좌의 회사입금 기준 평가 스냅샷을 모두 삭제한다."""
+    """계좌의 입금 기준 평가 스냅샷을 모두 삭제한다."""
 
     _run_with_fallback(
         supabase_call=lambda: _supabase_delete_valuation_snapshots(account_id),
@@ -4085,13 +4081,13 @@ def sync_account_rollup(
     try:
         from src.valuation import (
             build_price_lookup_for_trade_logs,
-            first_company_deposit_date,
+            first_principal_deposit_date,
             rebuild_and_save_daily_valuation_snapshots,
         )
 
         price_lookup = build_price_lookup_for_trade_logs(
             trade_logs,
-            start_date=first_company_deposit_date(trade_logs),
+            start_date=first_principal_deposit_date(trade_logs),
             end_date=today,
         )
         valuation_snapshots = rebuild_and_save_daily_valuation_snapshots(
