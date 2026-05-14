@@ -13,6 +13,7 @@
 - [x] `premium_ui.html` 목업 기준 거래 기록 카드, 필터, 흰색 테이블 내부, 흰색 CSV 버튼, 색상 매수/매도 배지, 수정/삭제 액션 배지, 민트 페이지네이션 스타일 반영
 - [x] 거래/현금 입력, 저장, 조회, 분석, Supabase/SQLite fallback, CSV export helper 로직 보존
 - [x] 로컬 테스트와 브라우저 검증 완료
+- [x] `main` 배포 커밋 푸시 및 Streamlit Cloud dashboard/trades 원격 검증 완료
 - [ ] KIS WebSocket worker 장시간 실행 중 재연결/상태 복구를 장중 운영 로그 기준으로 추가 점검
 - [ ] 모바일 viewport에서 대시보드 트리맵/보유 종목 표 가독성 추가 확인
 - [ ] 스냅샷 저장, CSV export, 운영 정리 작업의 로딩 상태 표시 누락 여부 점검
@@ -82,10 +83,14 @@ python -m unittest discover -s tests -p "test_*.py"
 - 페이지네이션 active 버튼은 검은색 대신 `#5DBB92` 민트로 표시한다.
 - 브라우저 산출물: `artifacts/premium-trade-log-desktop.png`, `artifacts/premium-trade-log-mobile.png`, `artifacts/returns-chart-interactive-standalone.png`
 - 현재 8501 Streamlit 서버는 사용자 확인을 위해 실행 상태로 유지 중
+- 배포 커밋: `1a3d951` (`Apply Soft Wealth design and remove Data page`)
+- 원격 배포 검증: Streamlit Cloud `dashboard`/`trades` 모두 로그인 성공, workspace 표시, Supabase backend 확인, `ok=true`
+- 원격 검증 산출물: `artifacts/deploy-dashboard-latest.txt`, `artifacts/deploy-dashboard-latest.png`, `artifacts/deploy-trades-latest.txt`, `artifacts/deploy-trades-latest.png`
 
 ## Git/GitHub 상태
 - 기본 브랜치: `main`
-- 이번 작업은 로컬 수정만 수행했고 커밋, push, 실제 PR 생성은 하지 않았다.
+- `origin/main`에 배포 커밋 `1a3d951`을 push했다.
+- 실제 PR 생성은 하지 않았다.
 - 워크트리에는 이번 요청 전부터 `data/portfolio.db`, 문서, 산출물, 로컬 도구 디렉터리 등 여러 변경/미추적 파일이 있었다.
 - 커밋 시 요청 관련 파일만 선별하고 `data/portfolio.db`, `.local/`, `.playtools*/`, `.playwright-browsers/`, `.vscode/`, `artifacts/`, `data/kis_cache/` 등 로컬 산출물은 제외한다.
 
@@ -97,7 +102,6 @@ python -m unittest discover -s tests -p "test_*.py"
 - 실제 값은 `.streamlit/secrets.toml`, Streamlit Cloud secrets, GitHub Actions secrets, OS 환경 변수에만 둔다.
 
 ## 남은 작업
-1. 운영 배포가 필요하면 별도 지시 후 관련 파일만 커밋하고 push한다.
-2. PR 제목은 `Apply Soft Wealth design and remove Data page`를 사용한다.
+1. 배포 후 실제 사용자 브라우저에서 Dashboard 수익률 차트 탭/정렬과 Trades 거래 기록 UI를 최종 육안 확인한다.
+2. PR을 별도로 만들 경우 제목은 `Apply Soft Wealth design and remove Data page`를 사용한다.
 3. PR 설명에는 Data 페이지 제거, Soft Wealth 테마 적용, 저장/분석/시세/거래 로직 보존, 테스트 갱신을 명시한다.
-4. 운영 배포 후 `scripts/verify_streamlit_deployment.py`로 dashboard/trades를 다시 확인한다.

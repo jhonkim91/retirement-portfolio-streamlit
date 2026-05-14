@@ -8,6 +8,8 @@
 ## 최신 대표 검증 결과
 - 작업 범위: RetirementPort Soft Wealth 라이트 디자인 적용, Data 페이지 제거, `premium_ui.html` 기준 거래 기록 프리미엄 UI 반영, `returns_chart.html` 기준 보유 종목 수익률 차트 반영
 - 환경: 로컬 Python 3.11, Streamlit, SQLite backend 검증
+- 배포 커밋: `1a3d951` (`Apply Soft Wealth design and remove Data page`)
+- 배포 대상: `origin/main` push 후 Streamlit Cloud 자동 배포
 - 서버 실행:
 ```bash
 env -u SUPABASE_URL -u SUPABASE_KEY -u SUPABASE_SERVICE_ROLE_KEY \
@@ -27,6 +29,14 @@ env -u SUPABASE_URL -u SUPABASE_KEY -u SUPABASE_SERVICE_ROLE_KEY \
 - `python -m unittest discover -s tests -p "test_*.py"` 성공, 190 tests
 - `git diff --check -- .streamlit/app.css src/ui/app_core.py tests/test_app_dashboard.py Memory.md docs/VALIDATION.md` 성공
 - `curl -sS --max-time 5 http://127.0.0.1:8501/_stcore/health` 결과 `ok`
+- `git push origin main` 성공, `9b56788..1a3d951 main -> main`
+
+## 원격 배포 검증
+- `python scripts/verify_streamlit_deployment.py --page dashboard --expect-backend supabase --wait-ms 20000 ...` 성공
+  - `logged_in=true`, `workspace_visible=true`, `backend_storage=Supabase`, `backend_storage_code=supabase`, `ok=true`
+  - `allocation_status=지연 데이터 표시 중`
+- `python scripts/verify_streamlit_deployment.py --page trades --expect-backend supabase --wait-ms 20000 ...` 성공
+  - `logged_in=true`, `workspace_visible=true`, `backend_storage=Supabase`, `backend_storage_code=supabase`, `ok=true`
 
 ## 브라우저 검증
 - 사이드바와 Streamlit 기본 multipage에 Data 메뉴 없음
@@ -56,7 +66,10 @@ env -u SUPABASE_URL -u SUPABASE_KEY -u SUPABASE_SERVICE_ROLE_KEY \
 - `artifacts/premium-trade-log-desktop.png`
 - `artifacts/premium-trade-log-mobile.png`
 - `artifacts/returns-chart-interactive-standalone.png`
+- `artifacts/deploy-dashboard-latest.txt`
+- `artifacts/deploy-dashboard-latest.png`
+- `artifacts/deploy-trades-latest.txt`
+- `artifacts/deploy-trades-latest.png`
 
 ## 미수행 항목
-- 원격 Streamlit Cloud 배포 검증은 수행하지 않았다.
-- 커밋, push, 실제 PR 생성은 수행하지 않았다.
+- 실제 PR 생성은 수행하지 않았다.
