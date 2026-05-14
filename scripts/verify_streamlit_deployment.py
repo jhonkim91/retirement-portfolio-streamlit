@@ -34,7 +34,7 @@ PAGE_LABEL_INDEX = {
 PAGE_READY_MARKERS = {
     "dashboard": ("자산 배분", "선택 종목 트렌드"),
     "trades": ("상품 등록", "예상 매입금액", "거래 기록"),
-    "valuation": ("평가액 기록", "회사입금 원금"),
+    "valuation": ("평가액 기록", "재계산"),
 }
 LOCAL_SECRETS_PATH = Path(".streamlit/secrets.toml")
 
