@@ -35,17 +35,24 @@
 - 명령:
 ```bash
 python scripts/verify_streamlit_deployment.py \
-  --url http://127.0.0.1:8501 \
+  --url https://retirement-portfolio-app-nh2vq9ferqnpehsslbykbe.streamlit.app/ \
   --page valuation \
-  --expect-backend sqlite \
+  --expect-backend supabase \
   --wait-ms 12000 \
-  --screenshot artifacts/local-valuation-page.png \
-  --text-output artifacts/local-valuation-page.txt \
-  --debug-dir artifacts/local-valuation-debug
+  --screenshot artifacts/deploy-valuation-ledger-cash.png \
+  --text-output artifacts/deploy-valuation-ledger-cash.txt \
+  --debug-dir artifacts/deploy-valuation-ledger-cash-debug
 ```
 - 결과: 성공, `ok=true`
-- 확인값: `target_page=valuation`, `logged_in=true`, `backend_storage=SQLite`, `backend_storage_code=sqlite`, `onboarding_visible=true`
-- 산출물: `artifacts/local-valuation-page.png`, `artifacts/local-valuation-page.txt`, `artifacts/local-valuation-debug/`
+- 확인값: `target_page=valuation`, `logged_in=true`, `backend_storage=Supabase`, `backend_storage_code=supabase`, `workspace_visible=true`
+- 산출물: `artifacts/deploy-valuation-ledger-cash.png`, `artifacts/deploy-valuation-ledger-cash.txt`, `artifacts/deploy-valuation-ledger-cash-debug/`
+
+## 운영 데이터 검증
+- 대상: Supabase 운영 `jhonkim2025@gmail.com`
+- 재계산 기준일: `2026-05-14`
+- 결과: account 23 스냅샷 686건, account 24 스냅샷 99건 재계산 저장
+- 입금 원장이 없는 account 25/26은 평가 스냅샷 0건으로 정리
+- IRP account 24 확인값: `2026-05-07` 원장 현금 `80,483.722`, `2026-05-14` 실제 현금 `82,071`, 보유 평가액 `1,007,666`
 
 ## 계산 검증 범위
 - 최초 입금성 거래 발생일부터 series 생성
@@ -80,5 +87,4 @@ python scripts/verify_streamlit_deployment.py \
 - `scripts/run_daily_rollup.py`가 기존 daily account snapshot과 신규 valuation snapshot을 함께 처리
 
 ## 미수행 항목
-- Supabase 운영/스테이징 DB에는 migration을 직접 적용하지 않았다.
-- 원격 Streamlit Cloud `valuation` 페이지 검증은 수행하지 않았다.
+- Supabase 스테이징 DB는 별도 검증하지 않았다.
