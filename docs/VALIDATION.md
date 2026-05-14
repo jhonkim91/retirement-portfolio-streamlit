@@ -7,6 +7,7 @@
 
 ## 최신 대표 검증 결과
 - 작업 범위: RetirementPort Soft Wealth 라이트 디자인 적용, Data 페이지 제거, `premium_ui.html` 기준 거래 기록 프리미엄 UI 반영, `returns_chart.html` 기준 보유 종목 수익률 차트 반영
+- 추가 패치: 원격 Dashboard 보유 종목 수익률 차트 footer 잘림 방지를 위한 iframe 높이 보정
 - 환경: 로컬 Python 3.11, Streamlit, SQLite backend 검증
 - 배포 커밋: `1a3d951` (`Apply Soft Wealth design and remove Data page`)
 - 배포 대상: `origin/main` push 후 Streamlit Cloud 자동 배포
@@ -26,6 +27,7 @@ env -u SUPABASE_URL -u SUPABASE_KEY -u SUPABASE_SERVICE_ROLE_KEY \
 ## 명령 검증
 - `python -m compileall app.py src scripts tests pages` 성공
 - `python -m pytest tests/test_app_dashboard.py` 성공, 77 tests
+- `python -m compileall src/ui/app_core.py tests/test_app_dashboard.py` 성공
 - `python -m unittest discover -s tests -p "test_*.py"` 성공, 190 tests
 - `git diff --check -- .streamlit/app.css src/ui/app_core.py tests/test_app_dashboard.py Memory.md docs/VALIDATION.md` 성공
 - `curl -sS --max-time 5 http://127.0.0.1:8501/_stcore/health` 결과 `ok`
