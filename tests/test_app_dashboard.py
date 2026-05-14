@@ -1008,7 +1008,7 @@ class ReturnsChartHtmlTests(unittest.TestCase):
 
         self.assertEqual(dashboard_app.returns_chart_component_height(0), dashboard_app.RETURNS_CHART_MIN_HEIGHT)
         self.assertGreater(dashboard_app.returns_chart_component_height(5, 1), dashboard_app.RETURNS_CHART_MIN_HEIGHT)
-        self.assertGreaterEqual(dashboard_app.returns_chart_component_height(4, 1), 620)
+        self.assertGreaterEqual(dashboard_app.returns_chart_component_height(4, 1), 720)
         self.assertEqual(dashboard_app.returns_chart_component_height(50), dashboard_app.RETURNS_CHART_MAX_HEIGHT)
 
 

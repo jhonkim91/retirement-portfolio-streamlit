@@ -75,7 +75,7 @@ python -m unittest discover -s tests -p "test_*.py"
 - `git diff --check -- .streamlit/app.css src/ui/app_core.py tests/test_app_dashboard.py Memory.md docs/VALIDATION.md` 성공
 - Streamlit 로컬 실행 검증: SQLite backend로 `127.0.0.1:8501` 실행 중이며 health `ok`
 - 브라우저 검증: 수익률 차트 독립 컴포넌트에서 `손실` 탭 클릭 시 손실 종목만 표시, `금액순` 클릭 시 평가금액 내림차순 전환, 막대 overflow 없음, browser error 없음
-- 원격 Dashboard 수익률 차트 footer 잘림 이슈 대응: 4개 행 + divider 기준 iframe 높이를 620px 이상으로 확보하도록 `returns_chart_component_height` 보정 및 회귀 테스트 추가
+- 원격 Dashboard 수익률 차트 footer 잘림 이슈 대응: 4개 행 + divider 기준 iframe 높이를 720px 이상으로 확보하도록 `returns_chart_component_height` 보정 및 회귀 테스트 추가
 - Playwright 검증: Data 메뉴 없음, 거래 기록 프리미엄 패널/CSV 버튼/날짜 범위/목업 헤더/5건 페이지네이션/매수·매도 배지/390px 모바일 overflow 없음/browser error 없음
 - 최근 사용자 브라우저 확인 후 거래 기록 행 배경을 흰색으로 고정하고, CSV 버튼도 흰색으로 고정했다. 매수/매도 배지는 색상 유지.
 - 거래 기록 패널 내부 Streamlit wrapper 배경을 흰색으로 강제해 행 사이에 연한 배경이 비치지 않도록 했다.
