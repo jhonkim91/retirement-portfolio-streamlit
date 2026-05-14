@@ -10,6 +10,8 @@ from typing import Any
 COMPANY_DEPOSIT_TYPE = "employer_deposit"
 PRINCIPAL_DEPOSIT_TYPES = {"employer_deposit", "personal_deposit", "deposit", "opening_cash"}
 BUY_SELL_TYPES = {"buy", "sell"}
+CASH_DELTA_IN_TYPES = PRINCIPAL_DEPOSIT_TYPES | {"interest", "transfer_in", "dividend", "dividend_income"}
+CASH_DELTA_OUT_TYPES = {"withdraw", "transfer_out", "fee", "commission", "tax"}
 
 
 @dataclass
@@ -81,6 +83,28 @@ def trade_amount(log: dict[str, Any]) -> float:
     return quantity * price
 
 
+def trade_cash_delta(log: dict[str, Any]) -> float:
+    """거래 로그가 현금 잔액에 미치는 영향을 반환한다."""
+
+    raw_cash_delta = log.get("cash_delta")
+    trade_type = str(log.get("trade_type") or "").strip().lower()
+    amount = trade_amount(log)
+    if raw_cash_delta not in (None, ""):
+        cash_delta = safe_float(raw_cash_delta)
+        if abs(cash_delta) > 0.000001 or amount <= 0:
+            return cash_delta
+
+    if trade_type == "buy":
+        return -amount
+    if trade_type == "sell":
+        return amount
+    if trade_type in CASH_DELTA_IN_TYPES:
+        return amount
+    if trade_type in CASH_DELTA_OUT_TYPES:
+        return -amount
+    return 0.0
+
+
 def is_principal_deposit_log(log: dict[str, Any]) -> bool:
     """평가 원금에 포함할 입금성 거래인지 반환한다."""
 
@@ -140,6 +164,7 @@ def source_hash_for_inputs(
             "quantity": safe_float(log.get("quantity")),
             "price": safe_float(log.get("price")),
             "total_amount": safe_float(log.get("total_amount")),
+            "cash_delta": trade_cash_delta(log),
         }
         for log in sorted(
             trade_logs,
@@ -331,11 +356,13 @@ def build_company_principal_valuation_snapshots(
     )
     lots_by_symbol: dict[str, list[Lot]] = {}
     company_principal = 0.0
+    ledger_cash = 0.0
     snapshots: list[dict[str, Any]] = []
 
     for valuation_date in date_range(start_date, target_end_date):
         for log in logs_by_date.get(valuation_date, []):
             trade_type = str(log.get("trade_type") or "").strip().lower()
+            ledger_cash += trade_cash_delta(log)
 
             if trade_type in PRINCIPAL_DEPOSIT_TYPES:
                 company_principal += trade_amount(log)
@@ -353,8 +380,8 @@ def build_company_principal_valuation_snapshots(
             valuation_date,
             price_lookup,
         )
-        implied_cash = max(company_principal - invested_cost, 0.0)
-        over_invested_amount = max(invested_cost - company_principal, 0.0)
+        implied_cash = max(ledger_cash, 0.0)
+        over_invested_amount = max(-ledger_cash, 0.0)
 
         if valuation_date == normalized_today:
             cash_value = safe_float(account.get("cash_balance"))

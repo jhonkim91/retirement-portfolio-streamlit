@@ -2245,7 +2245,23 @@ def _supabase_adjust_cash_balance(
     if abs(cash_delta) <= 0.000001:
         raise ValueError("현재 현금과 동일해 조정할 내용이 없습니다.")
 
+    timestamp = now_iso()
     _supabase_update_cash_balance(account_id, next_cash)
+    _supabase_insert_trade_log(
+        account_id=account_id,
+        symbol="",
+        product_name=_cash_event_label("cash_adjustment"),
+        trade_type="cash_adjustment",
+        asset_type="cash",
+        quantity=0,
+        price=0,
+        total_amount=abs(cash_delta),
+        cash_delta=cash_delta,
+        trade_date=trade_date,
+        notes=cleaned_notes,
+        created_at=timestamp,
+        metadata_json={},
+    )
 
 
 def _supabase_update_trade_log(

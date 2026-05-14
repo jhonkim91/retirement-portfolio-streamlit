@@ -823,7 +823,7 @@ VALUATION_SNAPSHOT_CSV_COLUMNS = (
     "기준일",
     "입금 원금",
     "잔여 매입원가",
-    "현금간주액",
+    "원장 현금",
     "실제 보유현금",
     "현금값",
     "현금 기준",
@@ -838,7 +838,7 @@ VALUATION_SNAPSHOT_CSV_COLUMNS = (
 VALUATION_SNAPSHOT_NUMERIC_COLUMNS = (
     "입금 원금",
     "잔여 매입원가",
-    "현금간주액",
+    "원장 현금",
     "실제 보유현금",
     "현금값",
     "상품 평가액",
@@ -2069,10 +2069,10 @@ def build_valuation_snapshot_export_frame(snapshots: list[dict[str, Any]]) -> pd
                 "기준일": row.get("valuation_date") or "",
                 "입금 원금": float(row.get("company_principal") or 0),
                 "잔여 매입원가": float(row.get("invested_cost") or 0),
-                "현금간주액": float(row.get("implied_cash") or 0),
+                "원장 현금": float(row.get("implied_cash") or 0),
                 "실제 보유현금": "" if row.get("actual_cash_balance") is None else float(row.get("actual_cash_balance") or 0),
                 "현금값": float(row.get("cash_value") or 0),
-                "현금 기준": "실제" if row.get("cash_source") == "actual" else "간주",
+                "현금 기준": "실제" if row.get("cash_source") == "actual" else "원장",
                 "상품 평가액": float(row.get("holdings_market_value") or 0),
                 "보유 평가액": float(row.get("valuation_amount") or 0),
                 "손익": float(row.get("profit_loss") or 0),
@@ -2107,11 +2107,11 @@ def normalize_valuation_cash_source(value: Any) -> str:
     """CSV 현금 기준 값을 DB 저장값으로 정규화한다."""
 
     text = clean_trade_log_import_text(value).lower().replace(" ", "").replace("_", "")
-    if text in {"", "간주", "implied"}:
+    if text in {"", "원장", "간주", "ledger", "implied"}:
         return "implied"
     if text in {"실제", "actual"}:
         return "actual"
-    raise ValueError(f"현금 기준은 간주 또는 실제만 사용할 수 있습니다: {value}")
+    raise ValueError(f"현금 기준은 원장 또는 실제만 사용할 수 있습니다: {value}")
 
 
 def parse_optional_valuation_number(value: Any) -> float | None:
@@ -2149,6 +2149,8 @@ def parse_valuation_snapshot_import_frame(
         return [], [{"row": "-", "error": "필수 컬럼 누락: 기준일"}]
 
     normalized_frame = frame.copy()
+    if "원장 현금" not in normalized_frame.columns and "현금간주액" in normalized_frame.columns:
+        normalized_frame["원장 현금"] = normalized_frame["현금간주액"]
     for column in VALUATION_SNAPSHOT_CSV_COLUMNS:
         if column not in normalized_frame.columns:
             normalized_frame[column] = ""
@@ -2166,7 +2168,9 @@ def parse_valuation_snapshot_import_frame(
 
             company_principal = parse_optional_valuation_number(raw_row.get("입금 원금"))
             invested_cost = parse_optional_valuation_number(raw_row.get("잔여 매입원가")) or 0.0
-            implied_cash = parse_optional_valuation_number(raw_row.get("현금간주액"))
+            implied_cash = parse_optional_valuation_number(raw_row.get("원장 현금"))
+            if implied_cash is None:
+                implied_cash = parse_optional_valuation_number(raw_row.get("현금간주액"))
             actual_cash_balance = parse_optional_valuation_number(raw_row.get("실제 보유현금"))
             cash_value = parse_optional_valuation_number(raw_row.get("현금값"))
             cash_source = normalize_valuation_cash_source(raw_row.get("현금 기준"))
@@ -2275,7 +2279,7 @@ def render_valuation_snapshot_csv_editor(account_id: int, snapshots: list[dict[s
             num_rows="dynamic",
             column_config={
                 "기준일": st.column_config.TextColumn("기준일", required=True),
-                "현금 기준": st.column_config.SelectboxColumn("현금 기준", options=["간주", "실제"], required=True),
+                "현금 기준": st.column_config.SelectboxColumn("현금 기준", options=["원장", "실제"], required=True),
             },
         )
         parsed_rows, parse_errors = parse_valuation_snapshot_import_frame(
@@ -7766,7 +7770,7 @@ def valuation_page(account: dict[str, Any], rollup_state: dict[str, Any] | None 
     del rollup_state
     account_id = int(account["id"])
     st.title("평가액 기록")
-    st.caption("개인 입금과 회사 납입금을 원금으로 보고, 보유상품 평가액과 현금간주액을 더해 일별 보유 평가액을 기록합니다.")
+    st.caption("개인 입금과 회사 납입금을 원금으로 보고, 보유상품 평가액과 거래 원장 기준 현금을 더해 일별 보유 평가액을 기록합니다.")
 
     action_cols = st.columns((1, 0.26), gap="medium", vertical_alignment="center")
     with action_cols[1]:
@@ -7836,7 +7840,7 @@ def valuation_page(account: dict[str, Any], rollup_state: dict[str, Any] | None 
                 "상품 평가액": format_won(row.get("holdings_market_value")),
                 "잔여 매입원가": format_won(row.get("invested_cost")),
                 "현금값": format_won(row.get("cash_value")),
-                "현금 기준": "실제" if row.get("cash_source") == "actual" else "간주",
+                "현금 기준": "실제" if row.get("cash_source") == "actual" else "원장",
                 "손익": format_won(row.get("profit_loss")),
                 "수익률": format_pct(row.get("profit_rate")),
                 "원금초과 매입": format_won(row.get("over_invested_amount")),

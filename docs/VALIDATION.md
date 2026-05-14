@@ -8,8 +8,10 @@
 ## 최신 대표 검증 결과
 - 작업 범위: 입금액 기준 일별 평가액 기록 기능 추가
 - 추가 UI 조정: 사이드바 연금 유형 뱃지 제거, Dashboard 히어로 전일 대비 자산 증감 표시, 입금 대비 손익/수익률 KPI 차트 확대
+- 현금 계산 수정: 평가액 기록의 과거 현금을 `입금원금 - 잔여매입원가`가 아니라 거래 원장의 `cash_delta` 누적 기준으로 계산
 - 신규 저장소: Supabase/SQLite `daily_valuation_snapshot` 테이블, RLS/GRANT, batch upsert, 조회/삭제 wrapper 추가
-- 신규 계산: `src/valuation.py`에서 `employer_deposit`, `personal_deposit`, legacy `deposit`, `opening_cash`를 입금 원금으로 누적하고 FIFO 잔여 매입원가, 현금간주액, 오늘 실제 현금, 가격 fallback 종목을 계산
+- 신규 계산: `src/valuation.py`에서 `employer_deposit`, `personal_deposit`, legacy `deposit`, `opening_cash`를 입금 원금으로 누적하고 FIFO 잔여 매입원가, 원장 현금, 오늘 실제 현금, 가격 fallback 종목을 계산
+- 현금 원장: 매도 실현손익, 이자, 배당, 수수료, 현금 조정처럼 `cash_delta`가 있는 이벤트를 평가 현금에 반영
 - 경고 수정: Supabase 평가 스냅샷 저장 전 중복 계좌 재조회로 정상 계좌에서도 “계좌를 찾을 수 없습니다”가 표시될 수 있는 경로를 제거
 - 신규 가격 조회: 거래 로그 종목별 날짜 범위 가격 이력을 KIS/Naver/yfinance 경로로 조회하고 실패 종목은 빈 series로 넘겨 lot 단가 fallback 적용
 - 신규 UI: `평가액 기록` 별도 페이지 추가, Dashboard 상단은 오늘 평가 스냅샷이 있으면 `보유 평가액`/`입금 원금` 기준으로 표시
@@ -21,7 +23,8 @@
 
 ## 명령 검증
 - `python -m compileall app.py src scripts tests pages` 성공
-- `python -m unittest discover -s tests -p "test_*.py"` 성공, 233 tests
+- `python -m unittest discover -s tests -p "test_*.py"` 성공, 235 tests
+- `python -m pytest tests/test_valuation.py tests/test_db.py tests/test_app_dashboard.py` 성공, 154 tests
 - `git diff --check -- .streamlit/app.css src/ui/app_core.py tests/test_app_dashboard.py` 성공
 - `python -m pytest tests/test_app_dashboard.py tests/test_db.py tests/test_valuation.py tests/test_verify_streamlit_deployment.py` 성공, 166 tests
 - `python -m pytest tests/test_valuation.py tests/test_db.py tests/test_app_dashboard.py tests/test_run_daily_rollup.py tests/test_verify_streamlit_deployment.py` 성공, 164 tests
@@ -46,10 +49,12 @@ python scripts/verify_streamlit_deployment.py \
 
 ## 계산 검증 범위
 - 최초 입금성 거래 발생일부터 series 생성
-- 과거 날짜 `implied_cash` 계산
+- 과거 날짜 `implied_cash`에 원장 현금 누적값 저장
 - 오늘 날짜 `actual` cash 계산
 - `personal_deposit` 원금 포함
 - FIFO 매도 후 잔여 매입원가 차감
+- 매도 실현이익이 과거 원장 현금을 증가시키는지 검증
+- 배당/이자/수수료 등 `cash_delta` 이벤트가 원금이 아니라 원장 현금에 반영되는지 검증
 - 직전 영업일 종가 사용
 - 매입가 fallback 및 `missing_price_symbols` 기록
 - 원금 초과 매입 `over_invested_amount`
@@ -60,6 +65,7 @@ python scripts/verify_streamlit_deployment.py \
 ## DB/스키마 검증 범위
 - SQLite `record/list/delete_valuation_snapshots()` 저장/조회/삭제와 `missing_price_symbols` JSON list 정규화
 - Supabase batch upsert payload와 `on_conflict=account_id,valuation_date`
+- Supabase/SQLite `adjust_cash_balance()`가 현금 수정분을 `cash_adjustment` 원장 이벤트로 남기는지 검증
 - cache 무효화 경로
 - `setup_supabase.sql` 및 migration의 신규 테이블, 인덱스, RLS, 정책명, 명시적 GRANT
 

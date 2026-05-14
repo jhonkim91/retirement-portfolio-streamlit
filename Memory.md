@@ -16,6 +16,7 @@
 - [x] Supabase 평가 스냅샷 저장 전 중복 계좌 재조회로 발생하던 “계좌를 찾을 수 없습니다” 경고 방지
 - [x] 평가액 기록 CSV 저장/불러오기와 화면 수정 저장 기능 추가
 - [x] 사이드바 연금 유형 뱃지 제거, Dashboard 히어로 전일 대비 증감 표시, 손익/수익률 KPI 차트 확대
+- [x] 평가액 기록 과거 현금을 단순 원금-잔여원가에서 거래 원장 `cash_delta` 누적 기준으로 변경
 - [x] 계산/DB/스키마/UI/배치 회귀 테스트 추가 및 통과
 - [x] Supabase 운영 DB에 `migrations/2026-05-14_add_daily_valuation_snapshot.sql` 적용 및 평가 스냅샷 재계산
 - [ ] 기존 `migrations/2026-05-14_normalize_temporal_columns.sql` 적용 전 cast 실패 행 여부 점검
@@ -35,10 +36,10 @@
 ## 최근 변경 파일
 - `setup_supabase.sql`: `daily_valuation_snapshot` 테이블, 인덱스, RLS 정책 4종, 명시적 GRANT 추가
 - `migrations/2026-05-14_add_daily_valuation_snapshot.sql`: 신규 평가 스냅샷 테이블 migration 추가
-- `src/valuation.py`: 개인 입금과 회사 납입금을 합산한 입금 원금 기준 일별 평가 스냅샷 계산, 가격 lookup 구성, 재계산/저장 서비스 추가
+- `src/valuation.py`: 입금 원금 기준 일별 평가 스냅샷 계산, 원장 현금 누적, 가격 lookup 구성, 재계산/저장 서비스 추가
 - `src/market.py`: 날짜 범위 가격 이력 조회 helper 추가
-- `src/sqlite_db.py`: SQLite 평가 스냅샷 테이블 생성 및 저장/조회/삭제 구현
-- `src/db.py`: Supabase/SQLite 공통 wrapper, Supabase batch upsert, cache 무효화, export table 반영
+- `src/sqlite_db.py`: SQLite 평가 스냅샷 테이블 생성 및 저장/조회/삭제 구현, 현금 직접 수정 시 `cash_adjustment` 원장 기록 추가
+- `src/db.py`: Supabase/SQLite 공통 wrapper, Supabase batch upsert, cache 무효화, export table 반영, Supabase 현금 직접 수정 `cash_adjustment` 기록 추가
 - `src/ui/app_core.py`: Dashboard 스냅샷 우선 표시, 평가액 기록 페이지, 거래/CSV/가격 갱신 후 재계산 hook 추가
 - `src/ui/app_core.py`: 평가액 기록 CSV 저장/불러오기, `data_editor` 기반 수동 수정 저장 추가
 - `src/ui/app_core.py`: 사이드바 계좌 카드의 연금 유형 뱃지 렌더링 제거, Dashboard 히어로는 전일 대비 총자산 증감을 표시
@@ -54,7 +55,8 @@
 - 기존 `account_summary`와 `daily_account_snapshot` 계산은 유지하고, 입금 기준 이력은 별도 `daily_valuation_snapshot`에 저장한다.
 - `company_principal` 컬럼은 기존 스키마명을 유지하되 `employer_deposit`, `personal_deposit`, legacy `deposit`, `opening_cash`를 입금 원금으로 누적한다.
 - 매수 lot은 FIFO로 쌓고 매도는 FIFO 기준으로 잔여 수량과 잔여 매입원가를 차감한다.
-- 과거 날짜 현금은 `max(company_principal - invested_cost, 0)` 현금간주액을 사용하고, 오늘 날짜는 `account.cash_balance` 실제 현금을 사용한다.
+- 과거 날짜 현금은 거래 원장의 `cash_delta`를 누적한 원장 현금을 사용하고, 오늘 날짜는 `account.cash_balance` 실제 현금을 사용한다.
+- 매도 실현손익, 이자, 배당, 수수료, 현금 조정처럼 `cash_delta`가 있는 이벤트는 원금이 아니라 원장 현금에 반영한다.
 - UI/배치에서 넘기는 오늘 기준일은 Asia/Seoul 날짜를 사용한다.
 - 가격은 해당일 종가, 없으면 직전 종가, 그래도 없으면 lot 단가를 사용한다. `missing_price_symbols`에는 lot 단가 fallback 종목만 기록한다.
 - `source_hash`에는 거래 원장, 가격 lookup 요약, 오늘 실제 현금, 기준 날짜를 포함해 가격 갱신 재계산도 구분한다.
@@ -77,7 +79,8 @@ streamlit run app.py --server.port 8501 --server.address 0.0.0.0 --server.fileWa
 
 ## 최신 검증 결과
 - `python -m compileall app.py src scripts tests pages` 성공
-- `python -m unittest discover -s tests -p "test_*.py"` 성공, 233 tests
+- `python -m unittest discover -s tests -p "test_*.py"` 성공, 235 tests
+- `python -m pytest tests/test_valuation.py tests/test_db.py tests/test_app_dashboard.py` 성공, 154 tests
 - `git diff --check -- .streamlit/app.css src/ui/app_core.py tests/test_app_dashboard.py` 성공
 - `python -m pytest tests/test_app_dashboard.py tests/test_db.py tests/test_valuation.py tests/test_verify_streamlit_deployment.py` 성공, 166 tests
 - `python -m pytest tests/test_valuation.py tests/test_db.py tests/test_app_dashboard.py tests/test_run_daily_rollup.py tests/test_verify_streamlit_deployment.py` 성공, 164 tests

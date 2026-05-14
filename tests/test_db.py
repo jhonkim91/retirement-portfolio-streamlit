@@ -1199,7 +1199,7 @@ class SupabaseTradeCashRuleTests(unittest.TestCase):
     @patch("src.db._supabase_insert_trade_log")
     @patch("src.db._supabase_update_cash_balance")
     @patch("src.db._supabase_get_account", return_value={"id": 7, "cash_balance": 1000.0})
-    def test_supabase_adjust_cash_balance_updates_balance_without_trade_log(
+    def test_supabase_adjust_cash_balance_records_cash_adjustment_log(
         self,
         _get_account_mock,
         update_cash_balance_mock,
@@ -1213,7 +1213,10 @@ class SupabaseTradeCashRuleTests(unittest.TestCase):
         )
 
         update_cash_balance_mock.assert_called_once_with(7, 1300.0)
-        insert_trade_log_mock.assert_not_called()
+        insert_trade_log_mock.assert_called_once()
+        self.assertEqual(insert_trade_log_mock.call_args.kwargs["trade_type"], "cash_adjustment")
+        self.assertEqual(insert_trade_log_mock.call_args.kwargs["total_amount"], 300.0)
+        self.assertEqual(insert_trade_log_mock.call_args.kwargs["cash_delta"], 300.0)
 
 
 class SQLiteRealtimeQuotePersistenceTests(unittest.TestCase):
@@ -1294,7 +1297,7 @@ class SQLiteRealtimeQuotePersistenceTests(unittest.TestCase):
                 self.assertEqual(len(holdings), 1)
                 self.assertEqual(float(holdings[0]["quantity"]), 2.0)
 
-    def test_adjust_cash_balance_updates_account_without_trade_log(self) -> None:
+    def test_adjust_cash_balance_records_cash_adjustment_log(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             database_path = Path(temp_dir) / "portfolio.db"
             with patch.object(sqlite_db, "DB_PATH", database_path):
@@ -1313,7 +1316,10 @@ class SQLiteRealtimeQuotePersistenceTests(unittest.TestCase):
                 trade_logs = sqlite_module.list_trade_logs(account_id)
 
                 self.assertEqual(float(account["cash_balance"]), 620000.0)
-                self.assertEqual(trade_logs, [])
+                self.assertEqual(len(trade_logs), 1)
+                self.assertEqual(trade_logs[0]["trade_type"], "cash_adjustment")
+                self.assertEqual(float(trade_logs[0]["total_amount"]), 120000.0)
+                self.assertEqual(float(trade_logs[0]["cash_delta"]), 120000.0)
 
 
 class SQLiteTradeLogEditDeleteTests(unittest.TestCase):
