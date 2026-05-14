@@ -995,6 +995,92 @@ class TradeFormResetTests(unittest.TestCase):
         self.assertIn("trade_logs_import_template.csv", import_source)
         self.assertIn("save_trade_log_import_rows(account_id, rows_to_save)", import_source)
 
+    def test_valuation_snapshot_export_and_import_allows_manual_edits(self) -> None:
+        """평가액 기록 CSV는 저장 후 편집값을 다시 스냅샷 payload로 변환한다."""
+
+        export_frame = dashboard_app.build_valuation_snapshot_export_frame(
+            [
+                {
+                    "valuation_date": "2026-05-14",
+                    "company_principal": 800000,
+                    "invested_cost": 600000,
+                    "implied_cash": 200000,
+                    "actual_cash_balance": None,
+                    "cash_value": 200000,
+                    "cash_source": "implied",
+                    "holdings_market_value": 650000,
+                    "valuation_amount": 850000,
+                    "profit_loss": 50000,
+                    "profit_rate": 6.25,
+                    "over_invested_amount": 0,
+                    "missing_price_symbols": ["AAA"],
+                    "calculation_reason": "manual_rebuild",
+                }
+            ]
+        ).astype(object)
+        export_frame.loc[0, "보유 평가액"] = "900,000"
+        export_frame.loc[0, "손익"] = ""
+        export_frame.loc[0, "수익률"] = ""
+        export_frame.loc[0, "가격 fallback"] = "AAA, BBB"
+
+        rows, errors = dashboard_app.parse_valuation_snapshot_import_frame(export_frame, account_id=24)
+
+        self.assertEqual(errors, [])
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["account_id"], 24)
+        self.assertEqual(rows[0]["valuation_date"], "2026-05-14")
+        self.assertEqual(rows[0]["valuation_amount"], 900000)
+        self.assertEqual(rows[0]["profit_loss"], 100000)
+        self.assertEqual(rows[0]["profit_rate"], 12.5)
+        self.assertEqual(rows[0]["missing_price_symbols"], ["AAA", "BBB"])
+
+    def test_valuation_snapshot_import_computes_missing_derived_values(self) -> None:
+        """CSV 불러오기에서 비어 있는 파생값은 저장 전에 계산한다."""
+
+        frame = pd.DataFrame(
+            [
+                {
+                    "기준일": "2026-05-15",
+                    "입금 원금": "800,000",
+                    "잔여 매입원가": "600,000",
+                    "현금간주액": "",
+                    "실제 보유현금": "",
+                    "현금값": "",
+                    "현금 기준": "간주",
+                    "상품 평가액": "650,000",
+                    "보유 평가액": "",
+                    "손익": "",
+                    "수익률": "",
+                    "원금초과 매입": "",
+                    "가격 fallback": "",
+                    "계산 사유": "",
+                }
+            ]
+        )
+
+        rows, errors = dashboard_app.parse_valuation_snapshot_import_frame(frame, account_id=24)
+
+        self.assertEqual(errors, [])
+        self.assertEqual(rows[0]["implied_cash"], 200000)
+        self.assertEqual(rows[0]["cash_value"], 200000)
+        self.assertEqual(rows[0]["valuation_amount"], 850000)
+        self.assertEqual(rows[0]["profit_loss"], 50000)
+        self.assertEqual(rows[0]["profit_rate"], 6.25)
+        self.assertEqual(rows[0]["calculation_reason"], "manual_edit")
+
+    def test_valuation_page_source_includes_csv_editor(self) -> None:
+        """평가액 기록 페이지는 CSV 저장/불러오기와 수정 저장 UI를 제공한다."""
+
+        page_source = inspect.getsource(dashboard_app.valuation_page)
+        editor_source = inspect.getsource(dashboard_app.render_valuation_snapshot_csv_editor)
+
+        self.assertIn("render_valuation_snapshot_csv_editor(account_id, snapshots)", page_source)
+        self.assertIn("↓ CSV 저장", editor_source)
+        self.assertIn("valuation_snapshots_import_template.csv", editor_source)
+        self.assertIn("st.file_uploader", editor_source)
+        self.assertIn("st.data_editor", editor_source)
+        self.assertIn("record_valuation_snapshots(account_id, parsed_rows)", editor_source)
+
     def test_trade_log_realized_profit_rate_cell_uses_sell_log_lookup(self) -> None:
         """거래 기록의 실현수익률 컬럼은 매도 거래 ID lookup으로 표시한다."""
 

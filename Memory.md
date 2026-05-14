@@ -14,6 +14,7 @@
 - [x] Dashboard 스냅샷 우선 표시와 `평가액 기록` 페이지 추가
 - [x] 평가액 기록 시작일과 원금을 회사 납입금 단독 기준에서 개인 입금 포함 입금성 거래 기준으로 변경
 - [x] Supabase 평가 스냅샷 저장 전 중복 계좌 재조회로 발생하던 “계좌를 찾을 수 없습니다” 경고 방지
+- [x] 평가액 기록 CSV 저장/불러오기와 화면 수정 저장 기능 추가
 - [x] 계산/DB/스키마/UI/배치 회귀 테스트 추가 및 통과
 - [ ] Supabase 운영/스테이징 DB에 `migrations/2026-05-14_add_daily_valuation_snapshot.sql` 적용
 - [ ] 기존 `migrations/2026-05-14_normalize_temporal_columns.sql` 적용 전 cast 실패 행 여부 점검
@@ -38,6 +39,7 @@
 - `src/sqlite_db.py`: SQLite 평가 스냅샷 테이블 생성 및 저장/조회/삭제 구현
 - `src/db.py`: Supabase/SQLite 공통 wrapper, Supabase batch upsert, cache 무효화, export table 반영
 - `src/ui/app_core.py`: Dashboard 스냅샷 우선 표시, 평가액 기록 페이지, 거래/CSV/가격 갱신 후 재계산 hook 추가
+- `src/ui/app_core.py`: 평가액 기록 CSV 저장/불러오기, `data_editor` 기반 수동 수정 저장 추가
 - `pages/valuation.py`: Streamlit 평가액 기록 페이지 진입점 추가
 - `scripts/run_daily_rollup.py`: 기존 일별 계좌 스냅샷 저장 후 평가 스냅샷도 재계산 저장
 - `scripts/verify_streamlit_deployment.py`: `valuation` 페이지 검증 대상 추가
@@ -70,8 +72,9 @@ streamlit run app.py --server.port 8501 --server.address 0.0.0.0 --server.fileWa
 
 ## 최신 검증 결과
 - `python -m compileall app.py src scripts tests pages` 성공
+- `python -m pytest tests/test_app_dashboard.py tests/test_db.py tests/test_valuation.py tests/test_verify_streamlit_deployment.py` 성공, 166 tests
 - `python -m pytest tests/test_valuation.py tests/test_db.py tests/test_app_dashboard.py tests/test_run_daily_rollup.py tests/test_verify_streamlit_deployment.py` 성공, 164 tests
-- `python -m unittest discover -s tests -p "test_*.py"` 성공, 229 tests
+- `python -m unittest discover -s tests -p "test_*.py"` 성공, 232 tests
 - `git diff --check -- README.md docs/VALIDATION.md setup_supabase.sql migrations/2026-05-14_add_daily_valuation_snapshot.sql src/valuation.py src/market.py src/sqlite_db.py src/db.py src/ui/app_core.py scripts/run_daily_rollup.py scripts/verify_streamlit_deployment.py pages/valuation.py tests/test_valuation.py tests/test_db.py tests/test_setup_supabase_sql.py tests/test_app_dashboard.py tests/test_run_daily_rollup.py tests/test_verify_streamlit_deployment.py` 성공
 - 로컬 Streamlit 서버 `http://127.0.0.1:8501` health `ok`
 - `python scripts/verify_streamlit_deployment.py --url http://127.0.0.1:8501 --page valuation --expect-backend sqlite --wait-ms 12000 ...` 성공, `ok=true`

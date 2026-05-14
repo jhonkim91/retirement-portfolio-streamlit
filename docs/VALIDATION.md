@@ -12,14 +12,16 @@
 - 경고 수정: Supabase 평가 스냅샷 저장 전 중복 계좌 재조회로 정상 계좌에서도 “계좌를 찾을 수 없습니다”가 표시될 수 있는 경로를 제거
 - 신규 가격 조회: 거래 로그 종목별 날짜 범위 가격 이력을 KIS/Naver/yfinance 경로로 조회하고 실패 종목은 빈 series로 넘겨 lot 단가 fallback 적용
 - 신규 UI: `평가액 기록` 별도 페이지 추가, Dashboard 상단은 오늘 평가 스냅샷이 있으면 `보유 평가액`/`입금 원금` 기준으로 표시
+- 신규 편집: 평가액 기록 CSV 저장/불러오기와 `data_editor` 기반 수동 수정 저장 추가
 - 재계산 hook: 거래 저장/수정/삭제, 현금 흐름, CSV import 완료, 수동 가격 refresh, daily rollup에서 계좌별 1회 재계산
 - 배치 연동: `scripts/run_daily_rollup.py`가 기존 `daily_account_snapshot`과 신규 `daily_valuation_snapshot`을 함께 처리
 - 환경: 로컬 Python 3.11, Streamlit, SQLite backend 검증
 
 ## 명령 검증
 - `python -m compileall app.py src scripts tests pages` 성공
+- `python -m pytest tests/test_app_dashboard.py tests/test_db.py tests/test_valuation.py tests/test_verify_streamlit_deployment.py` 성공, 166 tests
 - `python -m pytest tests/test_valuation.py tests/test_db.py tests/test_app_dashboard.py tests/test_run_daily_rollup.py tests/test_verify_streamlit_deployment.py` 성공, 164 tests
-- `python -m unittest discover -s tests -p "test_*.py"` 성공, 229 tests
+- `python -m unittest discover -s tests -p "test_*.py"` 성공, 232 tests
 - `git diff --check -- README.md docs/VALIDATION.md setup_supabase.sql migrations/2026-05-14_add_daily_valuation_snapshot.sql src/valuation.py src/market.py src/sqlite_db.py src/db.py src/ui/app_core.py scripts/run_daily_rollup.py scripts/verify_streamlit_deployment.py pages/valuation.py tests/test_valuation.py tests/test_db.py tests/test_setup_supabase_sql.py tests/test_app_dashboard.py tests/test_run_daily_rollup.py tests/test_verify_streamlit_deployment.py` 성공
 - `curl -sS --max-time 5 http://127.0.0.1:8501/_stcore/health` 결과 `ok`
 
@@ -49,6 +51,8 @@ python scripts/verify_streamlit_deployment.py \
 - 매입가 fallback 및 `missing_price_symbols` 기록
 - 원금 초과 매입 `over_invested_amount`
 - 회사 납입금 없이 개인 입금만 있어도 결과 생성
+- CSV 저장 프레임을 수정한 뒤 다시 저장 payload로 변환
+- CSV/편집 프레임에서 빈 파생값을 저장 전 자동 계산
 
 ## DB/스키마 검증 범위
 - SQLite `record/list/delete_valuation_snapshots()` 저장/조회/삭제와 `missing_price_symbols` JSON list 정규화
@@ -60,6 +64,7 @@ python scripts/verify_streamlit_deployment.py \
 - `PAGES`, `PAGE_LABELS`, 사이드바, navigation page name에 `평가액 기록` 연결
 - Dashboard가 오늘 평가 스냅샷을 summary보다 우선 사용
 - Dashboard 문구가 `보유 평가액`, `입금 원금`, `현재 보유현금`, `입금 대비 손익`, `입금 대비 수익률`로 표시
+- 평가액 기록 페이지가 CSV 저장, CSV 불러오기, 화면 수정 저장 UI를 제공
 - `scripts/run_daily_rollup.py`가 기존 daily account snapshot과 신규 valuation snapshot을 함께 처리
 
 ## 미수행 항목

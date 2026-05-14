@@ -463,6 +463,12 @@ def list_valuation_snapshots(*args: Any, **kwargs: Any) -> Any:
     return get_db_module().list_valuation_snapshots(*args, **kwargs)
 
 
+def record_valuation_snapshots(*args: Any, **kwargs: Any) -> Any:
+    """저장소 모듈의 입금 기준 평가 스냅샷 저장 함수를 지연 호출한다."""
+
+    return get_db_module().record_valuation_snapshots(*args, **kwargs)
+
+
 def list_holdings(*args: Any, **kwargs: Any) -> Any:
     """저장소 모듈의 보유 종목 목록 함수를 지연 호출한다."""
 
@@ -813,6 +819,34 @@ TRADE_LOG_DATE_FILTER_LABELS = {
 }
 TRADE_LOG_PAGE_SIZE = 5
 TRADE_LOG_IMPORT_COLUMNS = ("거래일", "종목명", "코드", "유형", "자산군", "수량", "단가", "총액", "실현수익률", "메모")
+VALUATION_SNAPSHOT_CSV_COLUMNS = (
+    "기준일",
+    "입금 원금",
+    "잔여 매입원가",
+    "현금간주액",
+    "실제 보유현금",
+    "현금값",
+    "현금 기준",
+    "상품 평가액",
+    "보유 평가액",
+    "손익",
+    "수익률",
+    "원금초과 매입",
+    "가격 fallback",
+    "계산 사유",
+)
+VALUATION_SNAPSHOT_NUMERIC_COLUMNS = (
+    "입금 원금",
+    "잔여 매입원가",
+    "현금간주액",
+    "실제 보유현금",
+    "현금값",
+    "상품 평가액",
+    "보유 평가액",
+    "손익",
+    "수익률",
+    "원금초과 매입",
+)
 TABLE_LABELS = {
     "accounts": "계좌",
     "holdings": "보유 종목",
@@ -2020,6 +2054,248 @@ def save_trade_log_import_rows(account_id: int, rows: list[dict[str, Any]]) -> d
         else:
             saved_count += 1
     return {"saved_count": saved_count, "errors": errors}
+
+
+def build_valuation_snapshot_export_frame(snapshots: list[dict[str, Any]]) -> pd.DataFrame:
+    """평가액 기록 CSV 저장과 직접 수정에 사용할 원본 숫자 프레임을 만든다."""
+
+    rows: list[dict[str, Any]] = []
+    for row in snapshots:
+        missing_symbols = row.get("missing_price_symbols") or []
+        if not isinstance(missing_symbols, list):
+            missing_symbols = [str(missing_symbols)]
+        rows.append(
+            {
+                "기준일": row.get("valuation_date") or "",
+                "입금 원금": float(row.get("company_principal") or 0),
+                "잔여 매입원가": float(row.get("invested_cost") or 0),
+                "현금간주액": float(row.get("implied_cash") or 0),
+                "실제 보유현금": "" if row.get("actual_cash_balance") is None else float(row.get("actual_cash_balance") or 0),
+                "현금값": float(row.get("cash_value") or 0),
+                "현금 기준": "실제" if row.get("cash_source") == "actual" else "간주",
+                "상품 평가액": float(row.get("holdings_market_value") or 0),
+                "보유 평가액": float(row.get("valuation_amount") or 0),
+                "손익": float(row.get("profit_loss") or 0),
+                "수익률": float(row.get("profit_rate") or 0),
+                "원금초과 매입": float(row.get("over_invested_amount") or 0),
+                "가격 fallback": ", ".join(map(str, missing_symbols)),
+                "계산 사유": row.get("calculation_reason") or "manual_edit",
+            }
+        )
+    return pd.DataFrame(rows, columns=list(VALUATION_SNAPSHOT_CSV_COLUMNS))
+
+
+def empty_valuation_snapshot_import_frame() -> pd.DataFrame:
+    """평가액 기록 CSV 빈 양식 프레임을 반환한다."""
+
+    return pd.DataFrame(columns=list(VALUATION_SNAPSHOT_CSV_COLUMNS))
+
+
+def read_valuation_snapshot_import_csv(uploaded_bytes: bytes) -> pd.DataFrame:
+    """업로드된 평가액 기록 CSV bytes를 프레임으로 읽는다."""
+
+    last_error: Exception | None = None
+    for encoding in ("utf-8-sig", "utf-8", "cp949", "euc-kr"):
+        try:
+            return pd.read_csv(io.BytesIO(uploaded_bytes), dtype=str, encoding=encoding).fillna("")
+        except UnicodeDecodeError as exc:
+            last_error = exc
+    raise ValueError("CSV 인코딩을 읽지 못했습니다. UTF-8 또는 CP949 CSV 파일을 업로드해 주세요.") from last_error
+
+
+def normalize_valuation_cash_source(value: Any) -> str:
+    """CSV 현금 기준 값을 DB 저장값으로 정규화한다."""
+
+    text = clean_trade_log_import_text(value).lower().replace(" ", "").replace("_", "")
+    if text in {"", "간주", "implied"}:
+        return "implied"
+    if text in {"실제", "actual"}:
+        return "actual"
+    raise ValueError(f"현금 기준은 간주 또는 실제만 사용할 수 있습니다: {value}")
+
+
+def parse_optional_valuation_number(value: Any) -> float | None:
+    """빈 값은 None, 숫자 값은 float로 변환한다."""
+
+    if not clean_trade_log_import_text(value):
+        return None
+    return parse_trade_log_import_number(value)
+
+
+def parse_missing_price_symbols(value: Any) -> list[str]:
+    """CSV fallback 종목 문자열을 list로 변환한다."""
+
+    text = clean_trade_log_import_text(value)
+    if not text:
+        return []
+    try:
+        parsed = json.loads(text)
+        if isinstance(parsed, list):
+            return [str(item).strip().upper() for item in parsed if str(item).strip()]
+    except json.JSONDecodeError:
+        pass
+    return [item.strip().upper() for item in text.replace(";", ",").split(",") if item.strip()]
+
+
+def parse_valuation_snapshot_import_frame(
+    frame: pd.DataFrame,
+    *,
+    account_id: int,
+    calculation_reason: str = "manual_edit",
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """평가액 기록 CSV/편집 프레임을 저장 가능한 스냅샷과 오류 목록으로 분리한다."""
+
+    if "기준일" not in frame.columns:
+        return [], [{"row": "-", "error": "필수 컬럼 누락: 기준일"}]
+
+    normalized_frame = frame.copy()
+    for column in VALUATION_SNAPSHOT_CSV_COLUMNS:
+        if column not in normalized_frame.columns:
+            normalized_frame[column] = ""
+
+    parsed_rows: list[dict[str, Any]] = []
+    errors: list[dict[str, Any]] = []
+    for index, raw_row in normalized_frame.loc[:, list(VALUATION_SNAPSHOT_CSV_COLUMNS)].iterrows():
+        source_row = int(index) + 2
+        if not any(clean_trade_log_import_text(raw_row.get(column)) for column in VALUATION_SNAPSHOT_CSV_COLUMNS):
+            continue
+        try:
+            valuation_date = parse_log_date(raw_row.get("기준일"))
+            if valuation_date is None:
+                raise ValueError("기준일을 확인해 주세요.")
+
+            company_principal = parse_optional_valuation_number(raw_row.get("입금 원금"))
+            invested_cost = parse_optional_valuation_number(raw_row.get("잔여 매입원가")) or 0.0
+            implied_cash = parse_optional_valuation_number(raw_row.get("현금간주액"))
+            actual_cash_balance = parse_optional_valuation_number(raw_row.get("실제 보유현금"))
+            cash_value = parse_optional_valuation_number(raw_row.get("현금값"))
+            cash_source = normalize_valuation_cash_source(raw_row.get("현금 기준"))
+            holdings_market_value = parse_optional_valuation_number(raw_row.get("상품 평가액")) or 0.0
+            valuation_amount = parse_optional_valuation_number(raw_row.get("보유 평가액"))
+            profit_loss = parse_optional_valuation_number(raw_row.get("손익"))
+            profit_rate = parse_optional_valuation_number(raw_row.get("수익률"))
+            over_invested_amount = parse_optional_valuation_number(raw_row.get("원금초과 매입"))
+
+            if company_principal is None or company_principal <= 0:
+                raise ValueError("입금 원금은 0보다 커야 합니다.")
+            if implied_cash is None:
+                implied_cash = max(company_principal - invested_cost, 0.0)
+            if cash_value is None:
+                cash_value = actual_cash_balance if cash_source == "actual" and actual_cash_balance is not None else implied_cash
+            if cash_source == "actual" and actual_cash_balance is None:
+                actual_cash_balance = cash_value
+            if cash_source == "implied":
+                actual_cash_balance = None
+            if valuation_amount is None:
+                valuation_amount = holdings_market_value + cash_value
+            if profit_loss is None:
+                profit_loss = valuation_amount - company_principal
+            if profit_rate is None:
+                profit_rate = (profit_loss / company_principal * 100) if company_principal else 0.0
+            if over_invested_amount is None:
+                over_invested_amount = max(invested_cost - company_principal, 0.0)
+
+            parsed_rows.append(
+                {
+                    "account_id": int(account_id),
+                    "valuation_date": valuation_date.isoformat(),
+                    "company_principal": round(company_principal, 4),
+                    "invested_cost": round(invested_cost, 4),
+                    "implied_cash": round(implied_cash, 4),
+                    "actual_cash_balance": round(actual_cash_balance, 4) if actual_cash_balance is not None else None,
+                    "cash_value": round(cash_value, 4),
+                    "cash_source": cash_source,
+                    "holdings_market_value": round(holdings_market_value, 4),
+                    "valuation_amount": round(valuation_amount, 4),
+                    "profit_loss": round(profit_loss, 4),
+                    "profit_rate": round(profit_rate, 4),
+                    "over_invested_amount": round(over_invested_amount, 4),
+                    "missing_price_symbols": parse_missing_price_symbols(raw_row.get("가격 fallback")),
+                    "source_hash": "manual_csv_edit",
+                    "calculation_reason": clean_trade_log_import_text(raw_row.get("계산 사유")) or calculation_reason,
+                }
+            )
+        except ValueError as exc:
+            errors.append({"row": source_row, "error": str(exc)})
+
+    return parsed_rows, errors
+
+
+def render_valuation_snapshot_csv_editor(account_id: int, snapshots: list[dict[str, Any]]) -> None:
+    """평가액 기록 CSV 저장/불러오기와 화면 수정 저장 UI를 렌더링한다."""
+
+    export_frame = build_valuation_snapshot_export_frame(snapshots)
+    template_frame = empty_valuation_snapshot_import_frame()
+    with st.expander("CSV 저장/불러오기 및 수정", expanded=False):
+        button_cols = st.columns(2, gap="small")
+        with button_cols[0]:
+            st.download_button(
+                "↓ CSV 저장",
+                data=export_frame.to_csv(index=False).encode("utf-8-sig"),
+                file_name=f"valuation_snapshots_{account_id}.csv",
+                mime="text/csv",
+                key=f"valuation-csv-export:{account_id}",
+                width="stretch",
+                disabled=export_frame.empty,
+            )
+        with button_cols[1]:
+            st.download_button(
+                "빈 CSV 양식 다운로드",
+                data=template_frame.to_csv(index=False).encode("utf-8-sig"),
+                file_name="valuation_snapshots_import_template.csv",
+                mime="text/csv",
+                key=f"valuation-csv-template:{account_id}",
+                width="stretch",
+            )
+
+        uploaded_file = st.file_uploader(
+            "평가액 기록 CSV 선택",
+            type=["csv"],
+            key=f"valuation-csv-import:{account_id}",
+            help="CSV 저장 파일 또는 빈 양식에 맞춘 파일을 불러옵니다.",
+        )
+        import_frame = export_frame if not export_frame.empty else template_frame
+        if uploaded_file is not None:
+            try:
+                import_frame = read_valuation_snapshot_import_csv(uploaded_file.getvalue())
+            except ValueError as exc:
+                st.error(str(exc))
+                return
+
+        editable_frame = import_frame.copy()
+        for column in VALUATION_SNAPSHOT_CSV_COLUMNS:
+            if column not in editable_frame.columns:
+                editable_frame[column] = ""
+        editable_frame = editable_frame.loc[:, list(VALUATION_SNAPSHOT_CSV_COLUMNS)]
+        edited_frame = st.data_editor(
+            editable_frame,
+            key=f"valuation-csv-editor:{account_id}",
+            width="stretch",
+            hide_index=True,
+            num_rows="dynamic",
+            column_config={
+                "기준일": st.column_config.TextColumn("기준일", required=True),
+                "현금 기준": st.column_config.SelectboxColumn("현금 기준", options=["간주", "실제"], required=True),
+            },
+        )
+        parsed_rows, parse_errors = parse_valuation_snapshot_import_frame(
+            edited_frame,
+            account_id=account_id,
+            calculation_reason="manual_edit",
+        )
+        if parse_errors:
+            st.dataframe(pd.DataFrame(parse_errors).rename(columns={"row": "행", "error": "오류"}), width="stretch", hide_index=True, height=160)
+        save_disabled = not parsed_rows or bool(parse_errors)
+        if st.button(
+            "수정 내용 저장",
+            key=f"valuation-csv-save:{account_id}",
+            width="stretch",
+            type="primary",
+            disabled=save_disabled,
+        ):
+            record_valuation_snapshots(account_id, parsed_rows)
+            st.success(f"평가액 기록 {len(parsed_rows):,}건을 저장했습니다.")
+            st.rerun()
 
 
 def render_trade_log_import_panel(account: dict[str, Any], existing_logs: list[dict[str, Any]]) -> None:
@@ -7471,6 +7747,7 @@ def valuation_page(account: dict[str, Any], rollup_state: dict[str, Any] | None 
                 st.rerun()
 
     snapshots = list_valuation_snapshots(account_id)
+    render_valuation_snapshot_csv_editor(account_id, snapshots)
     if not snapshots:
         st.info("입금 기록이 아직 없어 평가액 기록을 만들 수 없습니다. 거래 페이지에서 개인 입금 또는 회사 납입금을 먼저 등록해 주세요.")
         return
