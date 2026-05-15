@@ -17,6 +17,8 @@
 - `python -m unittest tests.test_analytics tests.test_app_dashboard tests.test_db` 성공, 181 tests
 - `python -m compileall app.py src scripts tests` 성공
 - `python -m unittest discover -s tests -p "test_*.py"` 성공, 273 tests
+- 코드 패치 커밋: `67643c0` (`Normalize fund trade amounts`)
+- 배포 방법: `git push origin main`
 
 ## 검증 범위
 - `holdings_frame()`/`account_summary()` 펀드 보유 평가액과 매입원가가 1,000좌 기준으로 계산되는지 검증
@@ -26,4 +28,4 @@
 - 평가액 부분 재계산의 `list_account_snapshots(..., start_date=...)` 호출과 ECharts 비활성 시 treemap intraday 조회 생략을 검증
 
 ## 미수행 항목
-- 운영 DB 데이터 직접 수정, 커밋, 푸시, 원격 배포 검증은 수행하지 않았다.
+- 운영 DB 데이터 직접 수정과 원격 배포 검증은 수행하지 않았다.
