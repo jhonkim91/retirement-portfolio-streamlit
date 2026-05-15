@@ -934,6 +934,13 @@ class TradeFormResetTests(unittest.TestCase):
         self.assertIn("₩15,200", dashboard_app.format_trade_log_premium_cell(log, "price", {}))
         self.assertIn("10주", dashboard_app.format_trade_log_premium_cell(log, "quantity", {}))
 
+    def test_won_format_uses_half_up_rounding(self) -> None:
+        """원화 표시는 소수점 이하를 원 단위로 일반 반올림한다."""
+
+        self.assertEqual(dashboard_app.format_won(1000.5), "₩1,001")
+        self.assertEqual(dashboard_app.dashboard_format_won(2000.5), "₩2,001")
+        self.assertEqual(dashboard_app.format_trade_log_cell({"price": 15200.5}, "price", {}), "15,201")
+
     def test_trade_log_actions_use_compact_icon_buttons(self) -> None:
         """거래 기록 액션은 행 선택과 수정 버튼을 제공한다."""
 

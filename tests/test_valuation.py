@@ -114,6 +114,41 @@ class CompanyPrincipalValuationTests(unittest.TestCase):
         self.assertEqual(snapshots[2]["cash_source"], "implied")
         self.assertEqual(snapshots[2]["cash_value"], 4000)
 
+    def test_money_amounts_round_to_won_units(self) -> None:
+        """평가 스냅샷 금액 컬럼은 소수점 없이 원 단위로 일반 반올림한다."""
+
+        snapshots = build_company_principal_valuation_snapshots(
+            account={"id": 1, "cash_balance": 0},
+            trade_logs=[
+                {"id": 1, "trade_date": "2026-01-01", "trade_type": "personal_deposit", "total_amount": 1000.5},
+                {
+                    "id": 2,
+                    "trade_date": "2026-01-02",
+                    "trade_type": "buy",
+                    "symbol": "AAA",
+                    "product_name": "A",
+                    "quantity": 1,
+                    "price": 100.5,
+                    "total_amount": 100.5,
+                },
+            ],
+            price_lookup={"AAA": {"2026-01-02": 100.5}},
+            account_snapshots=[{"snapshot_date": "2026-01-02", "cash_balance": 200.5}],
+            end_date=date(2026, 1, 2),
+            today_date=date(2026, 1, 3),
+            calculation_reason="test",
+        )
+
+        final_snapshot = snapshots[-1]
+        self.assertEqual(final_snapshot["company_principal"], 1001)
+        self.assertEqual(final_snapshot["invested_cost"], 101)
+        self.assertEqual(final_snapshot["actual_cash_balance"], 201)
+        self.assertEqual(final_snapshot["cash_value"], 201)
+        self.assertEqual(final_snapshot["holdings_market_value"], 101)
+        self.assertEqual(final_snapshot["valuation_amount"], 302)
+        self.assertEqual(final_snapshot["profit_loss"], -699)
+        self.assertEqual(final_snapshot["profit_rate"], -69.8302)
+
     def test_personal_deposit_starts_series_and_counts_as_principal(self) -> None:
         """개인 입금도 최초 시작일과 원금 누적에 포함한다."""
 

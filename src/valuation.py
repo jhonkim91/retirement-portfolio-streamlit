@@ -4,6 +4,7 @@ import hashlib
 import json
 from dataclasses import dataclass
 from datetime import date, timedelta
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Any
 
 
@@ -64,6 +65,17 @@ def safe_float(value: Any, default: float = 0.0) -> float:
         return float(value)
     except (TypeError, ValueError):
         return default
+
+
+def round_won(value: Any) -> int:
+    """금액을 원 단위로 일반 반올림한다."""
+
+    try:
+        if value in (None, ""):
+            return 0
+        return int(Decimal(str(value)).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+    except (InvalidOperation, TypeError, ValueError):
+        return 0
 
 
 def normalize_symbol(value: Any) -> str:
@@ -451,25 +463,36 @@ def build_company_principal_valuation_snapshots(
             actual_cash_balance = None
             cash_source = "implied"
 
-        valuation_amount = holdings_market_value + cash_value
-        profit_loss = valuation_amount - company_principal
-        profit_rate = (profit_loss / company_principal * 100) if company_principal else 0.0
+        rounded_company_principal = round_won(company_principal)
+        rounded_invested_cost = round_won(invested_cost)
+        rounded_implied_cash = round_won(implied_cash)
+        rounded_actual_cash_balance = round_won(actual_cash_balance) if actual_cash_balance is not None else None
+        rounded_cash_value = round_won(cash_value)
+        rounded_holdings_market_value = round_won(holdings_market_value)
+        rounded_valuation_amount = rounded_holdings_market_value + rounded_cash_value
+        rounded_profit_loss = rounded_valuation_amount - rounded_company_principal
+        rounded_over_invested_amount = round_won(over_invested_amount)
+        profit_rate = (
+            rounded_profit_loss / rounded_company_principal * 100
+            if rounded_company_principal
+            else 0.0
+        )
 
         snapshots.append(
             {
                 "account_id": int(account["id"]),
                 "valuation_date": valuation_date.isoformat(),
-                "company_principal": round(company_principal, 4),
-                "invested_cost": round(invested_cost, 4),
-                "implied_cash": round(implied_cash, 4),
-                "actual_cash_balance": round(actual_cash_balance, 4) if actual_cash_balance is not None else None,
-                "cash_value": round(cash_value, 4),
+                "company_principal": rounded_company_principal,
+                "invested_cost": rounded_invested_cost,
+                "implied_cash": rounded_implied_cash,
+                "actual_cash_balance": rounded_actual_cash_balance,
+                "cash_value": rounded_cash_value,
                 "cash_source": cash_source,
-                "holdings_market_value": round(holdings_market_value, 4),
-                "valuation_amount": round(valuation_amount, 4),
-                "profit_loss": round(profit_loss, 4),
+                "holdings_market_value": rounded_holdings_market_value,
+                "valuation_amount": rounded_valuation_amount,
+                "profit_loss": rounded_profit_loss,
                 "profit_rate": round(profit_rate, 4),
-                "over_invested_amount": round(over_invested_amount, 4),
+                "over_invested_amount": rounded_over_invested_amount,
                 "missing_price_symbols": missing_price_symbols,
                 "source_hash": source_hash,
                 "calculation_reason": calculation_reason,

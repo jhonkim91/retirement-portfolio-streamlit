@@ -6,6 +6,7 @@ import json
 import os
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from pathlib import Path
 from string import Template
 from typing import Any, Iterable, MutableMapping
@@ -1091,8 +1092,19 @@ EXCHANGE_LABELS = {
 }
 
 
+def round_won_amount(value: Any) -> int:
+    """금액을 원 단위로 일반 반올림한다."""
+
+    try:
+        if value in (None, ""):
+            return 0
+        return int(Decimal(str(value)).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+    except (InvalidOperation, TypeError, ValueError):
+        return 0
+
+
 def format_won(value: Any) -> str:
-    return f"₩{float(value or 0):,.0f}"
+    return f"₩{round_won_amount(value):,}"
 
 
 def format_pct(value: Any) -> str:
@@ -1110,11 +1122,11 @@ def _format_quote_price(value: Any, *, currency: str) -> str:
     numeric = float(value or 0)
     if str(currency or "").strip().upper() == "USD":
         return f"${numeric:,.2f}"
-    return f"₩{numeric:,.0f}"
+    return f"₩{round_won_amount(numeric):,}"
 
 
 def metric_delta(value: Any) -> str:
-    return f"{float(value or 0):+,.0f}"
+    return f"{round_won_amount(value):+,}"
 
 
 def label_page(value: Any) -> str:
@@ -2649,7 +2661,7 @@ def format_trade_log_cell(log: dict[str, Any], field_name: str, account_name_map
     if field_name == "quantity":
         return f"{float(log.get('quantity') or 0):,.4f}".rstrip("0").rstrip(".") or "0"
     if field_name in {"price", "total_amount", "cash_delta"}:
-        return f"{float(log.get(field_name) or 0):,.0f}"
+        return f"{round_won_amount(log.get(field_name)):,}"
     if field_name == "realized_profit_rate":
         if normalize_trade_log_type(log.get("trade_type")) != "sell":
             return "-"
@@ -3651,7 +3663,7 @@ def dashboard_safe_float(value: Any, default: float = 0.0) -> float:
 def dashboard_format_won(value: Any) -> str:
     """대시보드 Overview 카드용 원화 표시 문자열을 만든다."""
 
-    return f"₩{dashboard_safe_float(value):,.0f}"
+    return f"₩{round_won_amount(value):,}"
 
 
 def dashboard_format_rate(value: Any, *, signed: bool = False) -> str:

@@ -28,6 +28,7 @@
 - [x] 거래 기록 선택 삭제 UI/로직 추가
 - [x] 거래 기록 선택 삭제 시 연관 매도 자동 포함으로 음수 보유수량 오류 방지
 - [x] 평가액 기록 현금값을 일별 실제 계좌 스냅샷 현금 우선으로 보정
+- [x] 평가액 기록/원화 표시 금액을 원 단위 일반 반올림으로 보정
 - [ ] temporal normalize migration 실제 적용 전 운영 `realtime_price_bars` 테이블 생성/노출 여부 결정
 
 ## 프로젝트 개요
@@ -42,6 +43,9 @@
 - 배포 앱: `https://retirement-portfolio-app-nh2vq9ferqnpehsslbykbe.streamlit.app/`
 
 ## 최근 변경 파일
+- `src/valuation.py`: 평가 스냅샷 금액 컬럼을 소수점 4자리 저장 대신 원 단위 일반 반올림 값으로 산출
+- `src/ui/app_core.py`: 원화 표시 helper와 거래 금액 표시를 원 단위 일반 반올림으로 통일
+- `tests/test_valuation.py`, `tests/test_app_dashboard.py`: `.5` 금액 반올림과 평가 스냅샷 원 단위 저장 회귀 테스트 추가
 - `src/valuation.py`: 일별 계좌 스냅샷 현금이 있으면 평가액 기록 현금값에 실제 현금을 우선 사용하고, 보유 수량 없이 먼저 들어온 매도는 매칭 수량만 현금 유입 반영
 - `src/db.py`, `src/ui/app_core.py`, `scripts/run_daily_rollup.py`: daily rollup/manual rebuild 평가 스냅샷 재계산 시 `daily_account_snapshot` 목록 전달
 - `tests/test_valuation.py`, `tests/test_run_daily_rollup.py`: 과거 실제 현금 우선 적용과 미매칭 매도 현금 부풀림 방지 회귀 테스트 추가
@@ -67,6 +71,7 @@
 - Dashboard는 오늘 평가 스냅샷이 있으면 `보유 평가액`, `입금 원금`, `현재 보유현금`, `입금 대비 손익`, `입금 대비 수익률`을 우선 표시한다.
 - 평가액 기록 조회와 화면 표시는 `valuation_date DESC, id DESC` 최신 기준일 우선 순서를 사용한다.
 - 평가액 기록 현금값은 오늘은 `account.cash_balance`, 과거일은 같은 날짜 `daily_account_snapshot.cash_balance`가 있으면 실제 현금, 없으면 매수/매도/현금흐름 원장 현금으로 계산한다.
+- 평가액 기록의 금액 컬럼과 원화 UI 표시는 소수점 이하를 원 단위로 일반 반올림한다. 수익률은 기존처럼 소수점 표시를 유지한다.
 - 보유 수량 없이 먼저 들어온 매도 기록은 평가 현금을 부풀리지 않도록 FIFO lot에 매칭된 수량 비율만 현금 유입으로 반영한다.
 - 거래 기록 삭제는 개별 행 삭제 버튼 대신 선택 id 목록을 세션에 저장하고, 선택 삭제 dialog에서 기존 `delete_trade_log()`와 평가액 기록 재계산 경로를 반복 호출한다.
 - 선택 매수 삭제로 남은 매도 원장이 보유 수량을 음수로 만들 경우 해당 연관 매도 기록을 확인 dialog의 삭제 대상에 자동 포함한다.
@@ -88,16 +93,11 @@ streamlit run app.py --server.port 8501 --server.address 0.0.0.0 --server.fileWa
 ```
 
 ## 최신 검증 결과
-- 작업 범위: 평가액 기록 현금흐름 산식 재점검 및 실제 일별 현금 우선 보정
-- 배포 코드 커밋: `01a005aaab717a29db431032d0e0d43ade3b521e` (`Fix valuation cashflow snapshots`)
-- 배포 방법: 요청 범위 파일만 선별 커밋 후 `git push origin main`
-- 원격 배포 검증: `python scripts/verify_streamlit_deployment.py --page valuation --expect-backend supabase --wait-ms 30000 ...` 성공, `logged_in=true`, `workspace_visible=true`, `backend_storage_code=supabase`
-- 원격 검증 산출물: `artifacts/deploy-verify-valuation-cashflow-20260515-0352.txt`, `artifacts/deploy-verify-valuation-cashflow-20260515-0352.png`
-- 운영 read-only 점검: `jhonkim2025@gmail.com`의 미래에셋(account 23), 신한(account 24) 거래/평가/일별 스냅샷 조회
-- `python -m compileall src/valuation.py src/ui/app_core.py src/db.py scripts/run_daily_rollup.py tests/test_valuation.py tests/test_run_daily_rollup.py` 성공
-- `python -m unittest tests.test_valuation tests.test_app_dashboard tests.test_run_daily_rollup` 성공, 120 tests
+- 작업 범위: 평가액 기록/원화 표시 금액의 원 단위 반올림 보정
+- `python -m compileall src/valuation.py src/ui/app_core.py tests/test_valuation.py tests/test_app_dashboard.py` 성공
+- `python -m unittest tests.test_valuation tests.test_app_dashboard` 성공, 121 tests
 - `python -m compileall app.py src scripts tests` 성공
-- `python -m unittest discover -s tests -p "test_*.py"` 성공, 251 tests
+- `python -m unittest discover -s tests -p "test_*.py"` 성공, 253 tests
 - 테스트 중 Streamlit bare mode 경고가 출력됐으나 모든 테스트는 성공했다.
 
 ## Git/GitHub 상태
