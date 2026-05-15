@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 from datetime import date
-import importlib
-import os
 from pathlib import Path
 import tempfile
 import unittest
@@ -898,8 +896,8 @@ class SQLiteRealtimeQuotePersistenceTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as temp_dir:
             database_path = Path(temp_dir) / "portfolio.db"
-            with patch.dict(os.environ, {"RETIREMENT_DB_PATH": str(database_path)}, clear=False):
-                sqlite_module = importlib.reload(sqlite_db)
+            with patch.object(sqlite_db, "DB_PATH", database_path):
+                sqlite_module = sqlite_db
                 sqlite_module.initialize_database()
                 account_id = sqlite_module.create_account("user-1::테스트 계좌", opening_cash=500000)
                 sqlite_module.record_trade(
@@ -944,8 +942,8 @@ class SQLiteRealtimeQuotePersistenceTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as temp_dir:
             database_path = Path(temp_dir) / "portfolio.db"
-            with patch.dict(os.environ, {"RETIREMENT_DB_PATH": str(database_path)}, clear=False):
-                sqlite_module = importlib.reload(sqlite_db)
+            with patch.object(sqlite_db, "DB_PATH", database_path):
+                sqlite_module = sqlite_db
                 sqlite_module.initialize_database()
                 account_id = sqlite_module.create_account("user-1::테스트 계좌", opening_cash=100000)
 
@@ -971,8 +969,8 @@ class SQLiteRealtimeQuotePersistenceTests(unittest.TestCase):
     def test_adjust_cash_balance_updates_account_without_trade_log(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             database_path = Path(temp_dir) / "portfolio.db"
-            with patch.dict(os.environ, {"RETIREMENT_DB_PATH": str(database_path)}, clear=False):
-                sqlite_module = importlib.reload(sqlite_db)
+            with patch.object(sqlite_db, "DB_PATH", database_path):
+                sqlite_module = sqlite_db
                 sqlite_module.initialize_database()
                 account_id = sqlite_module.create_account("user-1::테스트 계좌", opening_cash=500000)
 
@@ -996,8 +994,8 @@ class SQLiteTradeLogEditDeleteTests(unittest.TestCase):
     def test_update_trade_log_rebuilds_holdings_without_touching_cash(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             database_path = Path(temp_dir) / "portfolio.db"
-            with patch.dict(os.environ, {"RETIREMENT_DB_PATH": str(database_path)}, clear=False):
-                sqlite_module = importlib.reload(sqlite_db)
+            with patch.object(sqlite_db, "DB_PATH", database_path):
+                sqlite_module = sqlite_db
                 sqlite_module.initialize_database()
                 account_id = sqlite_module.create_account("user-1::수정 테스트", opening_cash=500000)
                 sqlite_module.record_trade(
@@ -1042,8 +1040,8 @@ class SQLiteTradeLogEditDeleteTests(unittest.TestCase):
     def test_delete_trade_log_clears_active_holding_without_touching_cash(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             database_path = Path(temp_dir) / "portfolio.db"
-            with patch.dict(os.environ, {"RETIREMENT_DB_PATH": str(database_path)}, clear=False):
-                sqlite_module = importlib.reload(sqlite_db)
+            with patch.object(sqlite_db, "DB_PATH", database_path):
+                sqlite_module = sqlite_db
                 sqlite_module.initialize_database()
                 account_id = sqlite_module.create_account("user-1::삭제 테스트", opening_cash=500000)
                 sqlite_module.record_trade(
@@ -1075,8 +1073,8 @@ class SQLiteTradeLogEditDeleteTests(unittest.TestCase):
     def test_update_cash_flow_trade_log_recomputes_cash_balance(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             database_path = Path(temp_dir) / "portfolio.db"
-            with patch.dict(os.environ, {"RETIREMENT_DB_PATH": str(database_path)}, clear=False):
-                sqlite_module = importlib.reload(sqlite_db)
+            with patch.object(sqlite_db, "DB_PATH", database_path):
+                sqlite_module = sqlite_db
                 sqlite_module.initialize_database()
                 account_id = sqlite_module.create_account("user-1::현금 수정 테스트", opening_cash=500000)
                 sqlite_module.record_cash_flow(
@@ -1109,8 +1107,8 @@ class SQLiteTradeLogEditDeleteTests(unittest.TestCase):
     def test_delete_cash_flow_trade_log_restores_cash_balance(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             database_path = Path(temp_dir) / "portfolio.db"
-            with patch.dict(os.environ, {"RETIREMENT_DB_PATH": str(database_path)}, clear=False):
-                sqlite_module = importlib.reload(sqlite_db)
+            with patch.object(sqlite_db, "DB_PATH", database_path):
+                sqlite_module = sqlite_db
                 sqlite_module.initialize_database()
                 account_id = sqlite_module.create_account("user-1::현금 삭제 테스트", opening_cash=500000)
                 sqlite_module.record_cash_flow(

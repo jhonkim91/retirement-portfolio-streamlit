@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import time
 from typing import Any
 
 import streamlit as st
@@ -11,9 +12,11 @@ DEFAULT_SUPABASE_URL = "https://iyszkybxostbjfzbbymq.supabase.co"
 DEFAULT_EMAIL_REDIRECT_TO = "https://retirement-portfolio-app-nh2vq9ferqnpehsslbykbe.streamlit.app/"
 SESSION_STATE_KEY = "auth_session"
 BACKEND_STATE_KEY = "db_backend_state"
+CLIENT_STATE_KEY = "supabase_client_state"
 DEMO_SESSION_MODE = "local_demo"
 DEMO_USER_ID = "local-demo-user"
 DEMO_USER_EMAIL = "test"
+SESSION_REFRESH_SKEW_SECONDS = 60
 _FALLBACK_STATE: dict[str, Any] = {}
 
 
@@ -108,10 +111,52 @@ def _save_demo_session() -> None:
     store.pop(BACKEND_STATE_KEY, None)
 
 
+def _client_state() -> dict[str, Any]:
+    """클라이언트와 세션 서명을 캐시하는 상태를 반환한다."""
+    store = _state_store()
+    state = store.get(CLIENT_STATE_KEY)
+    if isinstance(state, dict):
+        return state
+
+    state = {
+        "client": None,
+        "session_signature": "",
+    }
+    store[CLIENT_STATE_KEY] = state
+    return state
+
+
+def _session_signature(session: dict[str, Any] | None) -> str:
+    """세션의 unique signature를 생성한다."""
+    if not session:
+        return ""
+    return "|".join(
+        [
+            str(session.get("access_token") or ""),
+            str(session.get("refresh_token") or ""),
+            str(session.get("expires_at") or ""),
+        ]
+    )
+
+
+def _session_expires_soon(session: dict[str, Any] | None, *, skew_seconds: int = SESSION_REFRESH_SKEW_SECONDS) -> bool:
+    """세션이 곧 만료될 예정인지 확인한다."""
+    if not session:
+        return False
+    expires_at = session.get("expires_at")
+    if expires_at in (None, ""):
+        return False
+    try:
+        return int(expires_at) <= int(time.time()) + int(skew_seconds)
+    except Exception:
+        return False
+
+
 def clear_session() -> None:
     store = _state_store()
     store.pop(SESSION_STATE_KEY, None)
     store.pop(BACKEND_STATE_KEY, None)
+    store.pop(CLIENT_STATE_KEY, None)
 
 
 def _raw_session() -> dict[str, Any] | None:
@@ -119,17 +164,23 @@ def _raw_session() -> dict[str, Any] | None:
     return session if isinstance(session, dict) else None
 
 
-def get_client() -> Client:
-    """현재 세션 기준 Supabase 클라이언트를 반환한다."""
-
+def get_client(*, refresh_if_needed: bool = False) -> Client:
+    """현재 세션 기준 Supabase 클라이언트를 반환한다.
+    
+    세션 signature와 만료 시간을 캐시해 불필요한 set_session() 호출을 줄인다.
+    """
     if not is_enabled():
         raise RuntimeError("Supabase 인증이 설정되지 않았습니다.")
 
-    client = create_client(_supabase_url(), _supabase_key())
+    state = _client_state()
+    client = state.get("client")
+    if client is None:
+        client = create_client(_supabase_url(), _supabase_key())
+        state["client"] = client
+        state["session_signature"] = ""
+
     session = _raw_session()
-    if not session:
-        return client
-    if is_demo_user():
+    if not session or is_demo_user():
         return client
 
     access_token = str(session.get("access_token") or "")
@@ -138,24 +189,37 @@ def get_client() -> Client:
         clear_session()
         return client
 
+    current_signature = _session_signature(session)
+    needs_refresh = refresh_if_needed or _session_expires_soon(session)
+
+    # 세션이 동일하고 만료 임박도 아니면 set_session을 다시 호출하지 않는다.
+    if state.get("session_signature") == current_signature and not needs_refresh:
+        return client
+
     try:
         response = client.auth.set_session(access_token, refresh_token)
     except Exception:
         clear_session()
-        return client
+        return create_client(_supabase_url(), _supabase_key())
 
     if response.session:
         _save_session(response.session)
+        state["session_signature"] = _session_signature(_raw_session())
+    else:
+        state["session_signature"] = current_signature
+
     return client
 
 
 def refresh_session_state() -> None:
+    """명시적으로 세션을 점검하고 필요 시 refresh한다."""
     if is_demo_user():
         return
     if not is_enabled():
         clear_session()
         return
-    get_client()
+    # 명시적으로 세션 점검이 필요할 때만 refresh 경로를 탄다.
+    get_client(refresh_if_needed=True)
 
 
 def sign_in(email: str, password: str) -> Any:

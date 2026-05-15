@@ -96,6 +96,7 @@ def _rgba_from_hex(value: str, alpha: float) -> str:
     return f"rgba({red}, {green}, {blue}, {max(0.0, min(1.0, float(alpha))):.2f})"
 
 
+@st.cache_data(show_spinner=False)
 def load_design_tokens() -> dict[str, str | list[str]]:
     """`.streamlit/config.toml`을 기준으로 파생 디자인 토큰을 계산한다."""
 
@@ -218,6 +219,7 @@ def load_design_tokens() -> dict[str, str | list[str]]:
     }
 
 
+@st.cache_data(show_spinner=False)
 def render_app_stylesheet() -> str:
     """디자인 토큰을 외부 CSS 템플릿에 주입한 결과를 반환한다."""
 
@@ -251,7 +253,6 @@ set_holding_price = _db.set_holding_price
 backend_status = _db.backend_status
 is_accounts_hotfix_error = _db.is_accounts_hotfix_error
 sync_account_rollup = _db.sync_account_rollup
-DESIGN_TOKENS = load_design_tokens()
 
 
 def holdings_overview_frame(
@@ -293,9 +294,12 @@ st.set_page_config(
 )
 
 
+DESIGN_TOKENS = load_design_tokens()
 PAGES = ("Dashboard", "Trades", "Data")
 PENDING_CONFIRMATION_EMAIL_KEY = "pending_confirmation_email"
 AUTH_FEEDBACK_KEY = "auth_feedback"
+AUTH_CALLBACK_RERUN_SIGNATURE_KEY = "auth_callback_rerun_signature"
+INVALID_ACCOUNT_RERUN_GUARD_KEY = "invalid_account_rerun_guard"
 TRADE_SEARCH_QUERY_KEY = "trade_search_query"
 TRADE_SYMBOL_KEY = "trade_symbol"
 TRADE_PRODUCT_NAME_KEY = "trade_product_name"
@@ -941,6 +945,8 @@ def init_state() -> None:
     st.session_state.setdefault("rollup_sync_signature", "")
     st.session_state.setdefault(PENDING_CONFIRMATION_EMAIL_KEY, "")
     st.session_state.setdefault(AUTH_FEEDBACK_KEY, None)
+    st.session_state.setdefault(AUTH_CALLBACK_RERUN_SIGNATURE_KEY, "")
+    st.session_state.setdefault(INVALID_ACCOUNT_RERUN_GUARD_KEY, False)
     st.session_state.setdefault(TRADE_SEARCH_QUERY_KEY, "")
     st.session_state.setdefault(TRADE_SYMBOL_KEY, "")
     st.session_state.setdefault(TRADE_PRODUCT_NAME_KEY, "")
@@ -1271,12 +1277,28 @@ def clear_query_params() -> None:
         del st.query_params[key]
 
 
+def auth_callback_signature() -> str:
+    """현재 URL의 인증 콜백 파라미터를 1회 처리용 서명으로 반환한다."""
+
+    for key in ("error_description", "code", "token_hash"):
+        value = str(st.query_params.get(key) or "").strip()
+        if value:
+            return f"{key}:{value}"
+    return ""
+
+
 def handle_auth_callback() -> bool:
+    callback_signature = auth_callback_signature()
+    if callback_signature and st.session_state.get(AUTH_CALLBACK_RERUN_SIGNATURE_KEY) == callback_signature:
+        clear_query_params()
+        return False
+
     error_description = str(st.query_params.get("error_description") or "").strip()
     error_code = str(st.query_params.get("error_code") or "").strip()
     if error_description:
         suffix = f" ({error_code})" if error_code else ""
         set_auth_feedback("error", f"이메일 확인에 실패했습니다{suffix}: {error_description}")
+        st.session_state[AUTH_CALLBACK_RERUN_SIGNATURE_KEY] = callback_signature
         clear_query_params()
         return True
 
@@ -1289,6 +1311,7 @@ def handle_auth_callback() -> bool:
         else:
             set_auth_feedback("success", "이메일 확인이 완료되어 바로 로그인했습니다.")
             st.session_state[PENDING_CONFIRMATION_EMAIL_KEY] = ""
+        st.session_state[AUTH_CALLBACK_RERUN_SIGNATURE_KEY] = callback_signature
         clear_query_params()
         return True
 
@@ -1302,9 +1325,11 @@ def handle_auth_callback() -> bool:
         else:
             set_auth_feedback("success", "이메일 확인이 완료되었습니다. 이제 로그인해 주세요.")
             st.session_state[PENDING_CONFIRMATION_EMAIL_KEY] = ""
+        st.session_state[AUTH_CALLBACK_RERUN_SIGNATURE_KEY] = callback_signature
         clear_query_params()
         return True
 
+    st.session_state[AUTH_CALLBACK_RERUN_SIGNATURE_KEY] = ""
     return False
 
 
@@ -4493,7 +4518,12 @@ def main() -> None:
     account = get_account(int(selected_account_id))
     if not account:
         st.session_state["selected_account_id"] = None
+        if st.session_state.get(INVALID_ACCOUNT_RERUN_GUARD_KEY):
+            st.warning("선택한 계좌를 찾지 못해 자동 새로고침을 중단했습니다. 사이드바에서 다른 계좌를 선택하거나 데이터를 다시 확인해 주세요.")
+            return
+        st.session_state[INVALID_ACCOUNT_RERUN_GUARD_KEY] = True
         st.rerun()
+    st.session_state[INVALID_ACCOUNT_RERUN_GUARD_KEY] = False
     holdings = list_holdings(int(account["id"]))
     rollup_state: dict[str, Any] = {"snapshot_date": date.today().isoformat(), "snapshot_updated": False}
     if should_sync_rollup(int(account["id"])):

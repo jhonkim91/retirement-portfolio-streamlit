@@ -528,6 +528,7 @@ def _search_products_cached(cleaned_query: str, limit: int = 8) -> list[dict[str
     return sorted(results, key=rank)[:limit]
 
 
+@st.cache_data(ttl=3600, max_entries=300, show_spinner=False)
 def search_products(query: str, limit: int = 8) -> list[dict[str, Any]]:
     """여러 외부 경로를 순차 조회해 검색 후보를 반환한다."""
 
@@ -560,7 +561,7 @@ def _empty_intraday_snapshot(normalized: str) -> dict[str, Any]:
 
 
 def _fetch_latest_price_from_yfinance(symbol: str) -> dict[str, Any]:
-    """기존 yfinance 경로로 최신 종가를 조회한다."""
+    """기존 yfinance 경로로 최신 종가를 조회한다. timeout을 강제한다."""
 
     normalized = normalize_symbol(symbol)
     if not normalized:
@@ -568,19 +569,33 @@ def _fetch_latest_price_from_yfinance(symbol: str) -> dict[str, Any]:
     if yf is None:
         raise ValueError("가격 조회 모듈을 불러오지 못했습니다.")
 
-    history = yf.Ticker(normalized).history(period="5d", auto_adjust=False)
-    closes = history.get("Close")
-    if closes is None or closes.dropna().empty:
-        raise ValueError(f"{normalized} 가격을 가져오지 못했습니다.")
+    try:
+        data = yf.download(
+            normalized,
+            period="5d",
+            interval="1d",
+            auto_adjust=False,
+            progress=False,
+            threads=False,
+            timeout=6,
+        )
+        if data.empty or "Close" not in data:
+            raise ValueError(f"{normalized} 가격 데이터가 비어 있습니다.")
 
-    last_value = closes.dropna().iloc[-1]
-    last_date = closes.dropna().index[-1]
-    return {
-        "symbol": normalized,
-        "price": float(last_value),
-        "as_of": pd.Timestamp(last_date).date().isoformat(),
-        "source": "Yahoo",
-    }
+        closes = data["Close"].dropna().astype(float)
+        if closes.empty:
+            raise ValueError(f"{normalized} 가격을 가져오지 못했습니다.")
+
+        last_price = float(closes.iloc[-1])
+        last_index = closes.dropna().index[-1]
+        return {
+            "symbol": normalized,
+            "price": last_price,
+            "as_of": pd.Timestamp(last_index).date().isoformat(),
+            "source": "Yahoo",
+        }
+    except Exception as exc:
+        raise ValueError(f"{normalized} 가격 조회 실패: {exc}") from exc
 
 
 def _fetch_intraday_price_snapshot_from_yfinance(symbol: str, interval: str = "5m") -> dict[str, Any]:
