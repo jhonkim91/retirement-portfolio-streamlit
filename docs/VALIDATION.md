@@ -19,6 +19,8 @@
 - `python -m unittest tests.test_valuation tests.test_analytics` 성공, 35 tests
 - `python -m compileall app.py src scripts tests` 성공
 - `python -m unittest discover -s tests -p "test_*.py"` 성공, 257 tests
+- `git push origin main` 성공, 배포 코드 커밋 `7b0af97a9ba017fe236c7d1fb2df45ebe9ef38cc`
+- `python scripts/verify_streamlit_deployment.py --page valuation --expect-backend supabase --wait-ms 30000 --text-output artifacts/deploy-verify-trade-normalize-20260515-0420.txt --screenshot artifacts/deploy-verify-trade-normalize-20260515-0420.png --debug-dir artifacts/deploy-verify-trade-normalize-20260515-0420-debug` 성공
 
 ## 검증 범위
 - 총액만 1,000배 수준으로 큰 중복 매수/매도 행이 평가 스냅샷의 원장 현금, 잔여 매입원가, 실현손익 계산에서 제외되는지 검증
@@ -26,8 +28,8 @@
 - `trade_logs_23.csv` 기준 제외 행과 교보악사파워인덱스 정정 실현손익을 산출 파일에 기록했는지 검증
 - `valuation_snapshots_23.csv` 기준 현재 실제 보유현금 `17,449`원을 사용한 최신 보유 평가액을 산출 파일에 기록했는지 검증
 - 전체 unittest suite가 기존 기능 회귀 없이 통과하는지 검증
+- 원격 Streamlit 평가액 기록 페이지가 로그인 후 Supabase backend로 로드되는지 검증
 
 ## 미수행 항목
 - 운영 거래 원장의 중복/비정상 거래 id 삭제 또는 수정은 destructive 작업이므로 수행하지 않았다.
 - 운영 `daily_valuation_snapshot` 재작성은 운영 DB 파생 데이터 변경이므로 수행하지 않았다.
-- 배포 후 원격 Streamlit 평가액 기록 페이지 검증은 아직 수행하지 않았다.

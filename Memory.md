@@ -101,6 +101,10 @@ streamlit run app.py --server.port 8501 --server.address 0.0.0.0 --server.fileWa
 
 ## 최신 검증 결과
 - 작업 범위: `valuation_snapshots_23.csv`, `trade_logs_23.csv` 기준 평가/실현손익 산식 재점검 및 중복 총액/종목코드 정규화 보정
+- 배포 코드 커밋: `7b0af97a9ba017fe236c7d1fb2df45ebe9ef38cc` (`Normalize trade logs for valuation`)
+- 배포 방법: 요청 범위 파일만 선별 커밋 후 `git push origin main`
+- 원격 배포 검증: `python scripts/verify_streamlit_deployment.py --page valuation --expect-backend supabase --wait-ms 30000 ...` 성공, `logged_in=true`, `workspace_visible=true`, `backend_storage_code=supabase`
+- 원격 검증 산출물: `artifacts/deploy-verify-trade-normalize-20260515-0420.txt`, `artifacts/deploy-verify-trade-normalize-20260515-0420.png`
 - 산출 파일: `artifacts/trade_logs_23_reconciled.csv`, `artifacts/valuation_snapshots_23_recalculated.csv`
 - `python -m compileall src/valuation.py src/analytics.py src/trade_log_filters.py tests/test_valuation.py tests/test_analytics.py` 성공
 - `python -m unittest tests.test_valuation tests.test_analytics` 성공, 35 tests
@@ -110,7 +114,7 @@ streamlit run app.py --server.port 8501 --server.address 0.0.0.0 --server.fileWa
 
 ## Git/GitHub 상태
 - 기본 브랜치: `main`
-- 최근 배포 코드 커밋: `2c1a2ed Round won amounts to units`
+- 최근 배포 코드 커밋: `7b0af97 Normalize trade logs for valuation`
 - 워크트리에는 이번 요청 전부터 `data/portfolio.db`, 로컬 도구 디렉터리, 산출물 등 여러 변경/미추적 파일이 함께 있었다.
 - 커밋 시 요청 관련 파일만 선별하고 `data/portfolio.db`, `.local/`, `.playtools*/`, `.playwright-browsers/`, `.vscode/`, `artifacts/`, `data/kis_cache/` 등 로컬 산출물은 제외한다.
 
