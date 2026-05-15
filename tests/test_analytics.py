@@ -59,7 +59,7 @@ class AccountSummaryTests(unittest.TestCase):
                 "id": 1,
                 "trade_type": "buy",
                 "trade_date": "2026-01-01",
-                "symbol": "K55207BU0715",
+                "symbol": "DUP",
                 "product_name": "교보악사파워인덱스",
                 "asset_type": "risk",
                 "quantity": 1000,
@@ -70,7 +70,7 @@ class AccountSummaryTests(unittest.TestCase):
                 "id": 2,
                 "trade_type": "buy",
                 "trade_date": "2026-01-01",
-                "symbol": "K55207BU0715",
+                "symbol": "DUP",
                 "product_name": "교보악사파워인덱스",
                 "asset_type": "risk",
                 "quantity": 1000,
@@ -81,7 +81,7 @@ class AccountSummaryTests(unittest.TestCase):
                 "id": 3,
                 "trade_type": "sell",
                 "trade_date": "2026-02-01",
-                "symbol": "K55207BU0715",
+                "symbol": "DUP",
                 "product_name": "교보악사파워인덱스",
                 "asset_type": "risk",
                 "quantity": 1000,
@@ -92,7 +92,7 @@ class AccountSummaryTests(unittest.TestCase):
                 "id": 4,
                 "trade_type": "sell",
                 "trade_date": "2026-02-01",
-                "symbol": "K55207BU0715",
+                "symbol": "DUP",
                 "product_name": "교보악사파워인덱스",
                 "asset_type": "risk",
                 "quantity": 1000,
@@ -109,6 +109,42 @@ class AccountSummaryTests(unittest.TestCase):
         self.assertEqual(summary["positions"][0]["sell_amount"], 3000)
         self.assertEqual(summary["positions"][0]["profit_loss"], 1000)
         self.assertEqual(summary["positions"][0]["profit_rate"], 50.0)
+
+    def test_realized_summary_uses_fund_price_per_thousand_units(self) -> None:
+        """펀드 좌수 거래는 기준가를 1,000좌당 가격으로 해석해 실현손익을 계산한다."""
+
+        summary = realized_summary(
+            [
+                {
+                    "id": 1,
+                    "trade_type": "buy",
+                    "trade_date": "2026-01-01",
+                    "symbol": "K55207BU0715",
+                    "product_name": "교보악사파워인덱스",
+                    "asset_type": "risk",
+                    "quantity": 3_501_508,
+                    "price": 2036,
+                    "total_amount": 7_129_070_288,
+                },
+                {
+                    "id": 2,
+                    "trade_type": "sell",
+                    "trade_date": "2026-02-01",
+                    "symbol": "K55207BU0715",
+                    "product_name": "교보악사파워인덱스",
+                    "asset_type": "risk",
+                    "quantity": 3_501_508,
+                    "price": 3189,
+                    "total_amount": 11_166_309_012,
+                },
+            ]
+        )
+
+        self.assertEqual(summary["sold_count"], 1)
+        self.assertEqual(summary["positions"][0]["buy_amount"], 7_129_070.29)
+        self.assertEqual(summary["positions"][0]["sell_amount"], 11_166_309.01)
+        self.assertEqual(summary["positions"][0]["profit_loss"], 4_037_238.72)
+        self.assertEqual(summary["positions"][0]["profit_rate"], 56.63)
 
     def test_realized_summary_matches_domestic_symbol_suffix(self) -> None:
         """국내 종목 접미사 유무가 달라도 실현손익 lot을 매칭한다."""

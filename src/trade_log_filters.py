@@ -37,6 +37,38 @@ def normalize_trade_symbol(value: Any) -> str:
     return symbol
 
 
+def is_fund_symbol(value: Any) -> bool:
+    """좌 단위 기준가를 쓰는 펀드성 심볼인지 반환한다."""
+
+    symbol = normalize_trade_symbol(value)
+    return symbol.startswith("K") and any(character.isdigit() for character in symbol)
+
+
+def is_fund_trade_log(log: dict[str, Any]) -> bool:
+    """좌 단위 기준가를 쓰는 펀드성 거래인지 반환한다."""
+
+    return is_fund_symbol(log.get("symbol"))
+
+
+def normalized_trade_amount(log: dict[str, Any]) -> float:
+    """펀드 좌수/기준가 단위 차이를 반영한 거래 총액을 반환한다."""
+
+    total_amount = abs(_safe_float(log.get("total_amount")))
+    quantity = abs(_safe_float(log.get("quantity")))
+    price = abs(_safe_float(log.get("price")))
+    if is_fund_trade_log(log) and quantity > 0 and price > 0:
+        expected_amount = quantity * price / 1000.0
+        if total_amount <= 0:
+            return expected_amount
+        if expected_amount > 0 and total_amount >= expected_amount * 100:
+            return total_amount / 1000.0
+        return total_amount
+
+    if total_amount > 0:
+        return total_amount
+    return quantity * price
+
+
 def _duplicate_key(log: dict[str, Any]) -> tuple[str, str, str, float, float] | None:
     """총액 스케일 중복 감지를 위한 거래 키를 만든다."""
 

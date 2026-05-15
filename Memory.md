@@ -44,9 +44,9 @@
 - 배포 앱: `https://retirement-portfolio-app-nh2vq9ferqnpehsslbykbe.streamlit.app/`
 
 ## 최근 변경 파일
-- `src/trade_log_filters.py`: 같은 날짜/유형/종목/수량/단가에서 총액만 1,000배 수준으로 큰 중복 매수/매도 행을 계산 입력에서 제외하는 helper 추가
-- `src/valuation.py`, `src/analytics.py`: 평가 스냅샷과 실현손익 계산에서 중복 총액 행 제외, 국내 종목 `.KS/.KQ` 접미사와 앞자리 0 차이를 같은 종목으로 정규화
-- `tests/test_valuation.py`, `tests/test_analytics.py`: 총액 스케일 중복 제외와 국내 종목 코드 정규화 회귀 테스트 추가
+- `src/trade_log_filters.py`: 펀드 좌수/기준가 총액을 1,000좌당 가격 기준으로 정규화하고, 같은 날짜/유형/종목/수량/단가에서 총액만 1,000배 수준으로 큰 중복 매수/매도 행을 계산 입력에서 제외하는 helper 추가
+- `src/valuation.py`, `src/analytics.py`: 평가 스냅샷과 실현손익 계산에서 펀드 금액/평가액을 `좌수 * 기준가 / 1000`으로 처리하고, 국내 종목 `.KS/.KQ` 접미사와 앞자리 0 차이를 같은 종목으로 정규화
+- `tests/test_valuation.py`, `tests/test_analytics.py`: 펀드 좌수/기준가 정규화, 총액 스케일 중복 제외, 국내 종목 코드 정규화 회귀 테스트 추가
 - `artifacts/trade_logs_23_reconciled.csv`, `artifacts/valuation_snapshots_23_recalculated.csv`: `trade_logs_23.csv`, `valuation_snapshots_23.csv` 기준 재산출 파일
 - `src/valuation.py`: 평가 스냅샷 금액 컬럼을 소수점 4자리 저장 대신 원 단위 일반 반올림 값으로 산출
 - `src/ui/app_core.py`: 원화 표시 helper와 거래 금액 표시를 원 단위 일반 반올림으로 통일
@@ -77,6 +77,7 @@
 - 평가액 기록 조회와 화면 표시는 `valuation_date DESC, id DESC` 최신 기준일 우선 순서를 사용한다.
 - 평가액 기록 현금값은 오늘은 `account.cash_balance`, 과거일은 같은 날짜 `daily_account_snapshot.cash_balance`가 있으면 실제 현금, 없으면 매수/매도/현금흐름 원장 현금으로 계산한다.
 - 평가액 기록의 금액 컬럼과 원화 UI 표시는 소수점 이하를 원 단위로 일반 반올림한다. 수익률은 기존처럼 소수점 표시를 유지한다.
+- 펀드성 코드(`K...`)는 수량을 좌수로 보고 기준가를 1,000좌당 가격으로 해석해 거래금액과 보유 평가액을 `좌수 * 기준가 / 1000`으로 계산한다.
 - 같은 날짜/유형/종목/수량/단가에 총액만 1,000배 수준으로 큰 중복 매수/매도가 있으면 큰 총액 행은 평가/실현손익 계산에서 제외한다.
 - 국내 종목 코드는 `.KS/.KQ` 접미사를 제거하고 숫자 코드는 6자리로 맞춰 `487240`과 `487240.KS`, `69500`과 `069500`을 같은 종목으로 매칭한다.
 - 보유 수량 없이 먼저 들어온 매도 기록은 평가 현금을 부풀리지 않도록 FIFO lot에 매칭된 수량 비율만 현금 유입으로 반영한다.
@@ -100,16 +101,16 @@ streamlit run app.py --server.port 8501 --server.address 0.0.0.0 --server.fileWa
 ```
 
 ## 최신 검증 결과
-- 작업 범위: `valuation_snapshots_23.csv`, `trade_logs_23.csv` 기준 평가/실현손익 산식 재점검 및 중복 총액/종목코드 정규화 보정
+- 작업 범위: `valuation_snapshots_23.csv`, `trade_logs_23.csv` 기준 펀드 좌수/기준가, 중복 총액, 종목코드 정규화 보정
 - 배포 코드 커밋: `7b0af97a9ba017fe236c7d1fb2df45ebe9ef38cc` (`Normalize trade logs for valuation`)
 - 배포 방법: 요청 범위 파일만 선별 커밋 후 `git push origin main`
 - 원격 배포 검증: `python scripts/verify_streamlit_deployment.py --page valuation --expect-backend supabase --wait-ms 30000 ...` 성공, `logged_in=true`, `workspace_visible=true`, `backend_storage_code=supabase`
 - 원격 검증 산출물: `artifacts/deploy-verify-trade-normalize-20260515-0420.txt`, `artifacts/deploy-verify-trade-normalize-20260515-0420.png`
 - 산출 파일: `artifacts/trade_logs_23_reconciled.csv`, `artifacts/valuation_snapshots_23_recalculated.csv`
 - `python -m compileall src/valuation.py src/analytics.py src/trade_log_filters.py tests/test_valuation.py tests/test_analytics.py` 성공
-- `python -m unittest tests.test_valuation tests.test_analytics` 성공, 35 tests
+- `python -m unittest tests.test_valuation tests.test_analytics` 성공, 37 tests
 - `python -m compileall app.py src scripts tests` 성공
-- `python -m unittest discover -s tests -p "test_*.py"` 성공, 257 tests
+- `python -m unittest discover -s tests -p "test_*.py"` 성공, 259 tests
 - 테스트 중 Streamlit bare mode 경고가 출력됐으나 모든 테스트는 성공했다.
 
 ## Git/GitHub 상태

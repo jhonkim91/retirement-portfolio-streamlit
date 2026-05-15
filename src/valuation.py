@@ -7,7 +7,12 @@ from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Any
 
-from .trade_log_filters import filter_scaled_duplicate_trade_logs, normalize_trade_symbol
+from .trade_log_filters import (
+    filter_scaled_duplicate_trade_logs,
+    is_fund_symbol,
+    normalize_trade_symbol,
+    normalized_trade_amount,
+)
 
 
 COMPANY_DEPOSIT_TYPE = "employer_deposit"
@@ -89,13 +94,7 @@ def normalize_symbol(value: Any) -> str:
 def trade_amount(log: dict[str, Any]) -> float:
     """거래 로그의 금액을 계산한다."""
 
-    total_amount = abs(safe_float(log.get("total_amount")))
-    if total_amount > 0:
-        return total_amount
-
-    quantity = abs(safe_float(log.get("quantity")))
-    price = abs(safe_float(log.get("price")))
-    return quantity * price
+    return normalized_trade_amount(log)
 
 
 def trade_cash_delta(log: dict[str, Any]) -> float:
@@ -104,7 +103,7 @@ def trade_cash_delta(log: dict[str, Any]) -> float:
     raw_cash_delta = log.get("cash_delta")
     trade_type = str(log.get("trade_type") or "").strip().lower()
     amount = trade_amount(log)
-    if raw_cash_delta not in (None, ""):
+    if raw_cash_delta not in (None, "") and trade_type not in BUY_SELL_TYPES:
         cash_delta = safe_float(raw_cash_delta)
         if abs(cash_delta) > 0.000001 or amount <= 0:
             return cash_delta
@@ -351,13 +350,15 @@ def current_holdings_market_value(
             if lot.quantity <= 0:
                 continue
 
+            fallback_price = lot.unit_cost * 1000 if is_fund_symbol(symbol) else lot.unit_cost
             price, used_fallback = price_at_date(
                 symbol,
                 target_date,
                 price_lookup,
-                fallback_price=lot.unit_cost,
+                fallback_price=fallback_price,
             )
-            market_value += lot.quantity * price
+            unit_divisor = 1000 if is_fund_symbol(symbol) else 1
+            market_value += lot.quantity * price / unit_divisor
             if used_fallback:
                 missing_price_symbols.add(symbol)
 

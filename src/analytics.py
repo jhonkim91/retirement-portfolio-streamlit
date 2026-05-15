@@ -7,7 +7,7 @@ from typing import Any
 import pandas as pd
 
 from .market import fetch_price_history, resolve_kis_sector_label
-from .trade_log_filters import filter_scaled_duplicate_trade_logs, normalize_trade_symbol
+from .trade_log_filters import filter_scaled_duplicate_trade_logs, normalize_trade_symbol, normalized_trade_amount
 
 
 CAPITAL_INFLOW_TYPES = {"personal_deposit", "employer_deposit"}
@@ -375,7 +375,7 @@ def realized_summary(trade_logs: list[dict[str, Any]]) -> dict[str, Any]:
         symbol = _trade_match_key(log)
         display_symbol = str(log.get("symbol") or "").strip().upper()
         quantity = float(log.get("quantity") or 0)
-        total_amount = float(log.get("total_amount") or 0)
+        total_amount = normalized_trade_amount(log)
         if quantity <= 0 or total_amount <= 0:
             continue
 

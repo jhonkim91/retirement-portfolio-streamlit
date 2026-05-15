@@ -188,6 +188,35 @@ class CompanyPrincipalValuationTests(unittest.TestCase):
         self.assertEqual(final_snapshot["implied_cash"], 8000)
         self.assertEqual(final_snapshot["valuation_amount"], 10000)
 
+    def test_fund_trade_amount_uses_price_per_thousand_units(self) -> None:
+        """펀드 좌수 거래는 기준가를 1,000좌당 가격으로 해석한다."""
+
+        snapshots = build_company_principal_valuation_snapshots(
+            account={"id": 1, "cash_balance": 0},
+            trade_logs=[
+                {"id": 1, "trade_date": "2026-01-01", "trade_type": "personal_deposit", "total_amount": 10_000_000},
+                {
+                    "id": 2,
+                    "trade_date": "2026-01-02",
+                    "trade_type": "buy",
+                    "symbol": "K55207BU0715",
+                    "product_name": "교보악사파워인덱스",
+                    "quantity": 3_501_508,
+                    "price": 2036,
+                    "total_amount": 7_129_070_288,
+                },
+            ],
+            price_lookup={"K55207BU0715": {"2026-01-02": 2036}},
+            end_date=date(2026, 1, 2),
+            today_date=date(2026, 1, 3),
+            calculation_reason="test",
+        )
+
+        final_snapshot = snapshots[-1]
+        self.assertEqual(final_snapshot["invested_cost"], 7_129_070)
+        self.assertEqual(final_snapshot["implied_cash"], 2_870_930)
+        self.assertEqual(final_snapshot["valuation_amount"], 10_000_000)
+
     def test_domestic_symbol_suffix_matches_existing_lot(self) -> None:
         """국내 종목의 `.KS` 접미사 유무가 달라도 같은 lot으로 매칭한다."""
 

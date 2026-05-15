@@ -6,9 +6,11 @@
 - 기준일: `2026-05-15`
 
 ## 최신 대표 검증 결과
-- 작업 범위: `valuation_snapshots_23.csv`, `trade_logs_23.csv` 기준 평가/실현손익 산식 재점검 및 중복 총액/종목코드 정규화 보정
-- 원인: 같은 날짜/유형/종목/수량/단가의 거래가 원 단위 총액과 1,000배 수준 총액으로 중복 저장되어 교보악사파워인덱스, 신한퇴직연금TopsValue40 매수/매도 금액이 계산에 중복 반영될 수 있었다.
+- 작업 범위: `valuation_snapshots_23.csv`, `trade_logs_23.csv` 기준 펀드 좌수/기준가, 중복 총액, 종목코드 정규화 보정
+- 원인: 펀드성 코드(`K...`)는 수량이 좌수이고 기준가가 1,000좌당 가격인데, 일부 경로에서 `좌수 * 기준가` 총액이 그대로 반영될 수 있었다.
+- 추가 원인: 같은 날짜/유형/종목/수량/단가의 거래가 원 단위 총액과 1,000배 수준 총액으로 중복 저장되어 교보악사파워인덱스, 신한퇴직연금TopsValue40 매수/매도 금액이 계산에 중복 반영될 수 있었다.
 - 추가 원인: 국내 종목 코드가 `487240`과 `487240.KS`처럼 접미사 유무가 다르면 FIFO lot 매칭에서 다른 종목으로 처리될 수 있었다.
+- 수정: 펀드 거래금액과 보유 평가액은 `좌수 * 기준가 / 1000`으로 정규화한다.
 - 수정: 총액만 1,000배 수준으로 큰 중복 매수/매도 행은 평가 스냅샷과 실현손익 계산 입력에서 제외한다.
 - 수정: 국내 종목 코드는 `.KS/.KQ` 접미사를 제거하고 숫자 코드는 6자리로 정규화해 같은 종목으로 매칭한다.
 - 산출 파일: `artifacts/trade_logs_23_reconciled.csv`, `artifacts/valuation_snapshots_23_recalculated.csv`
@@ -16,13 +18,14 @@
 
 ## 명령 검증
 - `python -m compileall src/valuation.py src/analytics.py src/trade_log_filters.py tests/test_valuation.py tests/test_analytics.py` 성공
-- `python -m unittest tests.test_valuation tests.test_analytics` 성공, 35 tests
+- `python -m unittest tests.test_valuation tests.test_analytics` 성공, 37 tests
 - `python -m compileall app.py src scripts tests` 성공
-- `python -m unittest discover -s tests -p "test_*.py"` 성공, 257 tests
+- `python -m unittest discover -s tests -p "test_*.py"` 성공, 259 tests
 - `git push origin main` 성공, 배포 코드 커밋 `7b0af97a9ba017fe236c7d1fb2df45ebe9ef38cc`
 - `python scripts/verify_streamlit_deployment.py --page valuation --expect-backend supabase --wait-ms 30000 --text-output artifacts/deploy-verify-trade-normalize-20260515-0420.txt --screenshot artifacts/deploy-verify-trade-normalize-20260515-0420.png --debug-dir artifacts/deploy-verify-trade-normalize-20260515-0420-debug` 성공
 
 ## 검증 범위
+- 펀드성 코드의 거래금액, 보유 평가액, 실현손익이 `좌수 * 기준가 / 1000` 기준으로 계산되는지 검증
 - 총액만 1,000배 수준으로 큰 중복 매수/매도 행이 평가 스냅샷의 원장 현금, 잔여 매입원가, 실현손익 계산에서 제외되는지 검증
 - 국내 종목 코드의 `.KS/.KQ` 접미사 유무와 앞자리 0 차이가 FIFO 매칭을 깨지 않는지 검증
 - `trade_logs_23.csv` 기준 제외 행과 교보악사파워인덱스 정정 실현손익을 산출 파일에 기록했는지 검증
