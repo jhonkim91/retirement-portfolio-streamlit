@@ -21,8 +21,8 @@
 - `python -m unittest tests.test_valuation tests.test_analytics` 성공, 37 tests
 - `python -m compileall app.py src scripts tests` 성공
 - `python -m unittest discover -s tests -p "test_*.py"` 성공, 259 tests
-- `git push origin main` 성공, 배포 코드 커밋 `7b0af97a9ba017fe236c7d1fb2df45ebe9ef38cc`
-- `python scripts/verify_streamlit_deployment.py --page valuation --expect-backend supabase --wait-ms 30000 --text-output artifacts/deploy-verify-trade-normalize-20260515-0420.txt --screenshot artifacts/deploy-verify-trade-normalize-20260515-0420.png --debug-dir artifacts/deploy-verify-trade-normalize-20260515-0420-debug` 성공
+- `git push origin main` 성공, 배포 코드 커밋 `fe566aae08f779c75c42f4cb9c7573d64d5e0ce2`
+- `python scripts/verify_streamlit_deployment.py --page valuation --expect-backend supabase --wait-ms 30000 --text-output artifacts/deploy-verify-fund-unit-pricing-20260515-0504.txt --screenshot artifacts/deploy-verify-fund-unit-pricing-20260515-0504.png --debug-dir artifacts/deploy-verify-fund-unit-pricing-20260515-0504-debug` 성공
 
 ## 검증 범위
 - 펀드성 코드의 거래금액, 보유 평가액, 실현손익이 `좌수 * 기준가 / 1000` 기준으로 계산되는지 검증
