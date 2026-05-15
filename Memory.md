@@ -83,6 +83,10 @@ streamlit run app.py --server.port 8501 --server.address 0.0.0.0 --server.fileWa
 
 ## 최신 검증 결과
 - 작업 범위: 거래 기록 선택 삭제 연관 매도 자동 포함 보강
+- 배포 코드 커밋: `ddf61a2f939ae140f6c9da7ac7f52ea3e4f2f462` (`Include dependent sells in bulk delete`)
+- 배포 방법: 요청 범위 파일만 선별 커밋 후 `git push origin main`
+- 원격 배포 검증: `python scripts/verify_streamlit_deployment.py --page trades --expect-backend supabase --wait-ms 30000 ...` 성공, `logged_in=true`, `workspace_visible=true`, `backend_storage_code=supabase`
+- 원격 검증 산출물: `artifacts/deploy-verify-trades-dependent-sells-20260515-0328.txt`, `artifacts/deploy-verify-trades-dependent-sells-20260515-0328.png`
 - `python -m compileall src/ui/app_core.py tests/test_app_dashboard.py` 성공
 - `python -m unittest tests.test_app_dashboard` 성공, 104 tests
 - `python -m compileall app.py src scripts tests` 성공
@@ -91,7 +95,7 @@ streamlit run app.py --server.port 8501 --server.address 0.0.0.0 --server.fileWa
 
 ## Git/GitHub 상태
 - 기본 브랜치: `main`
-- 최근 배포 코드 커밋: `5f4c95e Record trade log bulk delete deployment`
+- 최근 배포 코드 커밋: `ddf61a2 Include dependent sells in bulk delete`
 - 워크트리에는 이번 요청 전부터 `data/portfolio.db`, 로컬 도구 디렉터리, 산출물 등 여러 변경/미추적 파일이 함께 있었다.
 - 커밋 시 요청 관련 파일만 선별하고 `data/portfolio.db`, `.local/`, `.playtools*/`, `.playwright-browsers/`, `.vscode/`, `artifacts/`, `data/kis_cache/` 등 로컬 산출물은 제외한다.
 
