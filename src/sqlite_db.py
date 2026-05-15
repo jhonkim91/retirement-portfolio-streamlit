@@ -785,7 +785,7 @@ def list_valuation_snapshots(
     if end_date:
         query.append("AND valuation_date <= ?")
         parameters.append(str(end_date))
-    query.append("ORDER BY valuation_date ASC, id ASC")
+    query.append("ORDER BY valuation_date DESC, id DESC")
 
     rows = _fetch_all("\n".join(query), tuple(parameters))
     for row in rows:

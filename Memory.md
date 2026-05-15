@@ -3,7 +3,7 @@
 ## 문서 목적
 - 현재 프로젝트 상태와 다음 작업에 필요한 최소 정보만 유지한다.
 - 상세 검증 이력은 `docs/VALIDATION.md`, 완료 변경 이력은 `docs/CHANGELOG.md`, 설계 결정은 `docs/DECISIONS.md`를 기준으로 확인한다.
-- 기준일: `2026-05-14`
+- 기준일: `2026-05-15`
 
 ## 작업 상태
 - [x] 입금액 기준 일별 평가액 기록 기능 추가
@@ -17,6 +17,7 @@
 - [x] 평가액 기록 CSV 저장/불러오기와 화면 수정 저장 기능 추가
 - [x] 사이드바 연금 유형 뱃지 제거, Dashboard 히어로 전일 대비 증감 표시, 손익/수익률 KPI 차트 확대
 - [x] 평가액 기록 과거 현금을 단순 원금-잔여원가에서 거래 원장 `cash_delta` 누적 기준으로 변경
+- [x] 평가액 기록 스냅샷 조회/표시 순서를 최신 기준일 우선으로 변경
 - [x] 계산/DB/스키마/UI/배치 회귀 테스트 추가 및 통과
 - [x] Supabase 운영 DB에 `migrations/2026-05-14_add_daily_valuation_snapshot.sql` 적용 및 평가 스냅샷 재계산
 - [x] 운영 `jhonkim2025` 계정 평가 스냅샷을 원장 현금 기준으로 재계산
@@ -39,8 +40,8 @@
 - `migrations/2026-05-14_add_daily_valuation_snapshot.sql`: 신규 평가 스냅샷 테이블 migration 추가
 - `src/valuation.py`: 입금 원금 기준 일별 평가 스냅샷 계산, 원장 현금 누적, 가격 lookup 구성, 재계산/저장 서비스 추가
 - `src/market.py`: 날짜 범위 가격 이력 조회 helper 추가
-- `src/sqlite_db.py`: SQLite 평가 스냅샷 테이블 생성 및 저장/조회/삭제 구현, 현금 직접 수정 시 `cash_adjustment` 원장 기록 추가
-- `src/db.py`: Supabase/SQLite 공통 wrapper, Supabase batch upsert, cache 무효화, export table 반영, Supabase 현금 직접 수정 `cash_adjustment` 기록 추가
+- `src/sqlite_db.py`: SQLite 평가 스냅샷 테이블 생성 및 저장/조회/삭제 구현, 최신 기준일 우선 조회, 현금 직접 수정 시 `cash_adjustment` 원장 기록 추가
+- `src/db.py`: Supabase/SQLite 공통 wrapper, Supabase batch upsert, 최신 기준일 우선 조회, cache 무효화, export table 반영, Supabase 현금 직접 수정 `cash_adjustment` 기록 추가
 - `src/ui/app_core.py`: Dashboard 스냅샷 우선 표시, 평가액 기록 페이지, 거래/CSV/가격 갱신 후 재계산 hook 추가
 - `src/ui/app_core.py`: 평가액 기록 CSV 저장/불러오기, `data_editor` 기반 수동 수정 저장 추가
 - `src/ui/app_core.py`: 사이드바 계좌 카드의 연금 유형 뱃지 렌더링 제거, Dashboard 히어로는 전일 대비 총자산 증감을 표시
@@ -64,6 +65,7 @@
 - `rebuild_and_save_daily_valuation_snapshots()`는 stale row 방지를 위해 계좌의 기존 평가 스냅샷을 삭제한 뒤 전체 series를 다시 저장한다.
 - realtime tick마다 재계산하지 않고 거래 UI, CSV import 완료, 수동 가격 refresh, daily rollup에서 계좌별 1회 재계산한다.
 - Dashboard는 오늘 평가 스냅샷이 있으면 `보유 평가액`, `입금 원금`, `현재 보유현금`, `입금 대비 손익`, `입금 대비 수익률`을 우선 표시한다.
+- 평가액 기록 조회와 화면 표시는 `valuation_date DESC, id DESC` 최신 기준일 우선 순서를 사용한다.
 - Dashboard 히어로의 `전일 대비` 값은 입금 대비 손익이 아니라 추이 데이터의 마지막 두 `total_value` 차이로 계산한다.
 - 사이드바 계좌 카드에서는 계좌명만 표시하고 `연금(IRP/퇴직연금)` 유형 뱃지는 표시하지 않는다.
 - 스냅샷이 없으면 기존 summary와 `daily_account_snapshot` 기반 표시로 fallback한다.
@@ -80,7 +82,9 @@ streamlit run app.py --server.port 8501 --server.address 0.0.0.0 --server.fileWa
 
 ## 최신 검증 결과
 - `python -m compileall app.py src scripts tests pages` 성공
-- `python -m unittest discover -s tests -p "test_*.py"` 성공, 235 tests
+- `python -m unittest discover -s tests -p "test_*.py"` 성공, 236 tests
+- `python -m pytest tests/test_db.py -k "valuation_snapshots"` 성공, 3 tests
+- `python -m pytest tests/test_run_daily_rollup.py` 성공, 1 test
 - `python -m pytest tests/test_valuation.py tests/test_db.py tests/test_app_dashboard.py` 성공, 154 tests
 - `git diff --check -- .streamlit/app.css src/ui/app_core.py tests/test_app_dashboard.py` 성공
 - `python -m pytest tests/test_app_dashboard.py tests/test_db.py tests/test_valuation.py tests/test_verify_streamlit_deployment.py` 성공, 166 tests
@@ -92,7 +96,7 @@ streamlit run app.py --server.port 8501 --server.address 0.0.0.0 --server.fileWa
 
 ## Git/GitHub 상태
 - 기본 브랜치: `main`
-- 최근 커밋: `c29ec19 Use ledger cash for valuation snapshots`
+- 최근 커밋: `e571b7c Document valuation ledger cash verification`
 - 워크트리에는 이번 요청 전부터 `data/portfolio.db`, `.streamlit/app.css`, `src/auth.py`, `docs/review_report.md` 삭제, 로컬 도구 디렉터리, 산출물 등 여러 변경/미추적 파일이 함께 있었다.
 - 커밋 시 요청 관련 파일만 선별하고 `data/portfolio.db`, `.local/`, `.playtools*/`, `.playwright-browsers/`, `.vscode/`, `artifacts/`, `data/kis_cache/` 등 로컬 산출물은 제외한다.
 

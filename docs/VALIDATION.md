@@ -3,12 +3,13 @@
 ## 문서 목적
 - 최신 대표 검증 결과 1세트를 기록한다.
 - 과거 상세 이력은 `docs/archive/`, `docs/CHANGELOG.md`, `docs/DECISIONS.md`를 기준으로 확인한다.
-- 기준일: `2026-05-14`
+- 기준일: `2026-05-15`
 
 ## 최신 대표 검증 결과
 - 작업 범위: 입금액 기준 일별 평가액 기록 기능 추가
 - 추가 UI 조정: 사이드바 연금 유형 뱃지 제거, Dashboard 히어로 전일 대비 자산 증감 표시, 입금 대비 손익/수익률 KPI 차트 확대
 - 현금 계산 수정: 평가액 기록의 과거 현금을 `입금원금 - 잔여매입원가`가 아니라 거래 원장의 `cash_delta` 누적 기준으로 계산
+- 정렬 수정: 평가액 기록 스냅샷 조회/표시를 최신 기준일 우선으로 변경
 - 신규 저장소: Supabase/SQLite `daily_valuation_snapshot` 테이블, RLS/GRANT, batch upsert, 조회/삭제 wrapper 추가
 - 신규 계산: `src/valuation.py`에서 `employer_deposit`, `personal_deposit`, legacy `deposit`, `opening_cash`를 입금 원금으로 누적하고 FIFO 잔여 매입원가, 원장 현금, 오늘 실제 현금, 가격 fallback 종목을 계산
 - 현금 원장: 매도 실현손익, 이자, 배당, 수수료, 현금 조정처럼 `cash_delta`가 있는 이벤트를 평가 현금에 반영
@@ -23,7 +24,9 @@
 
 ## 명령 검증
 - `python -m compileall app.py src scripts tests pages` 성공
-- `python -m unittest discover -s tests -p "test_*.py"` 성공, 235 tests
+- `python -m unittest discover -s tests -p "test_*.py"` 성공, 236 tests
+- `python -m pytest tests/test_db.py -k "valuation_snapshots"` 성공, 3 tests
+- `python -m pytest tests/test_run_daily_rollup.py` 성공, 1 test
 - `python -m pytest tests/test_valuation.py tests/test_db.py tests/test_app_dashboard.py` 성공, 154 tests
 - `git diff --check -- .streamlit/app.css src/ui/app_core.py tests/test_app_dashboard.py` 성공
 - `python -m pytest tests/test_app_dashboard.py tests/test_db.py tests/test_valuation.py tests/test_verify_streamlit_deployment.py` 성공, 166 tests
@@ -73,6 +76,7 @@ python scripts/verify_streamlit_deployment.py \
 - SQLite `record/list/delete_valuation_snapshots()` 저장/조회/삭제와 `missing_price_symbols` JSON list 정규화
 - Supabase batch upsert payload와 `on_conflict=account_id,valuation_date`
 - Supabase/SQLite `adjust_cash_balance()`가 현금 수정분을 `cash_adjustment` 원장 이벤트로 남기는지 검증
+- SQLite 평가 스냅샷 조회가 최신 기준일 우선 순서를 반환하는지 검증
 - cache 무효화 경로
 - `setup_supabase.sql` 및 migration의 신규 테이블, 인덱스, RLS, 정책명, 명시적 GRANT
 
@@ -84,6 +88,7 @@ python scripts/verify_streamlit_deployment.py \
 - 사이드바 계좌 카드가 `연금(IRP/퇴직연금)` 유형 뱃지를 렌더링하지 않음
 - 입금 대비 손익/수익률 KPI 카드의 sparkline 표시 영역 확대
 - 평가액 기록 페이지가 CSV 저장, CSV 불러오기, 화면 수정 저장 UI를 제공
+- 평가액 기록 표와 CSV 원본 프레임이 최근 기준일에서 과거 기준일 순서로 표시됨
 - `scripts/run_daily_rollup.py`가 기존 daily account snapshot과 신규 valuation snapshot을 함께 처리
 
 ## 미수행 항목

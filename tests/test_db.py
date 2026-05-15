@@ -677,6 +677,47 @@ class ValuationSnapshotStorageTests(unittest.TestCase):
                 sqlite_db.delete_valuation_snapshots(account_id)
                 self.assertEqual(sqlite_db.list_valuation_snapshots(account_id), [])
 
+    def test_sqlite_lists_valuation_snapshots_newest_first(self) -> None:
+        """평가 스냅샷 조회는 최근 기준일이 먼저 오도록 정렬한다."""
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            database_path = Path(temp_dir) / "valuation-order.db"
+            with patch.object(sqlite_db, "DB_PATH", database_path):
+                sqlite_db.initialize_database()
+                account_id = sqlite_db.create_account("user-1::평가 정렬", opening_cash=0)
+                base_snapshot = {
+                    "account_id": account_id,
+                    "company_principal": 10000,
+                    "invested_cost": 0,
+                    "implied_cash": 10000,
+                    "actual_cash_balance": None,
+                    "cash_value": 10000,
+                    "cash_source": "implied",
+                    "holdings_market_value": 0,
+                    "valuation_amount": 10000,
+                    "profit_loss": 0,
+                    "profit_rate": 0,
+                    "over_invested_amount": 0,
+                    "missing_price_symbols": [],
+                    "source_hash": "hash",
+                    "calculation_reason": "test",
+                }
+                sqlite_db.record_valuation_snapshots(
+                    account_id,
+                    [
+                        dict(base_snapshot, valuation_date="2026-01-01"),
+                        dict(base_snapshot, valuation_date="2026-01-03"),
+                        dict(base_snapshot, valuation_date="2026-01-02"),
+                    ],
+                )
+
+                rows = sqlite_db.list_valuation_snapshots(account_id)
+
+                self.assertEqual(
+                    [row["valuation_date"] for row in rows],
+                    ["2026-01-03", "2026-01-02", "2026-01-01"],
+                )
+
     @patch("src.db.now_iso", return_value="2026-05-14T00:00:00")
     @patch("src.db._supabase_request")
     def test_supabase_record_valuation_snapshots_uses_batch_upsert(

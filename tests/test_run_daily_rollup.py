@@ -49,7 +49,7 @@ class DailyRollupValuationSnapshotTests(unittest.TestCase):
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0].valuation_snapshot_count, 2)
         self.assertEqual(len(rows), 2)
-        self.assertEqual(rows[-1]["valuation_amount"], 10200)
+        self.assertEqual(rows[0]["valuation_amount"], 10200)
 
 
 if __name__ == "__main__":

@@ -2653,7 +2653,7 @@ def _supabase_list_valuation_snapshots(
         filters["valuation_date"] = f"lte.{end_date}"
     result = _supabase_request("GET", "daily_valuation_snapshot", filters=filters)
     rows = result or []
-    return sorted(rows, key=lambda row: (row.get("valuation_date", ""), row.get("id", 0)))
+    return sorted(rows, key=lambda row: (row.get("valuation_date", ""), row.get("id", 0)), reverse=True)
 
 
 def _supabase_record_valuation_snapshots(account_id: int, snapshots: list[dict[str, Any]]) -> None:
