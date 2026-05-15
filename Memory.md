@@ -107,13 +107,16 @@ streamlit run app.py --server.port 8501 --server.address 0.0.0.0 --server.fileWa
 
 ## 최신 검증 결과
 - 작업 범위: 거래 기록 생성/수정/삭제 후 평가액 기록 부분 재계산 최적화
+- 배포 코드 커밋: `aa34666` (`Optimize trade valuation rebuilds`)
+- 배포 방법: 요청 범위 파일만 선별 커밋 후 `git push origin main`
 - 변경 파일: `src/valuation.py`, `src/db.py`, `src/sqlite_db.py`, `src/ui/app_core.py`, `tests/test_valuation.py`, `tests/test_db.py`, `tests/test_app_dashboard.py`
 - `python -m compileall src/valuation.py src/db.py src/sqlite_db.py src/ui/app_core.py tests/test_valuation.py tests/test_db.py tests/test_app_dashboard.py` 성공
 - `python -m unittest tests.test_valuation tests.test_db tests.test_app_dashboard` 성공, 175 tests
 - `python -m compileall app.py src scripts tests` 성공
 - `python -m unittest discover -s tests -p "test_*.py"` 성공, 264 tests
+- 원격 배포 검증: `python scripts/verify_streamlit_deployment.py --page trades --expect-backend supabase --wait-ms 60000 ...` 성공, `logged_in=true`, `workspace_visible=true`, `backend_storage_code=supabase`
+- 원격 검증 산출물: `artifacts/deploy-verify-trade-rebuild-optimization-20260515-0640.txt`, `artifacts/deploy-verify-trade-rebuild-optimization-20260515-0640.png`
 - 테스트 중 Streamlit bare mode 경고가 출력됐으나 모든 테스트는 성공했다.
-- 이번 요청에서는 로컬 코드/테스트만 수정했고 커밋/원격 배포는 수행하지 않았다.
 
 ## Git/GitHub 상태
 - 기본 브랜치: `main`

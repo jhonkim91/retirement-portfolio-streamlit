@@ -19,6 +19,8 @@
 - `python -m unittest tests.test_valuation tests.test_db tests.test_app_dashboard` 성공, 175 tests
 - `python -m compileall app.py src scripts tests` 성공
 - `python -m unittest discover -s tests -p "test_*.py"` 성공, 264 tests
+- `git push origin main` 성공, 배포 코드 커밋 `aa34666`
+- `python scripts/verify_streamlit_deployment.py --page trades --expect-backend supabase --wait-ms 60000 --text-output artifacts/deploy-verify-trade-rebuild-optimization-20260515-0640.txt --screenshot artifacts/deploy-verify-trade-rebuild-optimization-20260515-0640.png --debug-dir artifacts/deploy-verify-trade-rebuild-optimization-20260515-0640-debug` 성공
 
 ## 검증 범위
 - `output_start_date` 이전 거래가 원금/현금/FIFO lot 누적에는 반영되고 반환 스냅샷에서는 제외되는지 검증
@@ -29,4 +31,4 @@
 - 전체 unittest suite가 기존 기능 회귀 없이 통과하는지 검증
 
 ## 미수행 항목
-- 커밋, 원격 push, Streamlit 운영 배포 검증은 명시 요청이 없어 수행하지 않았다.
+- 운영 DB 데이터 직접 수정은 수행하지 않았다.
