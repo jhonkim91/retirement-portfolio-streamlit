@@ -94,6 +94,10 @@ streamlit run app.py --server.port 8501 --server.address 0.0.0.0 --server.fileWa
 
 ## 최신 검증 결과
 - 작업 범위: 평가액 기록/원화 표시 금액의 원 단위 반올림 보정
+- 배포 코드 커밋: `2c1a2ed2ebfa1ca45bb9dd2a56fcbcedc7296b5c` (`Round won amounts to units`)
+- 배포 방법: 요청 범위 파일만 선별 커밋 후 `git push origin main`
+- 원격 배포 검증: `python scripts/verify_streamlit_deployment.py --page valuation --expect-backend supabase --wait-ms 30000 ...` 성공, `logged_in=true`, `workspace_visible=true`, `backend_storage_code=supabase`
+- 원격 검증 산출물: `artifacts/deploy-verify-won-rounding-20260515-0404.txt`, `artifacts/deploy-verify-won-rounding-20260515-0404.png`
 - `python -m compileall src/valuation.py src/ui/app_core.py tests/test_valuation.py tests/test_app_dashboard.py` 성공
 - `python -m unittest tests.test_valuation tests.test_app_dashboard` 성공, 121 tests
 - `python -m compileall app.py src scripts tests` 성공
@@ -102,7 +106,7 @@ streamlit run app.py --server.port 8501 --server.address 0.0.0.0 --server.fileWa
 
 ## Git/GitHub 상태
 - 기본 브랜치: `main`
-- 최근 배포 코드 커밋: `01a005a Fix valuation cashflow snapshots`
+- 최근 배포 코드 커밋: `2c1a2ed Round won amounts to units`
 - 워크트리에는 이번 요청 전부터 `data/portfolio.db`, 로컬 도구 디렉터리, 산출물 등 여러 변경/미추적 파일이 함께 있었다.
 - 커밋 시 요청 관련 파일만 선별하고 `data/portfolio.db`, `.local/`, `.playtools*/`, `.playwright-browsers/`, `.vscode/`, `artifacts/`, `data/kis_cache/` 등 로컬 산출물은 제외한다.
 

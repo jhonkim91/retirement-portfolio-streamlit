@@ -19,13 +19,15 @@
 - `python -m unittest tests.test_valuation tests.test_app_dashboard` 성공, 121 tests
 - `python -m compileall app.py src scripts tests` 성공
 - `python -m unittest discover -s tests -p "test_*.py"` 성공, 253 tests
+- `git push origin main` 성공, 배포 코드 커밋 `2c1a2ed2ebfa1ca45bb9dd2a56fcbcedc7296b5c`
+- `python scripts/verify_streamlit_deployment.py --page valuation --expect-backend supabase --wait-ms 30000 --text-output artifacts/deploy-verify-won-rounding-20260515-0404.txt --screenshot artifacts/deploy-verify-won-rounding-20260515-0404.png --debug-dir artifacts/deploy-verify-won-rounding-20260515-0404-debug` 성공
 
 ## 검증 범위
 - 평가 스냅샷의 `company_principal`, `invested_cost`, `actual_cash_balance`, `cash_value`, `holdings_market_value`, `valuation_amount`, `profit_loss`가 원 단위 정수로 산출되는지 검증
 - 반올림된 `valuation_amount`와 `company_principal` 기준으로 `profit_loss`와 `profit_rate`가 계산되는지 검증
 - 원화 표시 helper와 거래 기록 금액 표시가 `.5` 금액을 원 단위로 일반 반올림하는지 검증
 - 전체 unittest suite가 기존 기능 회귀 없이 통과하는지 검증
+- 원격 Streamlit 평가액 기록 페이지가 로그인 후 Supabase backend로 로드되는지 검증
 
 ## 미수행 항목
 - 운영 `daily_valuation_snapshot` 재작성은 운영 DB 파생 데이터 변경이므로 수행하지 않았다.
-- 배포 후 원격 Streamlit 평가액 기록 페이지 검증은 아직 수행하지 않았다.
