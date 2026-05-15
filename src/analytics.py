@@ -7,7 +7,12 @@ from typing import Any
 import pandas as pd
 
 from .market import fetch_price_history, resolve_kis_sector_label
-from .trade_log_filters import filter_scaled_duplicate_trade_logs, normalize_trade_symbol, normalized_trade_amount
+from .trade_log_filters import (
+    filter_scaled_duplicate_trade_logs,
+    is_fund_symbol,
+    normalize_trade_symbol,
+    normalized_trade_amount,
+)
 
 
 CAPITAL_INFLOW_TYPES = {"personal_deposit", "employer_deposit"}
@@ -48,8 +53,13 @@ def holdings_frame(holdings: list[dict[str, Any]]) -> pd.DataFrame:
     frame = pd.DataFrame(holdings)
     if frame.empty:
         return frame
-    frame["cost_basis"] = frame["quantity"].astype(float) * frame["avg_cost"].astype(float)
-    frame["current_value"] = frame["quantity"].astype(float) * frame["current_price"].astype(float)
+    symbols = frame["symbol"] if "symbol" in frame.columns else pd.Series([""] * len(frame), index=frame.index)
+    unit_divisors = symbols.map(lambda value: 1000.0 if is_fund_symbol(value) else 1.0)
+    quantities = pd.to_numeric(frame["quantity"], errors="coerce").fillna(0.0)
+    avg_costs = pd.to_numeric(frame["avg_cost"], errors="coerce").fillna(0.0)
+    current_prices = pd.to_numeric(frame["current_price"], errors="coerce").fillna(0.0)
+    frame["cost_basis"] = quantities * avg_costs / unit_divisors
+    frame["current_value"] = quantities * current_prices / unit_divisors
     frame["profit_loss"] = frame["current_value"] - frame["cost_basis"]
     frame["profit_rate"] = frame.apply(
         lambda row: (row["profit_loss"] / row["cost_basis"] * 100) if row["cost_basis"] else 0,

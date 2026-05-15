@@ -90,6 +90,7 @@ def load_keyup_runtime() -> Any:
     return st_keyup
 
 import src.auth as app_auth
+from src.trade_log_filters import is_fund_symbol, normalized_trade_amount, normalized_trade_notional
 
 _ANALYTICS_MODULE: Any | None = None
 _MARKET_MODULE: Any | None = None
@@ -582,11 +583,14 @@ def rebuild_valuation_snapshots_for_account(
         if not account:
             return 0, "계좌를 찾을 수 없습니다."
         trade_logs = list_trade_logs(int(account_id))
-        account_snapshots = list_account_snapshots(int(account_id))
         today = valuation_today()
         valuation_module = get_valuation_module()
         first_deposit_date = valuation_module.first_principal_deposit_date(trade_logs)
         output_start_date = coerce_valuation_start_date(affected_start_date)
+        account_snapshots = list_account_snapshots(
+            int(account_id),
+            start_date=output_start_date.isoformat() if output_start_date else None,
+        )
         price_lookup = get_valuation_module().build_price_lookup_for_trade_logs(
             trade_logs,
             start_date=output_start_date or first_deposit_date,
@@ -1419,7 +1423,7 @@ def trade_log_editor_option_label(log: dict[str, Any]) -> str:
     trade_date = str(log.get("trade_date") or "-").strip() or "-"
     trade_type = label_transaction_type(normalize_trade_log_type(log.get("trade_type")))
     product_name = str(log.get("product_name") or "미지정").strip() or "미지정"
-    amount = float(log.get("total_amount") or 0)
+    amount = normalized_trade_amount(log)
     return f"{trade_date} | {trade_type} | {product_name} | {amount:,.0f}원"
 
 
@@ -1515,16 +1519,16 @@ def cash_flow_reset_values() -> dict[str, Any]:
     return values
 
 
-def calculate_trade_total(price: Any, quantity: Any) -> float:
+def calculate_trade_total(price: Any, quantity: Any, symbol: Any | None = None) -> float:
     """거래 단가와 수량으로 예상 거래 금액을 계산한다."""
 
-    return max(float(price or 0), 0.0) * max(float(quantity or 0), 0.0)
+    return normalized_trade_notional(symbol, quantity, price)
 
 
-def is_trade_submit_disabled(price: Any, quantity: Any) -> bool:
+def is_trade_submit_disabled(price: Any, quantity: Any, symbol: Any | None = None) -> bool:
     """거래 저장 버튼 비활성화 여부를 반환한다."""
 
-    return calculate_trade_total(price, quantity) <= 0
+    return calculate_trade_total(price, quantity, symbol) <= 0
 
 
 def build_trade_total_preview_html(total_amount: Any) -> str:
@@ -1962,7 +1966,7 @@ def format_trade_log_premium_cell(log: dict[str, Any], field_name: str, context:
     if field_name == "trade_type":
         return trade_log_type_badge_html(log)
     if field_name in {"price", "total_amount"}:
-        raw_value = log.get(field_name)
+        raw_value = normalized_trade_amount(log) if field_name == "total_amount" else log.get(field_name)
         try:
             numeric_value = float(raw_value or 0)
         except (TypeError, ValueError):
@@ -2046,6 +2050,20 @@ def parse_trade_log_import_number(value: Any) -> float:
         raise ValueError(f"숫자 형식이 올바르지 않습니다: {text}")
     parsed_value = float(numeric_value)
     return -abs(parsed_value) if is_parenthesized_negative else parsed_value
+
+
+def infer_trade_price_from_total(symbol: Any, quantity: Any, total_amount: Any) -> float:
+    """CSV에 단가가 없을 때 총액과 수량으로 기준가를 추정한다."""
+
+    share_count = float(quantity or 0)
+    amount = float(total_amount or 0)
+    if share_count <= 0 or amount <= 0:
+        return 0.0
+
+    raw_price = amount / share_count
+    if is_fund_symbol(symbol) and raw_price < 100:
+        return raw_price * 1000.0
+    return raw_price
 
 
 def normalize_trade_log_import_type(value: Any) -> str:
@@ -2162,10 +2180,17 @@ def parse_trade_log_import_frame(frame: pd.DataFrame) -> tuple[list[dict[str, An
                 if quantity <= 0:
                     raise ValueError("수량은 0보다 커야 합니다.")
                 if price <= 0 and total_amount > 0:
-                    price = total_amount / quantity
+                    price = infer_trade_price_from_total(symbol, quantity, total_amount)
                 if price <= 0:
                     raise ValueError("단가는 0보다 커야 합니다.")
-                total_amount = total_amount if total_amount > 0 else quantity * price
+                total_amount = normalized_trade_amount(
+                    {
+                        "symbol": symbol,
+                        "quantity": quantity,
+                        "price": price,
+                        "total_amount": total_amount if total_amount > 0 else quantity * price,
+                    }
+                )
             elif trade_type in CASH_FLOW_TYPES:
                 if total_amount <= 0:
                     raise ValueError("입금/출금 총액은 0보다 커야 합니다.")
@@ -2694,7 +2719,9 @@ def format_trade_log_cell(log: dict[str, Any], field_name: str, account_name_map
         return label_asset_type(log.get("asset_type"))
     if field_name == "quantity":
         return f"{float(log.get('quantity') or 0):,.4f}".rstrip("0").rstrip(".") or "0"
-    if field_name in {"price", "total_amount", "cash_delta"}:
+    if field_name == "total_amount":
+        return f"{round_won_amount(normalized_trade_amount(log)):,}"
+    if field_name in {"price", "cash_delta"}:
         return f"{round_won_amount(log.get(field_name)):,}"
     if field_name == "realized_profit_rate":
         if normalize_trade_log_type(log.get("trade_type")) != "sell":
@@ -2971,7 +2998,7 @@ def render_trade_log_bulk_delete_dialog(
             "거래일": str(log.get("trade_date") or "-"),
             "종목명": str(log.get("product_name") or "미지정"),
             "유형": label_transaction_type(normalize_trade_log_type(log.get("trade_type"))),
-            "총금액": f'{float(log.get("total_amount") or 0):,.0f}원',
+            "총금액": f"{normalized_trade_amount(log):,.0f}원",
             "삭제 사유": "연관 매도" if int(log.get("id") or 0) in dependent_log_ids else "선택",
         }
         for log in selected_logs
@@ -4923,6 +4950,7 @@ def allocation_treemap_options(
     holdings: list[dict[str, Any]],
     *,
     selected_symbol: str | None = None,
+    include_market_details: bool = True,
 ) -> dict[str, Any] | None:
     """자산 배분 트리맵용 ECharts 옵션을 만든다."""
 
@@ -4931,7 +4959,7 @@ def allocation_treemap_options(
     if not nodes:
         return None
 
-    snapshot_lookup = _build_treemap_market_snapshot_lookup(holdings)
+    snapshot_lookup = _build_treemap_market_snapshot_lookup(holdings) if include_market_details else {}
     for node in nodes:
         _rollup_treemap_node_values(node, snapshot_lookup=snapshot_lookup)
 
@@ -6164,7 +6192,8 @@ def build_selected_holding_intraday_trend_frame(holding: dict[str, Any]) -> pd.D
     as_of_timestamp = pd.to_datetime(snapshot.get("as_of"), errors="coerce")
     fallback_current_price = holding.get("current_price")
     quantity = float(holding.get("quantity") or 0)
-    cost_basis = float(holding.get("avg_cost") or 0) * quantity
+    unit_divisor = 1000.0 if is_fund_symbol(symbol) else 1.0
+    cost_basis = float(holding.get("avg_cost") or 0) * quantity / unit_divisor
     normalized_points: list[dict[str, Any]] = []
     if isinstance(timeline, list):
         for point in timeline:
@@ -6196,7 +6225,7 @@ def build_selected_holding_intraday_trend_frame(holding: dict[str, Any]) -> pd.D
     for point in normalized_frame.itertuples(index=False):
         point_datetime = pd.to_datetime(point.date, errors="coerce")
         close_price = float(point.close or 0)
-        market_value = close_price * quantity
+        market_value = close_price * quantity / unit_divisor
         profit_loss = market_value - cost_basis
         rows.append(
             {
@@ -7388,6 +7417,7 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]], roll
             summary,
             holdings,
             selected_symbol=selected_symbol or None,
+            include_market_details=echarts_available,
         )
         render_dashboard_allocation_status_header_fragment(
             account_id,
@@ -7657,9 +7687,9 @@ def trade_entry_page(account: dict[str, Any], holdings: list[dict[str, Any]], ac
                     with unit_col:
                         st.selectbox("단위", ["주"], index=0, key=f"trade-unit:{account['id']}", label_visibility="collapsed")
 
-                trade_total = calculate_trade_total(price, quantity)
+                trade_total = calculate_trade_total(price, quantity, symbol)
                 st.markdown(build_trade_total_preview_html(trade_total), unsafe_allow_html=True)
-                trade_disabled = is_trade_submit_disabled(price, quantity)
+                trade_disabled = is_trade_submit_disabled(price, quantity, symbol)
                 if trade_disabled:
                     st.caption("가격과 수량을 0보다 크게 입력하면 저장할 수 있습니다.")
 

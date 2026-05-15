@@ -16,6 +16,7 @@ import streamlit as st
 
 from . import auth as app_auth
 from . import sqlite_db
+from .trade_log_filters import normalized_trade_notional
 
 
 T = TypeVar("T")
@@ -1375,6 +1376,12 @@ def _cash_delta_for_cash_flow(flow_type: str, amount: float) -> float:
     return flow_amount if normalized_type in {"personal_deposit", "employer_deposit"} else -flow_amount
 
 
+def _normalized_trade_notional(symbol: Any, quantity: Any, price: Any) -> float:
+    """매수/매도 저장용 거래 총액을 펀드 기준가 단위까지 반영해 계산한다."""
+
+    return normalized_trade_notional(symbol, quantity, price)
+
+
 def _sorted_trade_logs_for_replay(trade_logs: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """보유 종목 재계산용으로 거래 로그를 오래된 순서대로 정렬한다."""
 
@@ -2093,7 +2100,7 @@ def _supabase_record_trade(
     if not account:
         raise ValueError("계좌를 찾을 수 없습니다.")
 
-    total_amount = share_count * trade_price
+    total_amount = _normalized_trade_notional(cleaned_symbol, share_count, trade_price)
     cash_delta = -total_amount if cleaned_type == "buy" else total_amount
     timestamp = now_iso()
     holdings = _supabase_request("GET", "holdings", filters={"account_id": f"eq.{account_id}"}) or []
@@ -2105,7 +2112,7 @@ def _supabase_record_trade(
             previous_quantity = float(holding_row.get("quantity", 0) or 0)
             previous_cost = float(holding_row.get("avg_cost", 0) or 0)
             next_quantity = previous_quantity + share_count
-            weighted_avg_cost = ((previous_quantity * previous_cost) + total_amount) / next_quantity
+            weighted_avg_cost = ((previous_quantity * previous_cost) + (share_count * trade_price)) / next_quantity
             _supabase_request(
                 "PATCH",
                 "holdings",
@@ -2316,7 +2323,7 @@ def _supabase_update_trade_log(
         if share_count <= 0 or trade_price <= 0:
             raise ValueError("수량과 단가는 모두 0보다 커야 합니다.")
 
-        total_amount = share_count * trade_price
+        total_amount = _normalized_trade_notional(cleaned_symbol, share_count, trade_price)
         cash_delta = -total_amount if next_type == "buy" else total_amount
         updated_log = dict(existing_log)
         updated_log.update(
@@ -3235,7 +3242,7 @@ def _sqlite_update_trade_log(
             if share_count <= 0 or trade_price <= 0:
                 raise ValueError("수량과 단가는 모두 0보다 커야 합니다.")
 
-            total_amount = share_count * trade_price
+            total_amount = _normalized_trade_notional(cleaned_symbol, share_count, trade_price)
             cash_delta = -total_amount if next_type == "buy" else total_amount
             connection.execute(
                 """

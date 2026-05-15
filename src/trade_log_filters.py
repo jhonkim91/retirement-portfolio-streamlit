@@ -69,6 +69,21 @@ def normalized_trade_amount(log: dict[str, Any]) -> float:
     return quantity * price
 
 
+def normalized_trade_notional(symbol: Any, quantity: Any, price: Any) -> float:
+    """심볼/수량/단가로 펀드 단위 차이를 반영한 예상 거래 총액을 계산한다."""
+
+    share_count = abs(_safe_float(quantity))
+    trade_price = abs(_safe_float(price))
+    return normalized_trade_amount(
+        {
+            "symbol": symbol,
+            "quantity": share_count,
+            "price": trade_price,
+            "total_amount": share_count * trade_price,
+        }
+    )
+
+
 def _duplicate_key(log: dict[str, Any]) -> tuple[str, str, str, float, float] | None:
     """총액 스케일 중복 감지를 위한 거래 키를 만든다."""
 

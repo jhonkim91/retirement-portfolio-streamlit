@@ -8,6 +8,7 @@ from src.analytics import (
     account_summary,
     allocation_treemap_nodes,
     cumulative_contribution_frame,
+    holdings_frame,
     holdings_overview_frame,
     infer_holding_sector_label,
     projected_today_interest,
@@ -145,6 +146,30 @@ class AccountSummaryTests(unittest.TestCase):
         self.assertEqual(summary["positions"][0]["sell_amount"], 11_166_309.01)
         self.assertEqual(summary["positions"][0]["profit_loss"], 4_037_238.72)
         self.assertEqual(summary["positions"][0]["profit_rate"], 56.63)
+
+    def test_holdings_frame_and_summary_use_fund_price_per_thousand_units(self) -> None:
+        """펀드 보유 평가액과 계좌 요약은 기준가를 1,000좌당 가격으로 해석한다."""
+
+        account = {"cash_balance": 1_000_000}
+        holdings = [
+            {
+                "symbol": "K55207BU0715",
+                "product_name": "교보악사파워인덱스",
+                "asset_type": "risk",
+                "quantity": 3_501_508,
+                "avg_cost": 2036,
+                "current_price": 3189,
+            },
+        ]
+
+        frame = holdings_frame(holdings)
+        summary = account_summary(account, holdings, trade_logs=[], interest_rows=[])
+
+        self.assertEqual(round(float(frame.iloc[0]["cost_basis"]), 2), 7_129_070.29)
+        self.assertEqual(round(float(frame.iloc[0]["current_value"]), 2), 11_166_309.01)
+        self.assertEqual(round(float(summary["total_cost"]), 2), 7_129_070.29)
+        self.assertEqual(round(float(summary["market_value"]), 2), 11_166_309.01)
+        self.assertEqual(round(float(summary["total_value"]), 2), 12_166_309.01)
 
     def test_realized_summary_matches_domestic_symbol_suffix(self) -> None:
         """국내 종목 접미사 유무가 달라도 실현손익 lot을 매칭한다."""

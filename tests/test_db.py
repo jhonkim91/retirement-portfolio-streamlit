@@ -1264,6 +1264,42 @@ class SupabaseTradeCashRuleTests(unittest.TestCase):
         update_cash_balance_mock.assert_not_called()
         insert_trade_log_mock.assert_called_once()
 
+    @patch("src.db._supabase_insert_trade_log")
+    @patch("src.db._supabase_request")
+    @patch("src.db._supabase_get_account", return_value={"id": 7, "cash_balance": 0.0})
+    @patch("src.db.now_iso", return_value="2026-05-11T09:35:00")
+    def test_supabase_record_trade_normalizes_fund_total_amount(
+        self,
+        _now_iso_mock,
+        _get_account_mock,
+        request_mock,
+        insert_trade_log_mock,
+    ) -> None:
+        """Supabase 펀드 매수 저장은 거래 총액/cash_delta만 1,000좌 기준으로 정규화한다."""
+
+        request_mock.side_effect = [
+            [],
+            None,
+        ]
+
+        _supabase_record_trade(
+            7,
+            symbol="K55207BU0715",
+            product_name="교보악사파워인덱스",
+            trade_type="buy",
+            asset_type="risk",
+            quantity=3_501_508,
+            price=2036,
+            trade_date="2026-05-11",
+            notes="펀드 매수",
+        )
+
+        holding_insert = request_mock.call_args_list[1]
+        self.assertEqual(holding_insert.kwargs["data"]["avg_cost"], 2036.0)
+        self.assertEqual(holding_insert.kwargs["data"]["current_price"], 2036.0)
+        self.assertAlmostEqual(insert_trade_log_mock.call_args.kwargs["total_amount"], 7_129_070.288)
+        self.assertAlmostEqual(insert_trade_log_mock.call_args.kwargs["cash_delta"], -7_129_070.288)
+
     @patch("src.db._supabase_record_daily_interest")
     @patch("src.db._supabase_update_cash_balance")
     @patch("src.db._supabase_delete_rows_by_ids")
@@ -1390,6 +1426,36 @@ class SQLiteRealtimeQuotePersistenceTests(unittest.TestCase):
                 self.assertEqual(len(holdings), 1)
                 self.assertEqual(float(holdings[0]["quantity"]), 2.0)
 
+    def test_record_trade_normalizes_fund_total_amount_without_scaling_avg_cost(self) -> None:
+        """펀드 매수 저장은 거래 총액만 1,000좌 기준으로 정규화하고 기준가는 유지한다."""
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            database_path = Path(temp_dir) / "portfolio.db"
+            with patch.object(sqlite_db, "DB_PATH", database_path):
+                sqlite_module = sqlite_db
+                sqlite_module.initialize_database()
+                account_id = sqlite_module.create_account("user-1::펀드 테스트", opening_cash=10_000_000)
+
+                sqlite_module.record_trade(
+                    account_id,
+                    symbol="K55207BU0715",
+                    product_name="교보악사파워인덱스",
+                    trade_type="buy",
+                    asset_type="risk",
+                    quantity=3_501_508,
+                    price=2036,
+                    trade_date="2026-05-10",
+                    notes="펀드 매수",
+                )
+
+                holding = sqlite_module.list_holdings(account_id)[0]
+                log = sqlite_module.list_trade_logs(account_id)[0]
+
+                self.assertEqual(float(holding["avg_cost"]), 2036.0)
+                self.assertEqual(float(holding["current_price"]), 2036.0)
+                self.assertAlmostEqual(float(log["total_amount"]), 7_129_070.288)
+                self.assertAlmostEqual(float(log["cash_delta"]), -7_129_070.288)
+
     def test_adjust_cash_balance_records_cash_adjustment_log(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             database_path = Path(temp_dir) / "portfolio.db"
@@ -1463,6 +1529,46 @@ class SQLiteTradeLogEditDeleteTests(unittest.TestCase):
                 self.assertEqual(float(log["total_amount"]), 600.0)
                 self.assertEqual(float(log["cash_delta"]), -600.0)
                 self.assertEqual(str(log["notes"]), "수정 완료")
+
+    def test_update_trade_log_normalizes_fund_total_amount_without_scaling_avg_cost(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            database_path = Path(temp_dir) / "portfolio.db"
+            with patch.object(sqlite_db, "DB_PATH", database_path):
+                sqlite_module = sqlite_db
+                sqlite_module.initialize_database()
+                account_id = sqlite_module.create_account("user-1::펀드 수정 테스트", opening_cash=10_000_000)
+                sqlite_module.record_trade(
+                    account_id,
+                    symbol="K55207BU0715",
+                    product_name="교보악사파워인덱스",
+                    trade_type="buy",
+                    asset_type="risk",
+                    quantity=3_501_508,
+                    price=2036,
+                    trade_date="2026-05-10",
+                    notes="원본",
+                )
+                log_id = int(sqlite_module.list_trade_logs(account_id)[0]["id"])
+
+                _sqlite_update_trade_log(
+                    account_id,
+                    log_id,
+                    trade_type="buy",
+                    symbol="K55207BU0715",
+                    product_name="교보악사파워인덱스",
+                    asset_type="risk",
+                    quantity=3_501_508,
+                    price=3189,
+                    trade_date="2026-05-11",
+                    notes="수정",
+                )
+
+                holding = sqlite_module.list_holdings(account_id)[0]
+                log = sqlite_module.list_trade_logs(account_id)[0]
+
+                self.assertEqual(float(holding["avg_cost"]), 3189.0)
+                self.assertAlmostEqual(float(log["total_amount"]), 11_166_309.012)
+                self.assertAlmostEqual(float(log["cash_delta"]), -11_166_309.012)
 
     def test_delete_trade_log_clears_active_holding_without_touching_cash(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1611,6 +1717,57 @@ class SupabaseTradeLogEditDeleteTests(unittest.TestCase):
         request_mock.assert_called_once()
         self.assertEqual(request_mock.call_args.args[:2], ("PATCH", "trade_logs"))
         self.assertEqual(request_mock.call_args.kwargs["data"]["total_amount"], 240.0)
+
+    @patch("src.db.now_iso", return_value="2026-05-11T09:35:00")
+    @patch("src.db._supabase_apply_holding_state")
+    @patch("src.db._supabase_request")
+    @patch("src.db._supabase_list_trade_logs")
+    @patch("src.db._supabase_get_account", return_value={"id": 7, "cash_balance": 0.0})
+    @patch("src.db._supabase_get_trade_log")
+    def test_supabase_update_trade_log_normalizes_fund_total_amount(
+        self,
+        get_trade_log_mock,
+        _get_account_mock,
+        list_trade_logs_mock,
+        request_mock,
+        apply_holding_state_mock,
+        _now_iso_mock,
+    ) -> None:
+        """Supabase 펀드 거래 수정도 총액/cash_delta를 정규화한다."""
+
+        existing_log = {
+            "id": 5,
+            "trade_type": "buy",
+            "symbol": "K55207BU0715",
+            "product_name": "교보악사파워인덱스",
+            "asset_type": "risk",
+            "quantity": 3_501_508,
+            "price": 2036,
+            "trade_date": "2026-05-10",
+            "created_at": "2026-05-10T09:00:00",
+            "cash_delta": -7_129_070.288,
+            "total_amount": 7_129_070.288,
+            "notes": "원본",
+        }
+        get_trade_log_mock.return_value = dict(existing_log)
+        list_trade_logs_mock.return_value = [dict(existing_log)]
+
+        _supabase_update_trade_log(
+            7,
+            5,
+            trade_type="buy",
+            symbol="K55207BU0715",
+            product_name="교보악사파워인덱스",
+            asset_type="risk",
+            quantity=3_501_508,
+            price=3189,
+            trade_date="2026-05-11",
+            notes="수정",
+        )
+
+        apply_holding_state_mock.assert_called_once()
+        self.assertAlmostEqual(request_mock.call_args.kwargs["data"]["total_amount"], 11_166_309.012)
+        self.assertAlmostEqual(request_mock.call_args.kwargs["data"]["cash_delta"], -11_166_309.012)
 
     @patch("src.db._supabase_update_cash_balance")
     @patch("src.db._supabase_request")

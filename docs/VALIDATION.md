@@ -6,29 +6,24 @@
 - 기준일: `2026-05-15`
 
 ## 최신 대표 검증 결과
-- 작업 범위: 거래 기록 생성/수정/삭제 후 평가액 기록 로딩 최적화
-- 원인: 거래 1건 변경 후에도 전체 기간 가격 히스토리 조회와 전체 `daily_valuation_snapshot` 삭제/재저장이 동기 실행되어 Streamlit UI 로딩이 길어질 수 있었다.
-- 수정: 평가 스냅샷 계산에 `output_start_date`를 추가해 원장 상태는 최초 입금일부터 누적하고, 반환/저장 스냅샷은 영향 시작일 이후로 제한한다.
-- 수정: Supabase/SQLite `delete_valuation_snapshots(account_id, start_date=None)`를 지원해 시작일 이후 평가 스냅샷만 삭제한다.
-- 수정: 거래 생성/수정/삭제/CSV import는 거래일 기준, 현금/가격 갱신은 오늘 기준으로 부분 재계산한다.
-- 유지: 평가액 기록 페이지 수동 재계산과 daily rollup은 기존 전체 재계산을 유지한다.
+- 작업 범위: 펀드성 코드(`K...`)의 1,000좌 기준가 정규화와 Dashboard/거래 UI 부분 조회 성능 개선
+- 원인: 일부 보유 평가/거래 표시/저장 경로가 펀드 기준가를 일반 주식 단가처럼 `수량 * 가격`으로 계산해 금액이 1,000배 커질 수 있었다.
+- 수정: 보유 평가액, 거래 총액 preview, 거래 기록 표시/CSV/delete preview, 선택 종목 당일 트렌드, Supabase/SQLite 거래 저장/수정 경로를 `좌수 * 기준가 / 1000` 기준으로 통일했다.
+- 수정: 평가액 부분 재계산 시 계좌 스냅샷 조회도 영향 시작일 이후로 제한하고, ECharts 비활성 경로에서는 treemap intraday 상세 조회를 건너뛰도록 했다.
+- 유지: 기존 운영 DB 데이터와 CSV/artifacts 파일은 직접 수정하지 않았다. 스키마 변경과 migration 추가도 없다.
 - 환경: 로컬 Python 3.11, Streamlit bare mode 테스트 실행.
 
 ## 명령 검증
-- `python -m compileall src/valuation.py src/db.py src/sqlite_db.py src/ui/app_core.py tests/test_valuation.py tests/test_db.py tests/test_app_dashboard.py` 성공
-- `python -m unittest tests.test_valuation tests.test_db tests.test_app_dashboard` 성공, 175 tests
+- `python -m unittest tests.test_analytics tests.test_app_dashboard tests.test_db` 성공, 181 tests
 - `python -m compileall app.py src scripts tests` 성공
-- `python -m unittest discover -s tests -p "test_*.py"` 성공, 264 tests
-- `git push origin main` 성공, 배포 코드 커밋 `aa34666`
-- `python scripts/verify_streamlit_deployment.py --page trades --expect-backend supabase --wait-ms 60000 --text-output artifacts/deploy-verify-trade-rebuild-optimization-20260515-0640.txt --screenshot artifacts/deploy-verify-trade-rebuild-optimization-20260515-0640.png --debug-dir artifacts/deploy-verify-trade-rebuild-optimization-20260515-0640-debug` 성공
+- `python -m unittest discover -s tests -p "test_*.py"` 성공, 273 tests
 
 ## 검증 범위
-- `output_start_date` 이전 거래가 원금/현금/FIFO lot 누적에는 반영되고 반환 스냅샷에서는 제외되는지 검증
-- 과거 매수 lot이 부분 재계산 시작일 이후 매도 계산에 계속 반영되는지 검증
-- SQLite 평가 스냅샷 부분 삭제가 시작일 이전 행을 보존하는지 검증
-- Supabase 평가 스냅샷 부분 삭제가 `valuation_date=gte.<date>` 필터를 전달하는지 검증
-- 거래 생성/수정/삭제/CSV import/현금/가격 갱신 UI 호출부가 영향 시작일을 전달하는지 검증
-- 전체 unittest suite가 기존 기능 회귀 없이 통과하는지 검증
+- `holdings_frame()`/`account_summary()` 펀드 보유 평가액과 매입원가가 1,000좌 기준으로 계산되는지 검증
+- 거래 총액 preview, 거래 기록 표기, CSV export, 삭제/수정 선택 label이 펀드 총액을 정규화하는지 검증
+- 선택 종목 당일 트렌드의 `market_value`, `cost_basis`, `profit_loss`가 펀드 기준가 단위를 반영하는지 검증
+- Supabase/SQLite 매수 및 수정 저장 경로에서 `total_amount`, `cash_delta`만 정규화하고 `avg_cost/current_price` 기준가는 유지하는지 검증
+- 평가액 부분 재계산의 `list_account_snapshots(..., start_date=...)` 호출과 ECharts 비활성 시 treemap intraday 조회 생략을 검증
 
 ## 미수행 항목
-- 운영 DB 데이터 직접 수정은 수행하지 않았다.
+- 운영 DB 데이터 직접 수정, 커밋, 푸시, 원격 배포 검증은 수행하지 않았다.

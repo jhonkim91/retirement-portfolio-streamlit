@@ -477,9 +477,11 @@ class TradeFormResetTests(unittest.TestCase):
         """거래 총액과 현금 흐름 미리보기 헬퍼는 0 입력 방지 기준을 제공한다."""
 
         self.assertEqual(dashboard_app.calculate_trade_total(15000, 3), 45000)
+        self.assertEqual(dashboard_app.calculate_trade_total(2036, 3_501_508, "K55207BU0715"), 7_129_070.288)
         self.assertTrue(dashboard_app.is_trade_submit_disabled(0, 3))
         self.assertTrue(dashboard_app.is_trade_submit_disabled(15000, 0))
         self.assertFalse(dashboard_app.is_trade_submit_disabled(15000, 3))
+        self.assertFalse(dashboard_app.is_trade_submit_disabled(2036, 3_501_508, "K55207BU0715"))
         self.assertEqual(
             dashboard_app.cash_flow_balance_preview(1_000_000, "personal_deposit", 500_000),
             (1_000_000.0, 1_500_000.0),
@@ -490,6 +492,28 @@ class TradeFormResetTests(unittest.TestCase):
         )
         self.assertIn("예상 매입금액", dashboard_app.build_trade_total_preview_html(45000))
         self.assertIn("예상 원금 잔액", dashboard_app.build_cash_flow_preview_html(1_000_000, "withdraw", 200_000))
+
+    def test_fund_trade_log_display_and_export_normalize_total_amount(self) -> None:
+        """펀드 거래 기록 표기와 CSV export 총액은 1,000좌 기준가 단위를 반영한다."""
+
+        log = {
+            "id": 1,
+            "trade_date": "2026-05-11",
+            "trade_type": "buy",
+            "symbol": "K55207BU0715",
+            "product_name": "교보악사파워인덱스",
+            "asset_type": "risk",
+            "quantity": 3_501_508,
+            "price": 2036,
+            "total_amount": 7_129_070_288,
+            "notes": "",
+        }
+
+        self.assertEqual(dashboard_app.format_trade_log_cell(log, "total_amount", {}), "7,129,070")
+        self.assertIn("₩7,129,070", dashboard_app.format_trade_log_premium_cell(log, "total_amount", {}))
+        self.assertIn("7,129,070원", dashboard_app.trade_log_editor_option_label(log))
+        export_frame = dashboard_app.build_trade_log_export_frame([log])
+        self.assertEqual(export_frame.iloc[0]["총액"], "7,129,070")
 
     def test_cash_flow_tab_keys_are_scoped_by_flow_type(self) -> None:
         """현금 흐름 탭 위젯 key는 유형별로 분리된다."""
@@ -511,7 +535,7 @@ class TradeFormResetTests(unittest.TestCase):
 
         self.assertIn("build_trade_total_preview_html(trade_total)", source)
         self.assertIn("build_product_code_status_html(st.session_state.get(TRADE_SYMBOL_KEY))", source)
-        self.assertIn("trade_disabled = is_trade_submit_disabled(price, quantity)", source)
+        self.assertIn("trade_disabled = is_trade_submit_disabled(price, quantity, symbol)", source)
         self.assertIn("disabled=trade_disabled", source)
         self.assertIn("st.tabs([cash_flow_tab_label(flow_type) for flow_type in CASH_FLOW_TYPES])", source)
         self.assertIn("cash_flow_widget_key(CASH_FLOW_AMOUNT_KEY, flow_type)", source)
@@ -1188,6 +1212,56 @@ class TradeFormResetTests(unittest.TestCase):
         self.assertIn("st.data_editor", editor_source)
         self.assertIn("record_valuation_snapshots(account_id, parsed_rows)", editor_source)
 
+    def test_rebuild_valuation_snapshots_uses_affected_start_date_for_account_snapshots(self) -> None:
+        """부분 재계산은 계좌 스냅샷 조회도 영향 시작일 이후로 제한한다."""
+
+        calls: list[str | None] = []
+        original_get_account = dashboard_app.get_account
+        original_list_trade_logs = dashboard_app.list_trade_logs
+        original_list_account_snapshots = dashboard_app.list_account_snapshots
+        original_valuation_today = dashboard_app.valuation_today
+        original_get_valuation_module = dashboard_app.get_valuation_module
+        original_rebuild = dashboard_app.rebuild_and_save_daily_valuation_snapshots
+
+        class FakeValuationModule:
+            @staticmethod
+            def first_principal_deposit_date(trade_logs):
+                return date(2026, 1, 1)
+
+            @staticmethod
+            def build_price_lookup_for_trade_logs(trade_logs, *, start_date=None, end_date=None):
+                return {}
+
+        dashboard_app.get_account = lambda account_id: {"id": account_id, "cash_balance": 0}
+        dashboard_app.list_trade_logs = lambda account_id: [
+            {"id": 1, "trade_date": "2026-01-01", "trade_type": "personal_deposit", "total_amount": 1000}
+        ]
+
+        def fake_list_account_snapshots(account_id, start_date=None):
+            calls.append(start_date)
+            return []
+
+        dashboard_app.list_account_snapshots = fake_list_account_snapshots
+        dashboard_app.valuation_today = lambda: date(2026, 1, 3)
+        dashboard_app.get_valuation_module = lambda: FakeValuationModule
+        dashboard_app.rebuild_and_save_daily_valuation_snapshots = lambda **kwargs: []
+        try:
+            count, error = dashboard_app.rebuild_valuation_snapshots_for_account(
+                24,
+                "trade_updated",
+                affected_start_date=date(2026, 1, 2),
+            )
+        finally:
+            dashboard_app.get_account = original_get_account
+            dashboard_app.list_trade_logs = original_list_trade_logs
+            dashboard_app.list_account_snapshots = original_list_account_snapshots
+            dashboard_app.valuation_today = original_valuation_today
+            dashboard_app.get_valuation_module = original_get_valuation_module
+            dashboard_app.rebuild_and_save_daily_valuation_snapshots = original_rebuild
+
+        self.assertEqual((count, error), (0, ""))
+        self.assertEqual(calls, ["2026-01-02"])
+
     def test_trade_log_realized_profit_rate_cell_uses_sell_log_lookup(self) -> None:
         """거래 기록의 실현수익률 컬럼은 매도 거래 ID lookup으로 표시한다."""
 
@@ -1835,6 +1909,41 @@ class AllocationTreemapVisualMapTests(unittest.TestCase):
         assert options is not None
         self.assertEqual(options["visualMap"]["outOfRange"]["colorAlpha"], 0.0)
 
+    def test_allocation_treemap_can_skip_intraday_market_details(self) -> None:
+        """ECharts 미사용 경로에서는 자산배분 옵션 생성 중 외부 시세 조회를 건너뛴다."""
+
+        holdings = [
+            {
+                "product_name": "고수익 ETF",
+                "symbol": "HIGH",
+                "asset_type": "risk",
+                "quantity": 1,
+                "avg_cost": 100,
+                "current_price": 250,
+            }
+        ]
+        summary = {
+            "allocation": {
+                "risk": 250,
+                "safe": 0,
+                "cash": 0,
+            },
+            "cash": 0,
+        }
+
+        original = dashboard_app.fetch_intraday_price_snapshot
+
+        def fail_fetch(symbol, interval="5m"):
+            raise AssertionError("intraday fetch should be skipped")
+
+        dashboard_app.fetch_intraday_price_snapshot = fail_fetch
+        try:
+            options = dashboard_app.allocation_treemap_options(summary, holdings, include_market_details=False)
+        finally:
+            dashboard_app.fetch_intraday_price_snapshot = original
+
+        self.assertIsNotNone(options)
+
     def test_allocation_treemap_uses_zero_gap_and_fixed_upper_labels(self) -> None:
         """트리맵 경계는 gap 없이 1px border와 고정 높이 upperLabel로 정렬한다."""
 
@@ -2250,6 +2359,32 @@ class SelectedHoldingTrendFrameTests(unittest.TestCase):
         self.assertEqual(frame["close"].tolist(), [108.5])
         self.assertEqual(frame["market_value"].tolist(), [1085.0])
         self.assertEqual(frame["profit_rate"].tolist(), [8.5])
+
+    def test_build_selected_holding_trend_frame_uses_fund_price_per_thousand_units(self) -> None:
+        """펀드 선택 종목 당일 트렌드는 기준가를 1,000좌당 가격으로 계산한다."""
+
+        holding = {
+            "symbol": "K55207BU0715",
+            "product_name": "교보악사파워인덱스",
+            "quantity": 3_501_508,
+            "avg_cost": 2036.0,
+        }
+        snapshot = {
+            "timeline": [
+                {"datetime": "2026-05-11T15:30:00+09:00", "close": 3189.0},
+            ]
+        }
+
+        original = dashboard_app.fetch_intraday_price_snapshot
+        dashboard_app.fetch_intraday_price_snapshot = lambda symbol, interval="5m": snapshot
+        try:
+            frame = dashboard_app.build_selected_holding_trend_frame([holding], period="today")
+        finally:
+            dashboard_app.fetch_intraday_price_snapshot = original
+
+        self.assertEqual(round(float(frame.iloc[0]["market_value"]), 2), 11_166_309.01)
+        self.assertEqual(round(float(frame.iloc[0]["cost_basis"]), 2), 7_129_070.29)
+        self.assertEqual(round(float(frame.iloc[0]["profit_loss"]), 2), 4_037_238.72)
 
 
 class SelectedHoldingTrendOptionTests(unittest.TestCase):

@@ -31,6 +31,7 @@
 - [x] 평가액 기록/원화 표시 금액을 원 단위 일반 반올림으로 보정
 - [x] 1,000배 총액 중복 거래와 국내 종목 코드 접미사 차이로 인한 평가/실현손익 왜곡 보정
 - [x] 거래 기록 생성/수정/삭제 후 평가액 기록을 영향 시작일 이후만 부분 재계산하도록 최적화
+- [x] 펀드성 코드(`K...`)의 1,000좌 기준가 단위를 보유 평가/거래 UI/저장 경로에 일관 적용
 - [ ] temporal normalize migration 실제 적용 전 운영 `realtime_price_bars` 테이블 생성/노출 여부 결정
 
 ## 프로젝트 개요
@@ -45,27 +46,12 @@
 - 배포 앱: `https://retirement-portfolio-app-nh2vq9ferqnpehsslbykbe.streamlit.app/`
 
 ## 최근 변경 파일
-- `src/valuation.py`: `output_start_date`를 받아 원장 상태는 최초 입금일부터 누적하되 반환/저장할 평가 스냅샷은 영향 시작일 이후로 제한
-- `src/db.py`, `src/sqlite_db.py`: `delete_valuation_snapshots(account_id, start_date=None)`로 확장해 Supabase/SQLite 평가 스냅샷 부분 삭제 지원
-- `src/ui/app_core.py`: 거래 생성/수정/삭제/CSV import는 거래일 기준, 현금/가격 갱신은 오늘 기준으로 평가액 기록 부분 재계산 호출
-- `tests/test_valuation.py`, `tests/test_db.py`, `tests/test_app_dashboard.py`: 부분 재계산, 부분 삭제, UI 호출부 회귀 테스트 추가
-- `src/trade_log_filters.py`: 펀드 좌수/기준가 총액을 1,000좌당 가격 기준으로 정규화하고, 같은 날짜/유형/종목/수량/단가에서 총액만 1,000배 수준으로 큰 중복 매수/매도 행을 계산 입력에서 제외하는 helper 추가
-- `src/valuation.py`, `src/analytics.py`: 평가 스냅샷과 실현손익 계산에서 펀드 금액/평가액을 `좌수 * 기준가 / 1000`으로 처리하고, 국내 종목 `.KS/.KQ` 접미사와 앞자리 0 차이를 같은 종목으로 정규화
-- `tests/test_valuation.py`, `tests/test_analytics.py`: 펀드 좌수/기준가 정규화, 총액 스케일 중복 제외, 국내 종목 코드 정규화 회귀 테스트 추가
-- `artifacts/trade_logs_23_reconciled.csv`, `artifacts/valuation_snapshots_23_recalculated.csv`: `trade_logs_23.csv`, `valuation_snapshots_23.csv` 기준 재산출 파일
-- `src/valuation.py`: 평가 스냅샷 금액 컬럼을 소수점 4자리 저장 대신 원 단위 일반 반올림 값으로 산출
-- `src/ui/app_core.py`: 원화 표시 helper와 거래 금액 표시를 원 단위 일반 반올림으로 통일
-- `tests/test_valuation.py`, `tests/test_app_dashboard.py`: `.5` 금액 반올림과 평가 스냅샷 원 단위 저장 회귀 테스트 추가
-- `src/valuation.py`: 일별 계좌 스냅샷 현금이 있으면 평가액 기록 현금값에 실제 현금을 우선 사용하고, 보유 수량 없이 먼저 들어온 매도는 매칭 수량만 현금 유입 반영
-- `src/db.py`, `src/ui/app_core.py`, `scripts/run_daily_rollup.py`: daily rollup/manual rebuild 평가 스냅샷 재계산 시 `daily_account_snapshot` 목록 전달
-- `tests/test_valuation.py`, `tests/test_run_daily_rollup.py`: 과거 실제 현금 우선 적용과 미매칭 매도 현금 부풀림 방지 회귀 테스트 추가
-- `src/ui/app_core.py`: 거래 기록 선택 삭제 시 선택 매수 제거로 음수 보유수량을 만드는 연관 매도 기록을 삭제 확인 대상에 자동 포함
-- `tests/test_app_dashboard.py`: 연관 매도 자동 포함과 기존 원장 불일치 차단 회귀 테스트 추가
-- `src/ui/app_core.py`: 거래 기록 표에 행 선택 체크박스, 현재 페이지 선택, 선택 해제, 선택 삭제 toolbar, 선택 삭제 확인 dialog 추가
-- `tests/test_app_dashboard.py`: 거래 기록 선택 상태 helper와 선택 삭제 dialog/source 회귀 테스트 추가
-- `src/valuation.py`, `src/ui/app_core.py`, `tests/test_valuation.py`: 평가액 기록 수익률을 일반 출금을 차감한 순입금 원금 기준으로 보정
-- `setup_supabase.sql`, `migrations/2026-05-15_reinforce_realtime_indexes.sql`, `src/sqlite_db.py`, `scripts/run_realtime_tick_retention.py`: realtime retention 인덱스와 조회 정렬 보강
-- `setup_supabase.sql`, `migrations/2026-05-14_add_daily_valuation_snapshot.sql`, `src/valuation.py`, `src/db.py`, `src/sqlite_db.py`, `pages/valuation.py`: 입금액 기준 일별 평가액 기록 기능 추가
+- `src/trade_log_filters.py`: `normalized_trade_notional()` 추가로 펀드 좌수/기준가 총액을 저장·표시 공통 기준에서 정규화
+- `src/analytics.py`: `holdings_frame()` 보유 평가액/매입원가를 펀드성 코드만 `좌수 * 기준가 / 1000`으로 계산
+- `src/ui/app_core.py`: 거래 총액 preview, 거래 기록 표시/CSV/export/delete label, 선택 종목 당일 트렌드, 평가액 부분 재계산 계좌 스냅샷 조회, treemap intraday 조회 조건을 보정
+- `src/db.py`, `src/sqlite_db.py`: 매수/매도 생성·수정 시 `total_amount`, `cash_delta`를 펀드 기준가 단위로 정규화하고 `avg_cost/current_price` 기준가는 유지
+- `tests/test_analytics.py`, `tests/test_app_dashboard.py`, `tests/test_db.py`: 펀드 금액 정규화, 부분 계좌 스냅샷 조회, ECharts 비활성 조회 생략 회귀 테스트 추가
+- `docs/VALIDATION.md`: 이번 패치의 최신 대표 검증 결과로 갱신
 
 ## 핵심 설계 결정
 - 기존 `account_summary`와 `daily_account_snapshot` 계산은 유지하고, 입금 기준 이력은 별도 `daily_valuation_snapshot`에 저장한다.
@@ -83,6 +69,10 @@
 - 평가액 기록 현금값은 오늘은 `account.cash_balance`, 과거일은 같은 날짜 `daily_account_snapshot.cash_balance`가 있으면 실제 현금, 없으면 매수/매도/현금흐름 원장 현금으로 계산한다.
 - 평가액 기록의 금액 컬럼과 원화 UI 표시는 소수점 이하를 원 단위로 일반 반올림한다. 수익률은 기존처럼 소수점 표시를 유지한다.
 - 펀드성 코드(`K...`)는 수량을 좌수로 보고 기준가를 1,000좌당 가격으로 해석해 거래금액과 보유 평가액을 `좌수 * 기준가 / 1000`으로 계산한다.
+- 향후 저장되는 펀드 매수/매도 로그는 `total_amount`, `cash_delta`만 1,000좌 기준으로 정규화하고, `avg_cost/current_price`에는 기준가 원값을 유지한다.
+- 기존에 저장된 1,000배 총액 데이터는 운영 DB에서 직접 수정하지 않고 표시/계산 경로에서 계속 정규화한다.
+- Dashboard treemap intraday 상세 조회는 ECharts 렌더링 가능 경로에서만 수행한다.
+- 평가액 부분 재계산은 영향 시작일 이전 계좌 스냅샷 조회를 피하기 위해 `list_account_snapshots(account_id, start_date=...)`를 사용한다.
 - 같은 날짜/유형/종목/수량/단가에 총액만 1,000배 수준으로 큰 중복 매수/매도가 있으면 큰 총액 행은 평가/실현손익 계산에서 제외한다.
 - 국내 종목 코드는 `.KS/.KQ` 접미사를 제거하고 숫자 코드는 6자리로 맞춰 `487240`과 `487240.KS`, `69500`과 `069500`을 같은 종목으로 매칭한다.
 - 보유 수량 없이 먼저 들어온 매도 기록은 평가 현금을 부풀리지 않도록 FIFO lot에 매칭된 수량 비율만 현금 유입으로 반영한다.
@@ -106,21 +96,18 @@ streamlit run app.py --server.port 8501 --server.address 0.0.0.0 --server.fileWa
 ```
 
 ## 최신 검증 결과
-- 작업 범위: 거래 기록 생성/수정/삭제 후 평가액 기록 부분 재계산 최적화
-- 배포 코드 커밋: `aa34666` (`Optimize trade valuation rebuilds`)
-- 배포 방법: 요청 범위 파일만 선별 커밋 후 `git push origin main`
-- 변경 파일: `src/valuation.py`, `src/db.py`, `src/sqlite_db.py`, `src/ui/app_core.py`, `tests/test_valuation.py`, `tests/test_db.py`, `tests/test_app_dashboard.py`
-- `python -m compileall src/valuation.py src/db.py src/sqlite_db.py src/ui/app_core.py tests/test_valuation.py tests/test_db.py tests/test_app_dashboard.py` 성공
-- `python -m unittest tests.test_valuation tests.test_db tests.test_app_dashboard` 성공, 175 tests
+- 작업 범위: 펀드성 코드(`K...`) 1,000좌 기준가 정규화와 Dashboard/거래 UI 부분 조회 성능 개선
+- 변경 파일: `src/trade_log_filters.py`, `src/analytics.py`, `src/ui/app_core.py`, `src/db.py`, `src/sqlite_db.py`, `tests/test_analytics.py`, `tests/test_app_dashboard.py`, `tests/test_db.py`, `docs/VALIDATION.md`, `Memory.md`
+- `python -m unittest tests.test_analytics tests.test_app_dashboard tests.test_db` 성공, 181 tests
 - `python -m compileall app.py src scripts tests` 성공
-- `python -m unittest discover -s tests -p "test_*.py"` 성공, 264 tests
-- 원격 배포 검증: `python scripts/verify_streamlit_deployment.py --page trades --expect-backend supabase --wait-ms 60000 ...` 성공, `logged_in=true`, `workspace_visible=true`, `backend_storage_code=supabase`
-- 원격 검증 산출물: `artifacts/deploy-verify-trade-rebuild-optimization-20260515-0640.txt`, `artifacts/deploy-verify-trade-rebuild-optimization-20260515-0640.png`
+- `python -m unittest discover -s tests -p "test_*.py"` 성공, 273 tests
 - 테스트 중 Streamlit bare mode 경고가 출력됐으나 모든 테스트는 성공했다.
+- 운영 DB 데이터 직접 수정, migration 추가, 커밋, 푸시, 원격 배포 검증은 수행하지 않았다.
 
 ## Git/GitHub 상태
 - 기본 브랜치: `main`
 - 최근 배포 코드 커밋: `fe566aa Normalize fund unit pricing`
+- 이번 패치는 아직 커밋/푸시하지 않았다.
 - 워크트리에는 이번 요청 전부터 `data/portfolio.db`, 로컬 도구 디렉터리, 산출물 등 여러 변경/미추적 파일이 함께 있었다.
 - 커밋 시 요청 관련 파일만 선별하고 `data/portfolio.db`, `.local/`, `.playtools*/`, `.playwright-browsers/`, `.vscode/`, `artifacts/`, `data/kis_cache/` 등 로컬 산출물은 제외한다.
 

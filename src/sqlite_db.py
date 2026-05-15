@@ -9,6 +9,8 @@ from pathlib import Path
 from typing import Any, Iterator
 from uuid import uuid4
 
+from .trade_log_filters import normalized_trade_notional
+
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 DB_PATH = Path(os.getenv("RETIREMENT_DB_PATH", ROOT_DIR / "data" / "portfolio.db"))
@@ -59,6 +61,12 @@ def _normalize_cash_flow_type(flow_type: str) -> str:
 def _cash_event_label(trade_type: str) -> str:
     normalized = _normalize_cash_flow_type(trade_type)
     return CASH_EVENT_LABELS.get(normalized, normalized)
+
+
+def _normalized_trade_notional(symbol: Any, quantity: Any, price: Any) -> float:
+    """매수/매도 저장용 거래 총액을 펀드 기준가 단위까지 반영해 계산한다."""
+
+    return normalized_trade_notional(symbol, quantity, price)
 
 
 def _metadata_json(metadata: dict[str, Any] | None = None) -> str:
@@ -853,7 +861,7 @@ def record_trade(
     if share_count <= 0 or trade_price <= 0:
         raise ValueError("수량과 단가는 모두 0보다 커야 합니다.")
 
-    total_amount = share_count * trade_price
+    total_amount = _normalized_trade_notional(cleaned_symbol, share_count, trade_price)
     cash_delta = -total_amount if cleaned_type == "buy" else total_amount
     timestamp = now_iso()
 
@@ -869,7 +877,7 @@ def record_trade(
                 previous_quantity = float(holding_row["quantity"] or 0)
                 previous_cost = float(holding_row["avg_cost"] or 0)
                 next_quantity = previous_quantity + share_count
-                weighted_avg_cost = ((previous_quantity * previous_cost) + total_amount) / next_quantity
+                weighted_avg_cost = ((previous_quantity * previous_cost) + (share_count * trade_price)) / next_quantity
                 connection.execute(
                     """
                     UPDATE holdings
