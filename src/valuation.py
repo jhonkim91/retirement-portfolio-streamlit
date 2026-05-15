@@ -9,6 +9,7 @@ from typing import Any
 
 COMPANY_DEPOSIT_TYPE = "employer_deposit"
 PRINCIPAL_DEPOSIT_TYPES = {"employer_deposit", "personal_deposit", "deposit", "opening_cash"}
+PRINCIPAL_WITHDRAW_TYPES = {"withdraw"}
 BUY_SELL_TYPES = {"buy", "sell"}
 CASH_DELTA_IN_TYPES = PRINCIPAL_DEPOSIT_TYPES | {"interest", "transfer_in", "dividend", "dividend_income"}
 CASH_DELTA_OUT_TYPES = {"withdraw", "transfer_out", "fee", "commission", "tax"}
@@ -103,6 +104,15 @@ def trade_cash_delta(log: dict[str, Any]) -> float:
     if trade_type in CASH_DELTA_OUT_TYPES:
         return -amount
     return 0.0
+
+
+def principal_withdraw_amount(log: dict[str, Any]) -> float:
+    """원금 차감용 출금액을 반환한다."""
+
+    amount = trade_amount(log)
+    if amount > 0:
+        return amount
+    return abs(trade_cash_delta(log))
 
 
 def is_principal_deposit_log(log: dict[str, Any]) -> bool:
@@ -366,6 +376,8 @@ def build_company_principal_valuation_snapshots(
 
             if trade_type in PRINCIPAL_DEPOSIT_TYPES:
                 company_principal += trade_amount(log)
+            elif trade_type in PRINCIPAL_WITHDRAW_TYPES:
+                company_principal = max(company_principal - principal_withdraw_amount(log), 0.0)
             elif trade_type == "buy":
                 apply_buy(lots_by_symbol, log)
             elif trade_type == "sell":

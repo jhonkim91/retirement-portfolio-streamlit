@@ -7770,7 +7770,10 @@ def valuation_page(account: dict[str, Any], rollup_state: dict[str, Any] | None 
     del rollup_state
     account_id = int(account["id"])
     st.title("평가액 기록")
-    st.caption("개인 입금과 회사 납입금을 원금으로 보고, 보유상품 평가액과 거래 원장 기준 현금을 더해 일별 보유 평가액을 기록합니다.")
+    st.caption(
+        "개인 입금과 회사 납입금에서 일반 출금을 차감한 순입금 원금을 기준으로, "
+        "보유상품 평가액과 거래 원장 기준 현금을 더해 일별 보유 평가액을 기록합니다."
+    )
 
     action_cols = st.columns((1, 0.26), gap="medium", vertical_alignment="center")
     with action_cols[1]:

@@ -5,6 +5,7 @@ from pathlib import Path
 import sqlite3
 import sys
 import tempfile
+from typing import Any
 import unittest
 from unittest.mock import patch
 
@@ -24,6 +25,23 @@ def _load_tick_retention_module():
 
 
 tick_retention = _load_tick_retention_module()
+
+
+class _FakeSupabaseResponse:
+    """Supabase REST 요청 mock 응답."""
+
+    headers: dict[str, str] = {}
+
+    def __init__(self, payload: Any) -> None:
+        self._payload = payload
+
+    def raise_for_status(self) -> None:
+        """테스트 응답은 HTTP 오류를 발생시키지 않는다."""
+
+    def json(self) -> Any:
+        """mock payload를 반환한다."""
+
+        return self._payload
 
 
 class RealtimeTickAggregationTests(unittest.TestCase):
@@ -85,6 +103,21 @@ class RealtimeTickAggregationTests(unittest.TestCase):
 
 class SQLiteRealtimeTickRetentionTests(unittest.TestCase):
     """SQLite tick retention 실행을 검증한다."""
+
+    def test_sqlite_initialization_creates_realtime_retention_indexes(self) -> None:
+        """SQLite fallback에도 retention 범위 조회/삭제용 인덱스를 생성한다."""
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            db_path = Path(temp_dir) / "portfolio.db"
+            with patch.object(tick_retention.sqlite_db, "DB_PATH", db_path):
+                tick_retention.sqlite_db.initialize_database()
+
+            tick_indexes = self._index_names(db_path, "realtime_price_ticks")
+            bar_indexes = self._index_names(db_path, "realtime_price_bars")
+
+        self.assertIn("idx_realtime_price_ticks_quote_time_id", tick_indexes)
+        self.assertIn("idx_realtime_price_ticks_holding_id", tick_indexes)
+        self.assertIn("idx_realtime_price_bars_interval_bucket", bar_indexes)
 
     def test_run_retention_aggregates_old_ticks_and_deletes_only_after_apply(self) -> None:
         """기본 dry-run은 쓰지 않고, apply 때만 bar 저장과 raw tick 삭제를 수행한다."""
@@ -156,6 +189,38 @@ class SQLiteRealtimeTickRetentionTests(unittest.TestCase):
             return int(connection.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0])
         finally:
             connection.close()
+
+    @staticmethod
+    def _index_names(db_path: Path, table_name: str) -> set[str]:
+        connection = sqlite3.connect(db_path)
+        try:
+            rows = connection.execute(f"PRAGMA index_list({table_name})").fetchall()
+            return {str(row[1]) for row in rows}
+        finally:
+            connection.close()
+
+
+class SupabaseRealtimeTickRetentionTests(unittest.TestCase):
+    """Supabase tick retention REST 요청 구성을 검증한다."""
+
+    def test_fetch_ticks_orders_by_quote_time_and_id_for_retention_index(self) -> None:
+        """Supabase tick 조회는 시간 범위 인덱스를 타도록 quote_time/id 순서로 정렬한다."""
+
+        with patch.object(tick_retention.requests, "request", return_value=_FakeSupabaseResponse([])) as request_mock:
+            store = tick_retention.SupabaseTickRetentionStore(
+                "https://example.supabase.co",
+                "service-role-key",
+                page_size=1000,
+            )
+
+            rows = store.fetch_ticks(start_at="2026-05-01T00:00:00", end_at="2026-05-08T00:00:00")
+
+        self.assertEqual(rows, [])
+        params = request_mock.call_args.kwargs["params"]
+        self.assertIn(("quote_time", "lt.2026-05-08T00:00:00"), params)
+        self.assertIn(("quote_time", "gte.2026-05-01T00:00:00"), params)
+        self.assertIn(("order", "quote_time.asc,id.asc"), params)
+        self.assertNotIn(("order", "account_id.asc,symbol.asc,quote_time.asc,id.asc"), params)
 
 
 if __name__ == "__main__":

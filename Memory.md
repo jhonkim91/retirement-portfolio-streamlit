@@ -23,6 +23,8 @@
 - [x] 운영 `jhonkim2025` 계정 평가 스냅샷을 원장 현금 기준으로 재계산
 - [x] 기존 `migrations/2026-05-14_normalize_temporal_columns.sql` 적용 전 cast 실패 행 여부 점검
 - [x] KIS WebSocket worker 장시간 실행 중 재연결/상태 복구를 장중 운영 로그 기준으로 추가 점검
+- [x] Supabase/SQLite 실시간 tick retention 전용 인덱스 보강
+- [x] 평가액 기록 수익률 계산 시 일반 출금을 순입금 원금에서 차감
 - [ ] temporal normalize migration 실제 적용 전 운영 `realtime_price_bars` 테이블 생성/노출 여부 결정
 
 ## 프로젝트 개요
@@ -37,6 +39,15 @@
 - 배포 앱: `https://retirement-portfolio-app-nh2vq9ferqnpehsslbykbe.streamlit.app/`
 
 ## 최근 변경 파일
+- `src/valuation.py`: 평가액 기록 `profit_rate` 분모인 원금을 입금 누계가 아니라 일반 출금을 차감한 순입금 원금으로 계산
+- `src/ui/app_core.py`: 평가액 기록 안내 문구를 순입금 원금 기준으로 조정
+- `tests/test_valuation.py`: 일반 출금/`cash_delta` 기반 출금/계좌 간 이체 출금 회귀 테스트 추가
+- `README.md`, `docs/VALIDATION.md`, `Memory.md`: 평가액 기록 수익률 기준과 최신 검증 결과 갱신
+- `migrations/2026-05-15_reinforce_realtime_indexes.sql`: 운영 Supabase용 `CREATE INDEX CONCURRENTLY` 기반 realtime retention 인덱스 migration 추가
+- `setup_supabase.sql`: `realtime_price_ticks(quote_time, id)`, `realtime_price_ticks(holding_id)`, `realtime_price_bars(interval, bucket_start)` 인덱스 추가
+- `src/sqlite_db.py`: SQLite fallback에도 동일 목적 realtime retention 인덱스 생성 추가
+- `scripts/run_realtime_tick_retention.py`: tick 범위 조회 정렬을 `quote_time ASC, id ASC`로 변경
+- `tests/test_setup_supabase_sql.py`, `tests/test_realtime_tick_retention.py`: Supabase/SQLite 인덱스와 Supabase REST order 회귀 테스트 추가
 - `setup_supabase.sql`: `daily_valuation_snapshot` 테이블, 인덱스, RLS 정책 4종, 명시적 GRANT 추가
 - `migrations/2026-05-14_add_daily_valuation_snapshot.sql`: 신규 평가 스냅샷 테이블 migration 추가
 - `src/valuation.py`: 입금 원금 기준 일별 평가 스냅샷 계산, 원장 현금 누적, 가격 lookup 구성, 재계산/저장 서비스 추가
@@ -58,7 +69,7 @@
 
 ## 핵심 설계 결정
 - 기존 `account_summary`와 `daily_account_snapshot` 계산은 유지하고, 입금 기준 이력은 별도 `daily_valuation_snapshot`에 저장한다.
-- `company_principal` 컬럼은 기존 스키마명을 유지하되 `employer_deposit`, `personal_deposit`, legacy `deposit`, `opening_cash`를 입금 원금으로 누적한다.
+- `company_principal` 컬럼은 기존 스키마명을 유지하되 `employer_deposit`, `personal_deposit`, legacy `deposit`, `opening_cash`에서 일반 출금을 차감한 순입금 원금으로 계산한다.
 - 매수 lot은 FIFO로 쌓고 매도는 FIFO 기준으로 잔여 수량과 잔여 매입원가를 차감한다.
 - 과거 날짜 현금은 거래 원장의 `cash_delta`를 누적한 원장 현금을 사용하고, 오늘 날짜는 `account.cash_balance` 실제 현금을 사용한다.
 - 매도 실현손익, 이자, 배당, 수수료, 현금 조정처럼 `cash_delta`가 있는 이벤트는 원금이 아니라 원장 현금에 반영한다.
@@ -73,6 +84,7 @@
 - 사이드바 계좌 카드에서는 계좌명만 표시하고 `연금(IRP/퇴직연금)` 유형 뱃지는 표시하지 않는다.
 - 스냅샷이 없으면 기존 summary와 `daily_account_snapshot` 기반 표시로 fallback한다.
 - KIS WebSocket worker는 운영 중 `ping/pong timed out` 후 재연결할 수 있지만, 종료 신호 수신 시에는 WebSocket을 닫고 재연결 루프 대신 `stopped` 상태 저장 경로로 이동한다.
+- realtime retention은 시간 범위 count/delete 성능을 우선해 `quote_time, id` 정렬 인덱스를 사용하고, 집계 정확도는 `aggregate_ticks()` 내부 정렬로 유지한다.
 
 ## 실행 명령
 ```powershell
@@ -85,6 +97,15 @@ streamlit run app.py --server.port 8501 --server.address 0.0.0.0 --server.fileWa
 ```
 
 ## 최신 검증 결과
+- `python -m compileall src/valuation.py src/ui/app_core.py tests/test_valuation.py` 성공
+- `python -m unittest tests.test_valuation tests.test_app_dashboard` 성공, 112 tests
+- `python -m unittest discover -s tests -p "test_*.py"` 성공, 244 tests
+- `git diff --check -- src/valuation.py src/ui/app_core.py tests/test_valuation.py` 성공
+- `python -m compileall app.py src scripts tests` 성공
+- `python -m unittest tests.test_setup_supabase_sql tests.test_realtime_tick_retention` 성공, 13 tests
+- `python -m unittest discover -s tests -p "test_*.py"` 성공, 241 tests
+- `RETIREMENT_DB_PATH=/tmp/retirement-retention-verify.db python scripts/run_realtime_tick_retention.py --backend sqlite --as-of 2026-05-13T00:00:00` 성공, dry-run `source_ticks=0`
+- `git diff --check -- setup_supabase.sql migrations/2026-05-15_reinforce_realtime_indexes.sql src/sqlite_db.py scripts/run_realtime_tick_retention.py tests/test_setup_supabase_sql.py tests/test_realtime_tick_retention.py` 성공
 - Supabase 운영 `migrations/2026-05-14_normalize_temporal_columns.sql` 사전 cast 점검: 대상 temporal 컬럼 전체 `invalid_rows=0`; 단, 운영 DB에 `public.realtime_price_bars`가 없어 migration 전체 적용 전 테이블 선행 적용 여부 확인 필요
 - GitHub Actions `KIS Realtime Worker` 최신 run `25845045857` 성공, 운영 Supabase tick 총 12,449건 및 account 23/24/25/26 `stopped` 상태 확인
 - `python -m unittest tests.test_run_kis_quote_worker` 성공, 7 tests

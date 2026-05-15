@@ -247,7 +247,7 @@ class SQLiteTickRetentionStore:
             SELECT *
             FROM realtime_price_ticks
             WHERE {' AND '.join(conditions)}
-            ORDER BY account_id ASC, symbol ASC, quote_time ASC, id ASC
+            ORDER BY quote_time ASC, id ASC
         """
         with sqlite_db.connect() as connection:
             rows = connection.execute(query, tuple(parameters)).fetchall()
@@ -424,7 +424,7 @@ class SupabaseTickRetentionStore:
         filters: list[tuple[str, Any]] = [
             ("select", "*"),
             ("quote_time", f"lt.{end_at}"),
-            ("order", "account_id.asc,symbol.asc,quote_time.asc,id.asc"),
+            ("order", "quote_time.asc,id.asc"),
         ]
         if start_at is not None:
             filters.append(("quote_time", f"gte.{start_at}"))

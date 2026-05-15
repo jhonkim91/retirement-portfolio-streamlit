@@ -168,8 +168,11 @@ CREATE INDEX IF NOT EXISTS idx_daily_account_snapshot_account_date ON public.dai
 CREATE INDEX IF NOT EXISTS idx_daily_valuation_snapshot_account_date ON public.daily_valuation_snapshot(account_id, valuation_date);
 CREATE INDEX IF NOT EXISTS idx_realtime_price_ticks_account_quote_time ON public.realtime_price_ticks(account_id, quote_time DESC);
 CREATE INDEX IF NOT EXISTS idx_realtime_price_ticks_symbol_quote_time ON public.realtime_price_ticks(symbol, quote_time DESC);
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_realtime_price_ticks_quote_time_id ON public.realtime_price_ticks(quote_time ASC, id ASC);
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_realtime_price_ticks_holding_id ON public.realtime_price_ticks(holding_id) WHERE holding_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_realtime_price_bars_account_interval_bucket ON public.realtime_price_bars(account_id, interval, bucket_start DESC);
 CREATE INDEX IF NOT EXISTS idx_realtime_price_bars_symbol_interval_bucket ON public.realtime_price_bars(symbol, interval, bucket_start DESC);
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_realtime_price_bars_interval_bucket ON public.realtime_price_bars(interval, bucket_start);
 
 UPDATE public.trade_logs
 SET trade_type = 'personal_deposit'

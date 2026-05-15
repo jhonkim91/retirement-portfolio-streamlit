@@ -167,6 +167,69 @@ class CompanyPrincipalValuationTests(unittest.TestCase):
         self.assertEqual(snapshots[-1]["implied_cash"], 10170)
         self.assertEqual(snapshots[-1]["profit_loss"], 170)
 
+    def test_withdraw_reduces_principal_for_profit_rate(self) -> None:
+        """일반 출금은 평가액 기록 수익률 분모인 순입금 원금을 줄인다."""
+
+        trade_logs = [
+            {"id": 1, "trade_date": "2026-01-01", "trade_type": "personal_deposit", "total_amount": 10000},
+            {"id": 2, "trade_date": "2026-01-02", "trade_type": "buy", "symbol": "AAA", "product_name": "A", "quantity": 2, "price": 3000},
+            {"id": 3, "trade_date": "2026-01-03", "trade_type": "withdraw", "total_amount": 2000, "cash_delta": -2000},
+        ]
+
+        snapshots = build_company_principal_valuation_snapshots(
+            account={"id": 1, "cash_balance": 0},
+            trade_logs=trade_logs,
+            price_lookup={"AAA": {"2026-01-03": 3100}},
+            end_date=date(2026, 1, 3),
+            today_date=date(2026, 1, 4),
+            calculation_reason="test",
+        )
+
+        final_snapshot = snapshots[-1]
+        self.assertEqual(final_snapshot["company_principal"], 8000)
+        self.assertEqual(final_snapshot["cash_value"], 2000)
+        self.assertEqual(final_snapshot["valuation_amount"], 8200)
+        self.assertEqual(final_snapshot["profit_loss"], 200)
+        self.assertEqual(final_snapshot["profit_rate"], 2.5)
+
+    def test_withdraw_without_total_amount_uses_cash_delta_for_principal(self) -> None:
+        """출금 total_amount가 비어 있으면 cash_delta 기준으로 순입금 원금을 줄인다."""
+
+        snapshots = build_company_principal_valuation_snapshots(
+            account={"id": 1, "cash_balance": 0},
+            trade_logs=[
+                {"id": 1, "trade_date": "2026-01-01", "trade_type": "personal_deposit", "total_amount": 10000},
+                {"id": 2, "trade_date": "2026-01-02", "trade_type": "withdraw", "total_amount": 0, "cash_delta": -3000},
+            ],
+            price_lookup={},
+            end_date=date(2026, 1, 2),
+            today_date=date(2026, 1, 3),
+            calculation_reason="test",
+        )
+
+        self.assertEqual(snapshots[-1]["company_principal"], 7000)
+        self.assertEqual(snapshots[-1]["valuation_amount"], 7000)
+        self.assertEqual(snapshots[-1]["profit_rate"], 0.0)
+
+    def test_transfer_out_does_not_reduce_principal_for_valuation(self) -> None:
+        """계좌 간 이체 출금은 기존 원금 기준과 같이 평가 원금 차감에서 제외한다."""
+
+        snapshots = build_company_principal_valuation_snapshots(
+            account={"id": 1, "cash_balance": 0},
+            trade_logs=[
+                {"id": 1, "trade_date": "2026-01-01", "trade_type": "personal_deposit", "total_amount": 10000},
+                {"id": 2, "trade_date": "2026-01-02", "trade_type": "transfer_out", "total_amount": 2000, "cash_delta": -2000},
+            ],
+            price_lookup={},
+            end_date=date(2026, 1, 2),
+            today_date=date(2026, 1, 3),
+            calculation_reason="test",
+        )
+
+        self.assertEqual(snapshots[-1]["company_principal"], 10000)
+        self.assertEqual(snapshots[-1]["valuation_amount"], 8000)
+        self.assertEqual(snapshots[-1]["profit_rate"], -20.0)
+
     def test_price_lookup_uses_previous_close_before_unit_cost_fallback(self) -> None:
         """해당 날짜 가격이 없으면 직전 종가를 쓰고, 가격 이력이 없으면 매입가 fallback을 기록한다."""
 

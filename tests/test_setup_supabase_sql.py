@@ -7,6 +7,9 @@ import unittest
 
 
 SQL_PATH = Path(__file__).resolve().parents[1] / "setup_supabase.sql"
+REALTIME_INDEX_MIGRATION_PATH = (
+    Path(__file__).resolve().parents[1] / "migrations" / "2026-05-15_reinforce_realtime_indexes.sql"
+)
 
 
 def read_setup_sql() -> str:
@@ -74,6 +77,33 @@ class SetupSupabaseSqlTests(unittest.TestCase):
         self.assertIn("idx_realtime_price_bars_account_interval_bucket", sql_text)
         self.assertIn("GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.realtime_price_bars", sql_text)
         self.assertIn("ALTER TABLE public.realtime_price_bars ENABLE ROW LEVEL SECURITY", sql_text)
+
+    def test_realtime_retention_indexes_exist(self) -> None:
+        """실시간 retention 조회/삭제용 Supabase 인덱스를 생성한다."""
+
+        sql_text = read_setup_sql()
+        expected_fragments = [
+            "CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_realtime_price_ticks_quote_time_id",
+            "ON public.realtime_price_ticks(quote_time ASC, id ASC)",
+            "CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_realtime_price_ticks_holding_id",
+            "ON public.realtime_price_ticks(holding_id) WHERE holding_id IS NOT NULL",
+            "CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_realtime_price_bars_interval_bucket",
+            "ON public.realtime_price_bars(interval, bucket_start)",
+        ]
+
+        for fragment in expected_fragments:
+            with self.subTest(fragment=fragment):
+                self.assertIn(fragment, sql_text)
+
+    def test_realtime_retention_index_migration_is_concurrent(self) -> None:
+        """운영 추가용 realtime 인덱스 migration은 transaction 없이 concurrent index를 만든다."""
+
+        migration_sql = REALTIME_INDEX_MIGRATION_PATH.read_text(encoding="utf-8")
+
+        self.assertNotRegex(migration_sql, r"\bBEGIN\b|\bCOMMIT\b")
+        self.assertIn("CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_realtime_price_ticks_quote_time_id", migration_sql)
+        self.assertIn("CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_realtime_price_ticks_holding_id", migration_sql)
+        self.assertIn("CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_realtime_price_bars_interval_bucket", migration_sql)
 
     def test_daily_valuation_snapshot_schema_and_access_policy_exist(self) -> None:
         """입금 기준 평가 스냅샷 테이블은 RLS와 명시적 GRANT를 함께 둔다."""

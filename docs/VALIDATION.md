@@ -6,6 +6,16 @@
 - 기준일: `2026-05-15`
 
 ## 최신 대표 검증 결과
+- 작업 범위: 평가액 기록 수익률 계산 보정
+- 원인: 일반 출금은 원장 현금에서는 차감됐지만 수익률 분모인 평가 원금에서는 차감되지 않아 출금 이후 손익률이 왜곡될 수 있었음
+- 수정: `daily_valuation_snapshot.company_principal` 저장값은 기존 컬럼명을 유지하되 일반 출금을 차감한 순입금 원금으로 계산
+- 예외 유지: 계좌 간 `transfer_out`은 기존 원금 기준과 동일하게 원금 차감 대상에서 제외
+- UI 문구: 평가액 기록 안내를 순입금 원금 기준으로 조정
+- 작업 범위: 실시간 테이블 retention 전용 인덱스 보강
+- 신규 Supabase 인덱스: `realtime_price_ticks(quote_time, id)`, `realtime_price_ticks(holding_id) WHERE holding_id IS NOT NULL`, `realtime_price_bars(interval, bucket_start)`
+- 신규 migration: `migrations/2026-05-15_reinforce_realtime_indexes.sql`; `CREATE INDEX CONCURRENTLY` 사용으로 transaction block 없이 작성
+- SQLite fallback: 동일 목적 인덱스를 초기화 루틴에 추가
+- retention 조회 변경: Supabase/SQLite tick 범위 조회 정렬을 `quote_time ASC, id ASC`로 변경하고, 집계 정확도는 기존 `aggregate_ticks()` 내부 정렬로 유지
 - 작업 범위: 입금액 기준 일별 평가액 기록 기능 추가
 - 추가 운영 점검: `migrations/2026-05-14_normalize_temporal_columns.sql` 적용 전 Supabase temporal 컬럼 cast 실패 행 점검
 - 추가 worker 수정: KIS WebSocket worker가 GitHub Actions timeout 종료 신호를 WebSocket 오류로 처리한 뒤 재연결하다 `137`로 kill되는 흐름을 방지
@@ -25,6 +35,15 @@
 - 환경: 로컬 Python 3.11, Streamlit, SQLite backend 검증
 
 ## 명령 검증
+- `python -m compileall src/valuation.py src/ui/app_core.py tests/test_valuation.py` 성공
+- `python -m unittest tests.test_valuation tests.test_app_dashboard` 성공, 112 tests
+- `python -m unittest discover -s tests -p "test_*.py"` 성공, 244 tests
+- `git diff --check -- src/valuation.py src/ui/app_core.py tests/test_valuation.py` 성공
+- `python -m compileall app.py src scripts tests` 성공
+- `python -m unittest tests.test_setup_supabase_sql tests.test_realtime_tick_retention` 성공, 13 tests
+- `python -m unittest discover -s tests -p "test_*.py"` 성공, 241 tests
+- `RETIREMENT_DB_PATH=/tmp/retirement-retention-verify.db python scripts/run_realtime_tick_retention.py --backend sqlite --as-of 2026-05-13T00:00:00` 성공, dry-run `source_ticks=0`
+- `git diff --check -- setup_supabase.sql migrations/2026-05-15_reinforce_realtime_indexes.sql src/sqlite_db.py scripts/run_realtime_tick_retention.py tests/test_setup_supabase_sql.py tests/test_realtime_tick_retention.py` 성공
 - `python -m unittest tests.test_run_kis_quote_worker` 성공, 7 tests
 - `python scripts/run_kis_quote_worker.py --backend sqlite --preflight-only` 성공, `accounts=8`, `holdings=34`
 - `python scripts/run_kis_quote_worker.py --backend supabase --preflight-only` 성공, `accounts=4`, `holdings=6`
