@@ -18,7 +18,10 @@
 - `python -m compileall app.py src scripts tests` 성공
 - `python -m unittest discover -s tests -p "test_*.py"` 성공, 273 tests
 - 코드 패치 커밋: `67643c0` (`Normalize fund trade amounts`)
-- 배포 방법: `git push origin main`
+- 배포 방법: `git push origin main`, `main`을 `3c5078f`까지 푸시
+- 원격 검증: `python scripts/verify_streamlit_deployment.py --page trades --expect-backend supabase --wait-ms 60000 ...` 성공
+- 원격 검증 결과: `logged_in=true`, `workspace_visible=true`, `backend_storage_code=supabase`, `ok=true`
+- 원격 검증 산출물: `artifacts/deploy-verify-fund-normalization-20260515-1020.txt`, `artifacts/deploy-verify-fund-normalization-20260515-1020.png`
 
 ## 검증 범위
 - `holdings_frame()`/`account_summary()` 펀드 보유 평가액과 매입원가가 1,000좌 기준으로 계산되는지 검증
@@ -28,4 +31,4 @@
 - 평가액 부분 재계산의 `list_account_snapshots(..., start_date=...)` 호출과 ECharts 비활성 시 treemap intraday 조회 생략을 검증
 
 ## 미수행 항목
-- 운영 DB 데이터 직접 수정과 원격 배포 검증은 수행하지 않았다.
+- 운영 DB 데이터 직접 수정은 수행하지 않았다.

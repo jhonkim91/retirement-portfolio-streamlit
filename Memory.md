@@ -102,14 +102,17 @@ streamlit run app.py --server.port 8501 --server.address 0.0.0.0 --server.fileWa
 - `python -m compileall app.py src scripts tests` 성공
 - `python -m unittest discover -s tests -p "test_*.py"` 성공, 273 tests
 - 코드 패치 커밋: `67643c0` (`Normalize fund trade amounts`)
-- 배포 방법: `git push origin main`
+- 배포 방법: `git push origin main`, `main`을 `3c5078f`까지 푸시
+- 원격 배포 검증: `python scripts/verify_streamlit_deployment.py --page trades --expect-backend supabase --wait-ms 60000 ...` 성공, `logged_in=true`, `workspace_visible=true`, `backend_storage_code=supabase`, `ok=true`
+- 원격 검증 산출물: `artifacts/deploy-verify-fund-normalization-20260515-1020.txt`, `artifacts/deploy-verify-fund-normalization-20260515-1020.png`
 - 테스트 중 Streamlit bare mode 경고가 출력됐으나 모든 테스트는 성공했다.
-- 운영 DB 데이터 직접 수정, migration 추가, 원격 배포 검증은 수행하지 않았다.
+- 운영 DB 데이터 직접 수정과 migration 추가는 수행하지 않았다.
 
 ## Git/GitHub 상태
 - 기본 브랜치: `main`
 - 최근 배포 코드 커밋: `fe566aa Normalize fund unit pricing`
 - 이번 패치 코드 커밋: `67643c0 Normalize fund trade amounts`
+- 이번 패치 검증 기록 커밋: `3c5078f Record fund normalization validation`
 - 워크트리에는 이번 요청 전부터 `data/portfolio.db`, 로컬 도구 디렉터리, 산출물 등 여러 변경/미추적 파일이 함께 있었다.
 - 커밋 시 요청 관련 파일만 선별하고 `data/portfolio.db`, `.local/`, `.playtools*/`, `.playwright-browsers/`, `.vscode/`, `artifacts/`, `data/kis_cache/` 등 로컬 산출물은 제외한다.
 
