@@ -380,6 +380,26 @@ class TradeFormResetTests(unittest.TestCase):
         self.assertFalse(dashboard_app.is_trade_log_editable({"trade_type": "withdraw"}))
         self.assertFalse(dashboard_app.is_trade_log_editable({"trade_type": "transfer_out"}))
 
+    def test_trade_log_selection_helpers_normalize_ids(self) -> None:
+        session_state = {"selected": [1, "2", "2", None, "bad", -1]}
+
+        self.assertEqual(dashboard_app.selected_trade_log_ids(session_state, "selected"), [1, 2])
+
+        selected_ids = dashboard_app.set_selected_trade_log_ids(session_state, "selected", ["3", 3, 4])
+
+        self.assertEqual(selected_ids, [3, 4])
+        self.assertEqual(session_state["selected"], [3, 4])
+
+    def test_trade_log_row_selection_callback_updates_bulk_ids(self) -> None:
+        session_state = {"selected": [1], "checkbox:2": True}
+
+        dashboard_app.sync_trade_log_row_selection(session_state, "selected", "checkbox:2", 2)
+        self.assertEqual(session_state["selected"], [1, 2])
+
+        session_state["checkbox:1"] = False
+        dashboard_app.sync_trade_log_row_selection(session_state, "selected", "checkbox:1", 1)
+        self.assertEqual(session_state["selected"], [2])
+
     def test_trade_log_table_fields_exclude_cash_delta_column(self) -> None:
         """거래 기록 표 구성에서 현금증감 컬럼을 제외한다."""
 
@@ -888,14 +908,29 @@ class TradeFormResetTests(unittest.TestCase):
         self.assertIn("10주", dashboard_app.format_trade_log_premium_cell(log, "quantity", {}))
 
     def test_trade_log_actions_use_compact_icon_buttons(self) -> None:
-        """거래 기록 액션은 목업 톤에 맞춘 작은 배지 버튼 라벨을 사용한다."""
+        """거래 기록 액션은 행 선택과 수정 버튼을 제공한다."""
 
         source = inspect.getsource(dashboard_app.trade_entry_page)
 
+        self.assertIn('st.checkbox(', source)
+        self.assertIn('"선택"', source)
+        self.assertIn('help="선택 삭제 대상"', source)
         self.assertIn('st.button("수정"', source)
         self.assertIn('help="거래 기록 수정"', source)
-        self.assertIn('st.button("삭제"', source)
-        self.assertIn('help="거래 기록 삭제"', source)
+        self.assertIn('"선택 삭제"', source)
+        self.assertIn('help="선택한 거래 기록 삭제"', source)
+
+    def test_trade_log_bulk_delete_flow_uses_dialog_and_existing_delete_path(self) -> None:
+        """선택 삭제는 확인 dialog에서 기존 삭제/재계산 경로를 사용한다."""
+
+        page_source = inspect.getsource(dashboard_app.trade_entry_page)
+        dialog_source = inspect.getsource(dashboard_app.render_trade_log_bulk_delete_dialog)
+
+        self.assertIn('@st.dialog("선택 거래 기록 삭제 확인")', dialog_source)
+        self.assertIn("render_trade_log_bulk_delete_dialog(", page_source)
+        self.assertIn("selected_logs_for_delete", page_source)
+        self.assertIn("delete_trade_log(int(account_id), int(log_id))", dialog_source)
+        self.assertIn('rebuild_valuation_snapshots_for_account(int(account_id), "trade_deleted")', dialog_source)
 
     def test_trade_log_import_parses_export_csv_format(self) -> None:
         """CSV 불러오기는 내보내기와 같은 컬럼을 저장 가능한 행으로 변환한다."""

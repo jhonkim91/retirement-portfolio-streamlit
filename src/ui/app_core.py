@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from string import Template
-from typing import Any, MutableMapping
+from typing import Any, Iterable, MutableMapping
 import tomllib
 from zoneinfo import ZoneInfo
 
@@ -818,6 +818,7 @@ TRADE_LOG_DATE_FILTER_LABELS = {
     "year": "올해",
 }
 TRADE_LOG_PAGE_SIZE = 5
+TRADE_LOG_BULK_DELETE_IDS_KEY = "trade_log_bulk_delete_ids"
 TRADE_LOG_IMPORT_COLUMNS = ("거래일", "종목명", "코드", "유형", "자산군", "수량", "단가", "총액", "실현수익률", "메모")
 VALUATION_SNAPSHOT_CSV_COLUMNS = (
     "기준일",
@@ -1200,6 +1201,76 @@ def is_trade_log_editable(log: dict[str, Any]) -> bool:
     """거래 기록 수정/삭제 UI에서 지원하는 유형인지 반환한다."""
 
     return normalize_trade_log_type(log.get("trade_type")) in VISIBLE_TRADE_LOG_TYPES
+
+
+def trade_log_select_checkbox_key(account_id: int, log_id: int) -> str:
+    """거래 기록 선택 체크박스의 안정적인 위젯 key를 반환한다."""
+
+    return f"trade-log-select-row:{account_id}:{log_id}"
+
+
+def selected_trade_log_ids(session_state: MutableMapping[str, Any], selected_ids_key: str) -> list[int]:
+    """세션 상태에 저장된 선택 거래 기록 id를 중복 없이 정수 목록으로 반환한다."""
+
+    selected_ids: list[int] = []
+    for raw_id in session_state.get(selected_ids_key) or []:
+        try:
+            log_id = int(raw_id)
+        except (TypeError, ValueError):
+            continue
+        if log_id > 0 and log_id not in selected_ids:
+            selected_ids.append(log_id)
+    return selected_ids
+
+
+def set_selected_trade_log_ids(
+    session_state: MutableMapping[str, Any],
+    selected_ids_key: str,
+    log_ids: Iterable[int],
+) -> list[int]:
+    """거래 기록 선택 목록을 정규화해 세션 상태에 저장한다."""
+
+    normalized_ids: list[int] = []
+    for raw_id in log_ids:
+        try:
+            log_id = int(raw_id)
+        except (TypeError, ValueError):
+            continue
+        if log_id > 0 and log_id not in normalized_ids:
+            normalized_ids.append(log_id)
+    session_state[selected_ids_key] = normalized_ids
+    return normalized_ids
+
+
+def sync_trade_log_row_selection(
+    session_state: MutableMapping[str, Any],
+    selected_ids_key: str,
+    checkbox_key: str,
+    log_id: int,
+) -> None:
+    """개별 행 체크박스 상태를 선택 삭제 id 목록에 반영한다."""
+
+    selected_ids = selected_trade_log_ids(session_state, selected_ids_key)
+    if session_state.get(checkbox_key):
+        if log_id not in selected_ids:
+            selected_ids.append(log_id)
+    else:
+        selected_ids = [selected_id for selected_id in selected_ids if selected_id != log_id]
+    set_selected_trade_log_ids(session_state, selected_ids_key, selected_ids)
+
+
+def clear_trade_log_selection(
+    session_state: MutableMapping[str, Any],
+    selected_ids_key: str,
+    *,
+    account_id: int,
+    log_ids: Iterable[int],
+) -> None:
+    """거래 기록 선택 목록과 이미 생성된 체크박스 상태를 함께 초기화한다."""
+
+    session_state[selected_ids_key] = []
+    for log_id in log_ids:
+        session_state.pop(trade_log_select_checkbox_key(int(account_id), int(log_id)), None)
 
 
 def trade_log_editor_option_label(log: dict[str, Any]) -> str:
@@ -2706,6 +2777,95 @@ def render_trade_log_edit_dialog(
     """선택한 거래 기록을 모달에서 수정한다."""
 
     render_trade_log_edit_dialog_body(account, selected_log, edit_state_key=edit_state_key)
+
+
+@st.dialog("선택 거래 기록 삭제 확인")
+def render_trade_log_bulk_delete_dialog(
+    account_id: int,
+    selected_logs: list[dict[str, Any]],
+    *,
+    selected_ids_key: str,
+    bulk_delete_state_key: str,
+) -> None:
+    """선택한 거래 기록을 확인 후 일괄 삭제한다."""
+
+    confirm_key = f"trade-log-bulk-delete-confirm:{account_id}"
+    selected_log_ids = [int(log["id"]) for log in selected_logs if log.get("id") is not None]
+    if not selected_logs:
+        st.info("삭제할 거래 기록을 먼저 선택해 주세요.")
+        if st.button("닫기", key=f"trade-log-bulk-delete-empty-close:{account_id}", width="stretch"):
+            st.session_state.pop(bulk_delete_state_key, None)
+            st.session_state.pop(confirm_key, None)
+            st.rerun()
+        return
+
+    preview_rows = [
+        {
+            "거래일": str(log.get("trade_date") or "-"),
+            "종목명": str(log.get("product_name") or "미지정"),
+            "유형": label_transaction_type(normalize_trade_log_type(log.get("trade_type"))),
+            "총금액": f'{float(log.get("total_amount") or 0):,.0f}원',
+        }
+        for log in selected_logs
+    ]
+    st.warning(f"선택한 거래 기록 {len(selected_logs):,}건을 삭제합니다.")
+    st.dataframe(pd.DataFrame(preview_rows), hide_index=True, width="stretch")
+    st.caption("삭제 후 보유 종목, 현금 흐름, 대시보드 계산 데이터가 다시 갱신됩니다.")
+    confirmed = st.checkbox("선택한 거래 기록 삭제를 확인했습니다.", key=confirm_key)
+
+    action_col_1, action_col_2 = st.columns(2, gap="small")
+    with action_col_1:
+        if st.button(
+            "삭제 실행",
+            key=f"trade-log-bulk-delete-submit:{account_id}",
+            width="stretch",
+            type="primary",
+            disabled=not confirmed,
+        ):
+            errors: list[str] = []
+            deleted_count = 0
+            deletion_order = sorted(
+                selected_logs,
+                key=lambda log: (str(log.get("trade_date") or ""), int(log.get("id") or 0)),
+                reverse=True,
+            )
+            with st.spinner("선택한 거래 기록 삭제 중..."):
+                for selected_log in deletion_order:
+                    log_id = int(selected_log["id"])
+                    try:
+                        delete_trade_log(int(account_id), int(log_id))
+                    except ValueError as exc:
+                        errors.append(f"{trade_log_editor_option_label(selected_log)}: {exc}")
+                    else:
+                        deleted_count += 1
+
+            if deleted_count:
+                with st.spinner("평가액 기록 재계산 중..."):
+                    _, valuation_error = rebuild_valuation_snapshots_for_account(int(account_id), "trade_deleted")
+                clear_trade_log_selection(
+                    st.session_state,
+                    selected_ids_key,
+                    account_id=int(account_id),
+                    log_ids=selected_log_ids,
+                )
+                st.session_state.pop(bulk_delete_state_key, None)
+                st.session_state.pop(confirm_key, None)
+                mark_rollup_dirty()
+                st.session_state[TRADE_PAGE_SUCCESS_MESSAGE_KEY] = (
+                    f"선택한 거래 기록 {deleted_count:,}건을 삭제했습니다."
+                    + (f" 실패 {len(errors):,}건은 남아 있습니다." if errors else "")
+                    + (f" 평가액 기록 재계산 실패: {valuation_error}" if valuation_error else "")
+                )
+                st.rerun()
+
+            st.error("선택한 거래 기록을 삭제하지 못했습니다.")
+            for error in errors[:5]:
+                st.caption(error)
+    with action_col_2:
+        if st.button("취소", key=f"trade-log-bulk-delete-cancel:{account_id}", width="stretch"):
+            st.session_state.pop(bulk_delete_state_key, None)
+            st.session_state.pop(confirm_key, None)
+            st.rerun()
 
 
 @st.dialog("거래 기록 삭제 확인")
@@ -7567,6 +7727,8 @@ def trade_entry_page(account: dict[str, Any], holdings: list[dict[str, Any]], ac
                 st.session_state[filter_end_date_key] = default_end_date
             edit_state_key = f"trade-log-editing:{account['id']}"
             delete_state_key = f"trade-log-delete-pending:{account['id']}"
+            bulk_delete_state_key = f"trade-log-bulk-delete-pending:{account['id']}"
+            selected_ids_key = f"{TRADE_LOG_BULK_DELETE_IDS_KEY}:{account['id']}"
             editing_log_id = _optional_int(st.session_state.get(edit_state_key))
             delete_log_id = _optional_int(st.session_state.get(delete_state_key))
             with st.container(border=True, key="trade-log-panel"):
@@ -7665,6 +7827,72 @@ def trade_entry_page(account: dict[str, Any], holdings: list[dict[str, Any]], ac
                 )
                 st.session_state[filter_page_key] = current_page
                 log_by_id = {int(row["id"]): row for row in filtered_logs if row.get("id") is not None}
+                editable_log_by_id = {
+                    int(row["id"]): row
+                    for row in visible_logs
+                    if row.get("id") is not None and is_trade_log_editable(row)
+                }
+                selected_log_ids = set_selected_trade_log_ids(
+                    st.session_state,
+                    selected_ids_key,
+                    [log_id for log_id in selected_trade_log_ids(st.session_state, selected_ids_key) if log_id in editable_log_by_id],
+                )
+                selectable_page_ids = [
+                    int(row["id"])
+                    for row in page_logs
+                    if row.get("id") is not None and is_trade_log_editable(row)
+                ]
+
+                bulk_action_cols = st.columns((1, 0.42, 0.34, 0.34), gap="small", vertical_alignment="center")
+                with bulk_action_cols[0]:
+                    st.caption(f"선택 {len(selected_log_ids):,}건")
+                with bulk_action_cols[1]:
+                    if st.button(
+                        "현재 페이지 선택",
+                        key=f"trade-log-select-page:{account['id']}",
+                        width="stretch",
+                        disabled=not selectable_page_ids,
+                    ):
+                        selected_log_ids = set_selected_trade_log_ids(
+                            st.session_state,
+                            selected_ids_key,
+                            [*selected_log_ids, *selectable_page_ids],
+                        )
+                        for selected_id in selectable_page_ids:
+                            st.session_state[trade_log_select_checkbox_key(int(account["id"]), selected_id)] = True
+                        st.session_state.pop(edit_state_key, None)
+                        st.session_state.pop(delete_state_key, None)
+                        st.rerun()
+                with bulk_action_cols[2]:
+                    if st.button(
+                        "선택 해제",
+                        key=f"trade-log-clear-selection:{account['id']}",
+                        width="stretch",
+                        disabled=not selected_log_ids,
+                    ):
+                        clear_trade_log_selection(
+                            st.session_state,
+                            selected_ids_key,
+                            account_id=int(account["id"]),
+                            log_ids=editable_log_by_id.keys(),
+                        )
+                        st.session_state.pop(edit_state_key, None)
+                        st.session_state.pop(delete_state_key, None)
+                        st.session_state.pop(bulk_delete_state_key, None)
+                        st.rerun()
+                with bulk_action_cols[3]:
+                    if st.button(
+                        "선택 삭제",
+                        key=f"trade-log-bulk-delete-button:{account['id']}",
+                        width="stretch",
+                        type="secondary",
+                        disabled=not selected_log_ids,
+                        help="선택한 거래 기록 삭제",
+                    ):
+                        st.session_state[bulk_delete_state_key] = True
+                        st.session_state.pop(edit_state_key, None)
+                        st.session_state.pop(delete_state_key, None)
+                        st.rerun()
 
                 if page_logs:
                     with st.container(key="trade-log-table-header"):
@@ -7686,13 +7914,20 @@ def trade_entry_page(account: dict[str, Any], holdings: list[dict[str, Any]], ac
                             with row_columns[-1]:
                                 if is_trade_log_editable(row):
                                     with st.container(key=f"trade-log-actions:{account['id']}:{log_id}"):
+                                        row_select_key = trade_log_select_checkbox_key(int(account["id"]), log_id)
+                                        if row_select_key not in st.session_state:
+                                            st.session_state[row_select_key] = log_id in selected_log_ids
+                                        st.checkbox(
+                                            "선택",
+                                            key=row_select_key,
+                                            help="선택 삭제 대상",
+                                            on_change=sync_trade_log_row_selection,
+                                            args=(st.session_state, selected_ids_key, row_select_key, log_id),
+                                        )
                                         if st.button("수정", key=f"trade-log-edit-button:{account['id']}:{log_id}", help="거래 기록 수정"):
                                             st.session_state[edit_state_key] = log_id
                                             st.session_state.pop(delete_state_key, None)
-                                            st.rerun()
-                                        if st.button("삭제", key=f"trade-log-delete-button:{account['id']}:{log_id}", help="거래 기록 삭제"):
-                                            st.session_state[delete_state_key] = log_id
-                                            st.session_state.pop(edit_state_key, None)
+                                            st.session_state.pop(bulk_delete_state_key, None)
                                             st.rerun()
                                 else:
                                     st.markdown('<span class="trade-log-action-empty">-</span>', unsafe_allow_html=True)
@@ -7742,7 +7977,21 @@ def trade_entry_page(account: dict[str, Any], holdings: list[dict[str, Any]], ac
                 st.session_state.pop(delete_state_key, None)
                 delete_log_id = None
 
-            if editing_log_id in log_by_id:
+            selected_logs_for_delete = [
+                editable_log_by_id[log_id]
+                for log_id in selected_trade_log_ids(st.session_state, selected_ids_key)
+                if log_id in editable_log_by_id
+            ]
+            if st.session_state.get(bulk_delete_state_key):
+                st.session_state.pop(edit_state_key, None)
+                st.session_state.pop(delete_state_key, None)
+                render_trade_log_bulk_delete_dialog(
+                    int(account["id"]),
+                    selected_logs_for_delete,
+                    selected_ids_key=selected_ids_key,
+                    bulk_delete_state_key=bulk_delete_state_key,
+                )
+            elif editing_log_id in log_by_id:
                 st.session_state.pop(delete_state_key, None)
                 selected_log = log_by_id[int(editing_log_id)]
                 render_trade_log_edit_dialog(account, selected_log, edit_state_key=edit_state_key)
