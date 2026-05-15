@@ -149,6 +149,67 @@ class CompanyPrincipalValuationTests(unittest.TestCase):
         self.assertEqual(final_snapshot["profit_loss"], -699)
         self.assertEqual(final_snapshot["profit_rate"], -69.8302)
 
+    def test_scaled_duplicate_trade_logs_are_ignored_for_valuation(self) -> None:
+        """같은 거래의 1,000배 총액 중복 행은 평가 원장 계산에서 제외한다."""
+
+        snapshots = build_company_principal_valuation_snapshots(
+            account={"id": 1, "cash_balance": 0},
+            trade_logs=[
+                {"id": 1, "trade_date": "2026-01-01", "trade_type": "personal_deposit", "total_amount": 10000},
+                {
+                    "id": 2,
+                    "trade_date": "2026-01-02",
+                    "trade_type": "buy",
+                    "symbol": "FUND",
+                    "product_name": "테스트펀드",
+                    "quantity": 1000,
+                    "price": 2,
+                    "total_amount": 2_000_000,
+                },
+                {
+                    "id": 3,
+                    "trade_date": "2026-01-02",
+                    "trade_type": "buy",
+                    "symbol": "FUND",
+                    "product_name": "테스트펀드",
+                    "quantity": 1000,
+                    "price": 2,
+                    "total_amount": 2000,
+                },
+            ],
+            price_lookup={"FUND": {"2026-01-02": 2}},
+            end_date=date(2026, 1, 2),
+            today_date=date(2026, 1, 3),
+            calculation_reason="test",
+        )
+
+        final_snapshot = snapshots[-1]
+        self.assertEqual(final_snapshot["invested_cost"], 2000)
+        self.assertEqual(final_snapshot["implied_cash"], 8000)
+        self.assertEqual(final_snapshot["valuation_amount"], 10000)
+
+    def test_domestic_symbol_suffix_matches_existing_lot(self) -> None:
+        """국내 종목의 `.KS` 접미사 유무가 달라도 같은 lot으로 매칭한다."""
+
+        snapshots = build_company_principal_valuation_snapshots(
+            account={"id": 1, "cash_balance": 0},
+            trade_logs=[
+                {"id": 1, "trade_date": "2026-01-01", "trade_type": "personal_deposit", "total_amount": 10000},
+                {"id": 2, "trade_date": "2026-01-02", "trade_type": "buy", "symbol": "487240", "product_name": "A", "quantity": 1, "price": 3000},
+                {"id": 3, "trade_date": "2026-01-03", "trade_type": "sell", "symbol": "487240.KS", "product_name": "A", "quantity": 1, "price": 5000},
+            ],
+            price_lookup={"487240": {"2026-01-03": 3000}},
+            end_date=date(2026, 1, 3),
+            today_date=date(2026, 1, 4),
+            calculation_reason="test",
+        )
+
+        final_snapshot = snapshots[-1]
+        self.assertEqual(final_snapshot["invested_cost"], 0)
+        self.assertEqual(final_snapshot["holdings_market_value"], 0)
+        self.assertEqual(final_snapshot["cash_value"], 12000)
+        self.assertEqual(final_snapshot["valuation_amount"], 12000)
+
     def test_personal_deposit_starts_series_and_counts_as_principal(self) -> None:
         """개인 입금도 최초 시작일과 원금 누적에 포함한다."""
 

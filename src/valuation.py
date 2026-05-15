@@ -7,6 +7,8 @@ from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Any
 
+from .trade_log_filters import filter_scaled_duplicate_trade_logs, normalize_trade_symbol
+
 
 COMPANY_DEPOSIT_TYPE = "employer_deposit"
 PRINCIPAL_DEPOSIT_TYPES = {"employer_deposit", "personal_deposit", "deposit", "opening_cash"}
@@ -81,7 +83,7 @@ def round_won(value: Any) -> int:
 def normalize_symbol(value: Any) -> str:
     """심볼을 비교용으로 정규화한다."""
 
-    return str(value or "").strip().upper()
+    return normalize_trade_symbol(value)
 
 
 def trade_amount(log: dict[str, Any]) -> float:
@@ -374,7 +376,8 @@ def build_company_principal_valuation_snapshots(
 ) -> list[dict[str, Any]]:
     """입금액 기준 일별 평가 스냅샷을 생성한다."""
 
-    start_date = first_principal_deposit_date(trade_logs)
+    effective_trade_logs = filter_scaled_duplicate_trade_logs(trade_logs)
+    start_date = first_principal_deposit_date(effective_trade_logs)
     if start_date is None:
         return []
 
@@ -386,7 +389,7 @@ def build_company_principal_valuation_snapshots(
     ordered_logs = sorted(
         [
             log
-            for log in trade_logs
+            for log in effective_trade_logs
             if start_date <= (parse_iso_date(log.get("trade_date")) or date.min) <= target_end_date
         ],
         key=lambda row: (

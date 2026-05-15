@@ -51,6 +51,97 @@ class AccountSummaryTests(unittest.TestCase):
         self.assertEqual(summary["positions"][0]["sell_log_id"], 11)
         self.assertEqual(summary["positions"][0]["profit_rate"], 14.29)
 
+    def test_realized_summary_ignores_scaled_duplicate_trade_logs(self) -> None:
+        """같은 매수/매도의 1,000배 총액 중복 행은 실현손익 계산에서 제외한다."""
+
+        trade_logs = [
+            {
+                "id": 1,
+                "trade_type": "buy",
+                "trade_date": "2026-01-01",
+                "symbol": "K55207BU0715",
+                "product_name": "교보악사파워인덱스",
+                "asset_type": "risk",
+                "quantity": 1000,
+                "price": 2,
+                "total_amount": 2_000_000,
+            },
+            {
+                "id": 2,
+                "trade_type": "buy",
+                "trade_date": "2026-01-01",
+                "symbol": "K55207BU0715",
+                "product_name": "교보악사파워인덱스",
+                "asset_type": "risk",
+                "quantity": 1000,
+                "price": 2,
+                "total_amount": 2000,
+            },
+            {
+                "id": 3,
+                "trade_type": "sell",
+                "trade_date": "2026-02-01",
+                "symbol": "K55207BU0715",
+                "product_name": "교보악사파워인덱스",
+                "asset_type": "risk",
+                "quantity": 1000,
+                "price": 3,
+                "total_amount": 3_000_000,
+            },
+            {
+                "id": 4,
+                "trade_type": "sell",
+                "trade_date": "2026-02-01",
+                "symbol": "K55207BU0715",
+                "product_name": "교보악사파워인덱스",
+                "asset_type": "risk",
+                "quantity": 1000,
+                "price": 3,
+                "total_amount": 3000,
+            },
+        ]
+
+        summary = realized_summary(trade_logs)
+
+        self.assertEqual(summary["sold_count"], 1)
+        self.assertEqual(summary["positions"][0]["sell_log_id"], 4)
+        self.assertEqual(summary["positions"][0]["buy_amount"], 2000)
+        self.assertEqual(summary["positions"][0]["sell_amount"], 3000)
+        self.assertEqual(summary["positions"][0]["profit_loss"], 1000)
+        self.assertEqual(summary["positions"][0]["profit_rate"], 50.0)
+
+    def test_realized_summary_matches_domestic_symbol_suffix(self) -> None:
+        """국내 종목 접미사 유무가 달라도 실현손익 lot을 매칭한다."""
+
+        summary = realized_summary(
+            [
+                {
+                    "id": 1,
+                    "trade_type": "buy",
+                    "trade_date": "2026-01-01",
+                    "symbol": "487240",
+                    "product_name": "KODEX AI전력핵심설비",
+                    "asset_type": "risk",
+                    "quantity": 1,
+                    "total_amount": 3000,
+                },
+                {
+                    "id": 2,
+                    "trade_type": "sell",
+                    "trade_date": "2026-01-02",
+                    "symbol": "487240.KS",
+                    "product_name": "KODEX AI전력핵심설비",
+                    "asset_type": "risk",
+                    "quantity": 1,
+                    "total_amount": 5000,
+                },
+            ]
+        )
+
+        self.assertEqual(summary["sold_count"], 1)
+        self.assertEqual(summary["positions"][0]["profit_loss"], 2000)
+        self.assertEqual(summary["positions"][0]["profit_rate"], 66.67)
+
     def test_account_summary_separates_principal_net_flow_and_actual_profit(self) -> None:
         account = {"cash_balance": 1_000_000}
         holdings = [

@@ -7,6 +7,7 @@ from typing import Any
 import pandas as pd
 
 from .market import fetch_price_history, resolve_kis_sector_label
+from .trade_log_filters import filter_scaled_duplicate_trade_logs, normalize_trade_symbol
 
 
 CAPITAL_INFLOW_TYPES = {"personal_deposit", "employer_deposit"}
@@ -32,7 +33,7 @@ SECTOR_KEYWORD_RULES = (
 
 
 def _trade_match_key(log: dict[str, Any]) -> str:
-    symbol = str(log.get("symbol") or "").strip().upper()
+    symbol = normalize_trade_symbol(log.get("symbol"))
     if symbol:
         return f"symbol:{symbol}"
 
@@ -363,7 +364,7 @@ def realized_summary(trade_logs: list[dict[str, Any]]) -> dict[str, Any]:
     realized: list[dict[str, Any]] = []
 
     ordered_logs = sorted(
-        trade_logs,
+        filter_scaled_duplicate_trade_logs(trade_logs),
         key=lambda row: (row.get("trade_date", ""), row.get("created_at", ""), row.get("id", 0)),
     )
     for log in ordered_logs:
