@@ -35,6 +35,9 @@
 - 환경: 로컬 Python 3.11, Streamlit, SQLite backend 검증
 
 ## 명령 검증
+- `python scripts/verify_and_push_deploy.py --commit-message "Fix valuation returns and realtime indexes" ... --page dashboard --expect-backend supabase --wait-ms 30000` 성공, 커밋 `0f285e4ae347d9bfe59ebbd7d5bf4c53c08a6908`, `git push origin main` 성공
+- 배포 대시보드 검증 성공, 산출물 `artifacts/deploy-verify-20260515-022816.txt`, `artifacts/deploy-verify-20260515-022816.png`
+- `python scripts/verify_streamlit_deployment.py --page valuation --expect-backend supabase --wait-ms 30000 --text-output artifacts/deploy-verify-valuation-20260515-0229.txt --screenshot artifacts/deploy-verify-valuation-20260515-0229.png --debug-dir artifacts/deploy-verify-valuation-20260515-0229-debug` 성공, `ok=true`, `logged_in=true`, `backend_storage_code=supabase`
 - `python -m compileall src/valuation.py src/ui/app_core.py tests/test_valuation.py` 성공
 - `python -m unittest tests.test_valuation tests.test_app_dashboard` 성공, 112 tests
 - `python -m unittest discover -s tests -p "test_*.py"` 성공, 244 tests

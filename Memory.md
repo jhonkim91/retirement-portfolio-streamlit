@@ -97,6 +97,10 @@ streamlit run app.py --server.port 8501 --server.address 0.0.0.0 --server.fileWa
 ```
 
 ## 최신 검증 결과
+- 배포 커밋: `0f285e4ae347d9bfe59ebbd7d5bf4c53c08a6908` (`Fix valuation returns and realtime indexes`)
+- 배포 방법: `python scripts/verify_and_push_deploy.py ... --page dashboard --expect-backend supabase --wait-ms 30000`로 로컬 검증, 커밋, `git push origin main`, 원격 대시보드 검증까지 실행
+- 배포 검증: 원격 대시보드 검증 성공, `backend_storage_code=supabase`, 산출물 `artifacts/deploy-verify-20260515-022816.txt`, `artifacts/deploy-verify-20260515-022816.png`
+- 추가 배포 검증: `python scripts/verify_streamlit_deployment.py --page valuation --expect-backend supabase --wait-ms 30000 ...` 성공, `logged_in=true`, `workspace_visible=true`, `backend_storage_code=supabase`, 산출물 `artifacts/deploy-verify-valuation-20260515-0229.txt`, `artifacts/deploy-verify-valuation-20260515-0229.png`
 - `python -m compileall src/valuation.py src/ui/app_core.py tests/test_valuation.py` 성공
 - `python -m unittest tests.test_valuation tests.test_app_dashboard` 성공, 112 tests
 - `python -m unittest discover -s tests -p "test_*.py"` 성공, 244 tests
@@ -126,7 +130,7 @@ streamlit run app.py --server.port 8501 --server.address 0.0.0.0 --server.fileWa
 
 ## Git/GitHub 상태
 - 기본 브랜치: `main`
-- 최근 커밋: `d4b0797 Document valuation newest-first deploy check`
+- 최근 배포 코드 커밋: `0f285e4 Fix valuation returns and realtime indexes`
 - 워크트리에는 이번 요청 전부터 `data/portfolio.db`, `.streamlit/app.css`, `src/auth.py`, `docs/review_report.md` 삭제, 로컬 도구 디렉터리, 산출물 등 여러 변경/미추적 파일이 함께 있었다.
 - 커밋 시 요청 관련 파일만 선별하고 `data/portfolio.db`, `.local/`, `.playtools*/`, `.playwright-browsers/`, `.vscode/`, `artifacts/`, `data/kis_cache/` 등 로컬 산출물은 제외한다.
 
