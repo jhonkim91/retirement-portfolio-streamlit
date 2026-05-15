@@ -625,6 +625,26 @@ class TradeFormResetTests(unittest.TestCase):
         self.assertEqual(amount_delta, 50_000)
         self.assertAlmostEqual(rate_delta, 5.0)
 
+    def test_dashboard_previous_day_delta_value_uses_sorted_last_two_values(self) -> None:
+        """KPI 델타는 추이 데이터의 날짜 정렬 후 마지막 두 값 차이로 계산한다."""
+
+        frame = pd.DataFrame(
+            [
+                {"date": "2026-05-13", "principal_profit_loss": 180_000, "principal_profit_rate": 1.8},
+                {"date": "2026-05-12", "principal_profit_loss": 120_000, "principal_profit_rate": 1.2},
+                {"date": "2026-05-14", "principal_profit_loss": 150_000, "principal_profit_rate": 1.5},
+            ]
+        )
+
+        self.assertEqual(
+            dashboard_app.dashboard_previous_day_delta_value(frame, column="principal_profit_loss"),
+            -30_000,
+        )
+        self.assertAlmostEqual(
+            dashboard_app.dashboard_previous_day_delta_value(frame, column="principal_profit_rate"),
+            -0.3,
+        )
+
     def test_dashboard_overview_metric_labels_use_profit_rate(self) -> None:
         """Overview KPI는 목표 달성률 대신 수익률 라벨을 사용한다."""
 
@@ -660,6 +680,34 @@ class TradeFormResetTests(unittest.TestCase):
         labels = [str(spec["label"]) for spec in specs]
 
         self.assertEqual(labels, ["입금 원금", "현재 보유현금", "입금 대비 손익", "입금 대비 수익률"])
+
+    def test_dashboard_overview_profit_cards_include_previous_day_delta(self) -> None:
+        """손익과 수익률 KPI는 전일 대비 델타를 표시한다."""
+
+        trend_frame = pd.DataFrame(
+            [
+                {"date": "2026-05-13", "principal_profit_loss": 1_500_000, "principal_profit_rate": 15.0},
+                {"date": "2026-05-14", "principal_profit_loss": 2_000_000, "principal_profit_rate": 20.25},
+            ]
+        )
+        specs = dashboard_app.build_dashboard_metric_specs(
+            {
+                "_valuation_mode": True,
+                "total_value": 12_000_000,
+                "total_principal": 10_000_000,
+                "cash": 1_500_000,
+                "principal_profit_loss": 2_000_000,
+                "principal_profit_rate": 20.25,
+            },
+            trend_values=[10_000_000, 11_000_000, 12_000_000],
+            trend_frame=trend_frame,
+        )
+
+        self.assertEqual(specs[2]["caption"], "전일 대비 +₩500,000")
+        self.assertEqual(specs[2]["delta_tone"], "positive")
+        self.assertEqual(specs[3]["caption"], "전일 대비 +5.25%p")
+        self.assertEqual(specs[3]["delta_tone"], "positive")
+        self.assertIn("dashboard-overview-card__caption--positive", dashboard_app.render_dashboard_metric_card_option2(specs[2]))
 
     def test_dashboard_summary_from_valuation_prefers_today_snapshot(self) -> None:
         """오늘 평가 스냅샷이 있으면 Dashboard 상단 요약값을 평가액 기준으로 바꾼다."""

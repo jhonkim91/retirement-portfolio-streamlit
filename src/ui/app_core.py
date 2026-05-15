@@ -3807,6 +3807,41 @@ def dashboard_previous_day_change(
     return amount_delta, rate_delta
 
 
+def dashboard_previous_day_delta_value(
+    trend_frame: pd.DataFrame | None,
+    *,
+    column: str,
+) -> float | None:
+    """추이 데이터의 마지막 두 값 차이를 전일 대비 KPI 델타로 계산한다."""
+
+    if trend_frame is None or trend_frame.empty or column not in trend_frame.columns:
+        return None
+    working = trend_frame.copy()
+    if "date" in working.columns:
+        working["_sort_date"] = pd.to_datetime(working["date"], errors="coerce")
+        working = working.sort_values("_sort_date")
+    numeric_values = pd.to_numeric(working[column], errors="coerce").dropna()
+    if len(numeric_values) < 2:
+        return None
+    return float(numeric_values.iloc[-1]) - float(numeric_values.iloc[-2])
+
+
+def dashboard_format_signed_won(value: Any) -> str:
+    """부호를 포함한 원화 KPI 델타 문자열을 만든다."""
+
+    number = dashboard_safe_float(value)
+    sign = "+" if number > 0 else "-" if number < 0 else ""
+    return f"{sign}₩{round_won_amount(abs(number)):,}"
+
+
+def dashboard_format_signed_percentage_point(value: Any) -> str:
+    """부호를 포함한 퍼센트포인트 KPI 델타 문자열을 만든다."""
+
+    number = dashboard_safe_float(value)
+    sign = "+" if number > 0 else "-" if number < 0 else ""
+    return f"{sign}{abs(number):.2f}%p"
+
+
 def format_dashboard_overview_reference_time(value: Any) -> str:
     """Overview toolbar 기준시각을 `YYYY.MM.DD HH:MM` 형태로 줄여 표시한다."""
 
@@ -3899,6 +3934,7 @@ def build_dashboard_metric_specs(
     summary: dict[str, Any],
     *,
     trend_values: list[float],
+    trend_frame: pd.DataFrame | None = None,
 ) -> list[dict[str, Any]]:
     """제안 2번 Overview KPI 카드 4개의 표시 데이터를 구성한다."""
 
@@ -3910,6 +3946,8 @@ def build_dashboard_metric_specs(
     cash_ratio = (cash / total_value * 100) if total_value else 0.0
     profit_tone = dashboard_tone_from_value(principal_profit_loss)
     valuation_mode = bool(summary.get("_valuation_mode"))
+    profit_loss_delta = dashboard_previous_day_delta_value(trend_frame, column="principal_profit_loss")
+    profit_rate_delta = dashboard_previous_day_delta_value(trend_frame, column="principal_profit_rate")
 
     return [
         {
@@ -3934,7 +3972,12 @@ def build_dashboard_metric_specs(
             "key": "profit",
             "label": "입금 대비 손익" if valuation_mode else "평가 손익",
             "value": dashboard_format_won(principal_profit_loss),
-            "caption": "",
+            "caption": (
+                f"전일 대비 {dashboard_format_signed_won(profit_loss_delta)}"
+                if profit_loss_delta is not None
+                else ""
+            ),
+            "delta_tone": dashboard_tone_from_value(profit_loss_delta) if profit_loss_delta is not None else "neutral",
             "tone": profit_tone,
             "trend_values": trend_values,
             "show_sparkline": True,
@@ -3943,7 +3986,12 @@ def build_dashboard_metric_specs(
             "key": "goal",
             "label": "입금 대비 수익률" if valuation_mode else "수익률",
             "value": dashboard_format_rate(principal_profit_rate),
-            "caption": "",
+            "caption": (
+                f"전일 대비 {dashboard_format_signed_percentage_point(profit_rate_delta)}"
+                if profit_rate_delta is not None
+                else ""
+            ),
+            "delta_tone": dashboard_tone_from_value(profit_rate_delta) if profit_rate_delta is not None else "neutral",
             "tone": "warning" if principal_profit_rate >= 0 else "negative",
             "trend_values": trend_values,
             "show_sparkline": True,
@@ -3959,9 +4007,14 @@ def render_dashboard_metric_card_option2(spec: dict[str, Any]) -> str:
     value = html.escape(str(spec.get("value") or ""))
     caption = html.escape(str(spec.get("caption") or ""))
     tone = html.escape(str(spec.get("tone") or "neutral"))
+    delta_tone = html.escape(str(spec.get("delta_tone") or "neutral"))
     show_sparkline = bool(spec.get("show_sparkline", True))
     sparkline = build_dashboard_sparkline_svg(spec.get("trend_values") or [], tone=tone) if show_sparkline else ""
-    caption_html = f'<div class="dashboard-overview-card__caption">{caption}</div>' if caption else ""
+    caption_html = (
+        f'<div class="dashboard-overview-card__caption dashboard-overview-card__caption--{delta_tone}">{caption}</div>'
+        if caption
+        else ""
+    )
     sparkline_html = f'<div class="dashboard-overview-card__sparkline">{sparkline}</div>' if sparkline else ""
     no_sparkline_class = "" if sparkline else " dashboard-overview-card--no-sparkline"
 
@@ -4006,7 +4059,7 @@ def render_dashboard_top_overview_option2(
     hero_sparkline = build_dashboard_sparkline_svg(trend_values, tone="hero", width=420, height=120)
     metric_cards = "".join(
         render_dashboard_metric_card_option2(spec)
-        for spec in build_dashboard_metric_specs(summary, trend_values=trend_values)
+        for spec in build_dashboard_metric_specs(summary, trend_values=trend_values, trend_frame=trend_frame)
     )
     live_class = "live" if is_live else "stale"
     live_label = "실시간 가격 갱신" if is_live else "가격 갱신 필요"

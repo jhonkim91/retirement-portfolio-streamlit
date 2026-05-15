@@ -2499,6 +2499,18 @@ div[role="dialog"] [data-testid="stFormSubmitButton"] > button {
     font-weight: 800;
 }
 
+.dashboard-overview-card__caption--positive {
+    color: #16a46c;
+}
+
+.dashboard-overview-card__caption--negative {
+    color: #e85d75;
+}
+
+.dashboard-overview-card__caption--neutral {
+    color: var(--text-muted);
+}
+
 .dashboard-overview-card--positive .dashboard-overview-card__value {
     color: #16a46c;
 }

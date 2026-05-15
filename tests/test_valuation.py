@@ -46,10 +46,10 @@ class CompanyPrincipalValuationTests(unittest.TestCase):
         self.assertEqual(snapshots[2]["holdings_market_value"], 6400)
         self.assertEqual(snapshots[2]["valuation_amount"], 10400)
 
-    def test_today_uses_actual_cash_balance(self) -> None:
-        """오늘 날짜만 실제 account.cash_balance를 평가 현금값으로 사용한다."""
+    def test_today_uses_actual_cash_balance_when_it_matches_ledger_cash(self) -> None:
+        """오늘 실제 현금이 거래 원장 현금과 같으면 평가 현금값으로 사용한다."""
 
-        account = {"id": 1, "cash_balance": 1500}
+        account = {"id": 1, "cash_balance": 4000}
         trade_logs = [
             {"id": 1, "trade_date": "2026-01-01", "trade_type": "employer_deposit", "total_amount": 10000},
             {
@@ -75,9 +75,38 @@ class CompanyPrincipalValuationTests(unittest.TestCase):
 
         today_snapshot = snapshots[-1]
         self.assertEqual(today_snapshot["cash_source"], "actual")
-        self.assertEqual(today_snapshot["actual_cash_balance"], 1500)
-        self.assertEqual(today_snapshot["cash_value"], 1500)
-        self.assertEqual(today_snapshot["valuation_amount"], 7700)
+        self.assertEqual(today_snapshot["actual_cash_balance"], 4000)
+        self.assertEqual(today_snapshot["cash_value"], 4000)
+        self.assertEqual(today_snapshot["valuation_amount"], 10200)
+
+    def test_today_falls_back_to_ledger_cash_when_account_cash_is_stale(self) -> None:
+        """매수/매도를 반영하지 않은 오늘 계좌 현금은 평가액 이중 계산을 막기 위해 제외한다."""
+
+        snapshots = build_company_principal_valuation_snapshots(
+            account={"id": 1, "cash_balance": 10000},
+            trade_logs=[
+                {"id": 1, "trade_date": "2026-01-01", "trade_type": "employer_deposit", "total_amount": 10000},
+                {
+                    "id": 2,
+                    "trade_date": "2026-01-02",
+                    "trade_type": "buy",
+                    "symbol": "AAA",
+                    "product_name": "테스트상품",
+                    "quantity": 2,
+                    "price": 3000,
+                },
+            ],
+            price_lookup={"AAA": {"2026-01-02": 3100}},
+            end_date=date(2026, 1, 2),
+            today_date=date(2026, 1, 2),
+            calculation_reason="test",
+        )
+
+        today_snapshot = snapshots[-1]
+        self.assertEqual(today_snapshot["cash_source"], "implied")
+        self.assertEqual(today_snapshot["actual_cash_balance"], 10000)
+        self.assertEqual(today_snapshot["cash_value"], 4000)
+        self.assertEqual(today_snapshot["valuation_amount"], 10200)
 
     def test_historical_account_snapshot_cash_overrides_ledger_cash(self) -> None:
         """일별 계좌 스냅샷 현금이 있으면 과거 날짜도 실제 현금값으로 평가한다."""

@@ -32,6 +32,8 @@
 - [x] 1,000배 총액 중복 거래와 국내 종목 코드 접미사 차이로 인한 평가/실현손익 왜곡 보정
 - [x] 거래 기록 생성/수정/삭제 후 평가액 기록을 영향 시작일 이후만 부분 재계산하도록 최적화
 - [x] 펀드성 코드(`K...`)의 1,000좌 기준가 단위를 보유 평가/거래 UI/저장 경로에 일관 적용
+- [x] Dashboard KPI 카드의 입금 대비 손익/수익률 전일 대비 델타 표시
+- [x] Dashboard KPI 값 급등 방지를 위해 오늘 평가 스냅샷 현금 산정 fallback 추가
 - [ ] temporal normalize migration 실제 적용 전 운영 `realtime_price_bars` 테이블 생성/노출 여부 결정
 
 ## 프로젝트 개요
@@ -46,18 +48,17 @@
 - 배포 앱: `https://retirement-portfolio-app-nh2vq9ferqnpehsslbykbe.streamlit.app/`
 
 ## 최근 변경 파일
-- `src/trade_log_filters.py`: `normalized_trade_notional()` 추가로 펀드 좌수/기준가 총액을 저장·표시 공통 기준에서 정규화
-- `src/analytics.py`: `holdings_frame()` 보유 평가액/매입원가를 펀드성 코드만 `좌수 * 기준가 / 1000`으로 계산
-- `src/ui/app_core.py`: 거래 총액 preview, 거래 기록 표시/CSV/export/delete label, 선택 종목 당일 트렌드, 평가액 부분 재계산 계좌 스냅샷 조회, treemap intraday 조회 조건을 보정
-- `src/db.py`, `src/sqlite_db.py`: 매수/매도 생성·수정 시 `total_amount`, `cash_delta`를 펀드 기준가 단위로 정규화하고 `avg_cost/current_price` 기준가는 유지
-- `tests/test_analytics.py`, `tests/test_app_dashboard.py`, `tests/test_db.py`: 펀드 금액 정규화, 부분 계좌 스냅샷 조회, ECharts 비활성 조회 생략 회귀 테스트 추가
-- `docs/VALIDATION.md`: 이번 패치의 최신 대표 검증 결과로 갱신
+- `src/ui/app_core.py`: Dashboard KPI 카드의 손익/수익률 전일 대비 델타 계산과 표시 추가
+- `src/valuation.py`: 오늘 `account.cash_balance`가 거래 원장 현금과 크게 다르면 `implied_cash`로 fallback하도록 보정
+- `.streamlit/app.css`: KPI 델타 caption의 positive/negative/neutral 색상 class 추가
+- `tests/test_valuation.py`, `tests/test_app_dashboard.py`: 오늘 현금 fallback과 KPI 델타 계산/렌더링 회귀 테스트 추가
+- `docs/VALIDATION.md`, `docs/CHANGELOG.md`, `Memory.md`: 최신 검증 결과와 변경 요약 갱신
 
 ## 핵심 설계 결정
 - 기존 `account_summary`와 `daily_account_snapshot` 계산은 유지하고, 입금 기준 이력은 별도 `daily_valuation_snapshot`에 저장한다.
 - `company_principal` 컬럼은 기존 스키마명을 유지하되 `employer_deposit`, `personal_deposit`, legacy `deposit`, `opening_cash`에서 일반 출금을 차감한 순입금 원금으로 계산한다.
 - 매수 lot은 FIFO로 쌓고 매도는 FIFO 기준으로 잔여 수량과 잔여 매입원가를 차감한다.
-- 과거 날짜 현금은 같은 날짜 `daily_account_snapshot.cash_balance`가 있으면 실제 현금을 사용하고, 없으면 거래 원장의 `cash_delta`를 누적한 원장 현금으로 fallback한다. 오늘 날짜는 `account.cash_balance` 실제 현금을 사용한다.
+- 과거 날짜 현금은 같은 날짜 `daily_account_snapshot.cash_balance`가 있으면 실제 현금을 사용하고, 없으면 거래 원장의 `cash_delta`를 누적한 원장 현금으로 fallback한다. 오늘 날짜는 `account.cash_balance`가 원장 현금과 원 단위로 맞을 때만 실제 현금으로 사용하고, 크게 다르면 원장 현금으로 fallback한다.
 - 매도 실현손익, 이자, 배당, 수수료, 현금 조정처럼 `cash_delta`가 있는 이벤트는 원금이 아니라 원장 현금에 반영한다.
 - UI/배치에서 넘기는 오늘 기준일은 Asia/Seoul 날짜를 사용한다.
 - 가격은 해당일 종가, 없으면 직전 종가, 그래도 없으면 lot 단가를 사용한다. `missing_price_symbols`에는 lot 단가 fallback 종목만 기록한다.
@@ -66,7 +67,7 @@
 - realtime tick마다 재계산하지 않고 거래 UI, CSV import 완료, 수동 가격 refresh, daily rollup에서 계좌별 1회 재계산한다. 거래 UI/CSV import/수동 현금·가격 갱신은 영향 시작일 이후만 부분 재계산하고, daily rollup과 수동 재계산 버튼은 전체 재계산을 유지한다.
 - Dashboard는 오늘 평가 스냅샷이 있으면 `보유 평가액`, `입금 원금`, `현재 보유현금`, `입금 대비 손익`, `입금 대비 수익률`을 우선 표시한다.
 - 평가액 기록 조회와 화면 표시는 `valuation_date DESC, id DESC` 최신 기준일 우선 순서를 사용한다.
-- 평가액 기록 현금값은 오늘은 `account.cash_balance`, 과거일은 같은 날짜 `daily_account_snapshot.cash_balance`가 있으면 실제 현금, 없으면 매수/매도/현금흐름 원장 현금으로 계산한다.
+- 평가액 기록 현금값은 오늘은 `account.cash_balance`와 원장 현금이 일치할 때만 실제 현금, 과거일은 같은 날짜 `daily_account_snapshot.cash_balance`가 있으면 실제 현금, 그 외에는 매수/매도/현금흐름 원장 현금으로 계산한다.
 - 평가액 기록의 금액 컬럼과 원화 UI 표시는 소수점 이하를 원 단위로 일반 반올림한다. 수익률은 기존처럼 소수점 표시를 유지한다.
 - 펀드성 코드(`K...`)는 수량을 좌수로 보고 기준가를 1,000좌당 가격으로 해석해 거래금액과 보유 평가액을 `좌수 * 기준가 / 1000`으로 계산한다.
 - 향후 저장되는 펀드 매수/매도 로그는 `total_amount`, `cash_delta`만 1,000좌 기준으로 정규화하고, `avg_cost/current_price`에는 기준가 원값을 유지한다.
@@ -96,17 +97,14 @@ streamlit run app.py --server.port 8501 --server.address 0.0.0.0 --server.fileWa
 ```
 
 ## 최신 검증 결과
-- 작업 범위: 펀드성 코드(`K...`) 1,000좌 기준가 정규화와 Dashboard/거래 UI 부분 조회 성능 개선
-- 변경 파일: `src/trade_log_filters.py`, `src/analytics.py`, `src/ui/app_core.py`, `src/db.py`, `src/sqlite_db.py`, `tests/test_analytics.py`, `tests/test_app_dashboard.py`, `tests/test_db.py`, `docs/VALIDATION.md`, `Memory.md`
-- `python -m unittest tests.test_analytics tests.test_app_dashboard tests.test_db` 성공, 181 tests
+- 작업 범위: Dashboard KPI 카드 값 급등 원인 점검, 오늘 평가 스냅샷 현금 산정 fallback, 손익/수익률 전일 대비 델타 표시
+- 변경 파일: `src/valuation.py`, `src/ui/app_core.py`, `.streamlit/app.css`, `tests/test_valuation.py`, `tests/test_app_dashboard.py`, `docs/VALIDATION.md`, `docs/CHANGELOG.md`, `Memory.md`
+- `python -m unittest tests.test_valuation tests.test_app_dashboard` 성공, 134 tests
 - `python -m compileall app.py src scripts tests` 성공
-- `python -m unittest discover -s tests -p "test_*.py"` 성공, 273 tests
-- 코드 패치 커밋: `67643c0` (`Normalize fund trade amounts`)
-- 배포 방법: `git push origin main`, `main`을 `3c5078f`까지 푸시
-- 원격 배포 검증: `python scripts/verify_streamlit_deployment.py --page trades --expect-backend supabase --wait-ms 60000 ...` 성공, `logged_in=true`, `workspace_visible=true`, `backend_storage_code=supabase`, `ok=true`
-- 원격 검증 산출물: `artifacts/deploy-verify-fund-normalization-20260515-1020.txt`, `artifacts/deploy-verify-fund-normalization-20260515-1020.png`
+- `python -m unittest discover -s tests -p "test_*.py"` 성공, 276 tests
 - 테스트 중 Streamlit bare mode 경고가 출력됐으나 모든 테스트는 성공했다.
-- 운영 DB 데이터 직접 수정과 migration 추가는 수행하지 않았다.
+- 로컬 재현 계좌에서 `account.cash_balance=17,400,000`, 거래 원장 현금 합계 `9,643,800` 불일치를 확인했고, 패치 후 해당 케이스는 오늘 현금을 원장 기준으로 fallback한다.
+- 운영 DB 데이터 직접 수정, migration 추가, 배포는 수행하지 않았다.
 
 ## Git/GitHub 상태
 - 기본 브랜치: `main`

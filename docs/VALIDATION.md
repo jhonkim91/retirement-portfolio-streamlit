@@ -6,29 +6,24 @@
 - 기준일: `2026-05-15`
 
 ## 최신 대표 검증 결과
-- 작업 범위: 펀드성 코드(`K...`)의 1,000좌 기준가 정규화와 Dashboard/거래 UI 부분 조회 성능 개선
-- 원인: 일부 보유 평가/거래 표시/저장 경로가 펀드 기준가를 일반 주식 단가처럼 `수량 * 가격`으로 계산해 금액이 1,000배 커질 수 있었다.
-- 수정: 보유 평가액, 거래 총액 preview, 거래 기록 표시/CSV/delete preview, 선택 종목 당일 트렌드, Supabase/SQLite 거래 저장/수정 경로를 `좌수 * 기준가 / 1000` 기준으로 통일했다.
-- 수정: 평가액 부분 재계산 시 계좌 스냅샷 조회도 영향 시작일 이후로 제한하고, ECharts 비활성 경로에서는 treemap intraday 상세 조회를 건너뛰도록 했다.
-- 유지: 기존 운영 DB 데이터와 CSV/artifacts 파일은 직접 수정하지 않았다. 스키마 변경과 migration 추가도 없다.
+- 작업 범위: Dashboard KPI 카드 값 급등 원인 점검과 평가 스냅샷 현금 산정 보정
+- 원인: 오늘 평가 스냅샷에서 `account.cash_balance`를 무조건 실제 현금으로 사용해, 매수/매도로 줄어든 원장 현금과 보유 평가액이 이중 계산될 수 있었다.
+- 확인: 로컬 재현 계좌에서 `account.cash_balance=17,400,000`, 거래 원장 현금 합계 `9,643,800`으로 불일치했고, 이 때문에 `입금 대비 손익`과 `수익률`이 과대 표시됐다.
+- 수정: 오늘 `account.cash_balance`가 거래 원장 기준 현금과 원 단위로 맞을 때만 실제 현금으로 사용하고, 크게 어긋나면 원장 기준 `implied_cash`로 fallback한다.
+- 유지: 저장소 스키마와 DB 데이터는 변경하지 않았다.
 - 환경: 로컬 Python 3.11, Streamlit bare mode 테스트 실행.
 
 ## 명령 검증
-- `python -m unittest tests.test_analytics tests.test_app_dashboard tests.test_db` 성공, 181 tests
+- `python -m unittest tests.test_valuation tests.test_app_dashboard` 성공, 134 tests
 - `python -m compileall app.py src scripts tests` 성공
-- `python -m unittest discover -s tests -p "test_*.py"` 성공, 273 tests
-- 코드 패치 커밋: `67643c0` (`Normalize fund trade amounts`)
-- 배포 방법: `git push origin main`, `main`을 `3c5078f`까지 푸시
-- 원격 검증: `python scripts/verify_streamlit_deployment.py --page trades --expect-backend supabase --wait-ms 60000 ...` 성공
-- 원격 검증 결과: `logged_in=true`, `workspace_visible=true`, `backend_storage_code=supabase`, `ok=true`
-- 원격 검증 산출물: `artifacts/deploy-verify-fund-normalization-20260515-1020.txt`, `artifacts/deploy-verify-fund-normalization-20260515-1020.png`
+- `python -m unittest discover -s tests -p "test_*.py"` 성공, 276 tests
 
 ## 검증 범위
-- `holdings_frame()`/`account_summary()` 펀드 보유 평가액과 매입원가가 1,000좌 기준으로 계산되는지 검증
-- 거래 총액 preview, 거래 기록 표기, CSV export, 삭제/수정 선택 label이 펀드 총액을 정규화하는지 검증
-- 선택 종목 당일 트렌드의 `market_value`, `cost_basis`, `profit_loss`가 펀드 기준가 단위를 반영하는지 검증
-- Supabase/SQLite 매수 및 수정 저장 경로에서 `total_amount`, `cash_delta`만 정규화하고 `avg_cost/current_price` 기준가는 유지하는지 검증
-- 평가액 부분 재계산의 `list_account_snapshots(..., start_date=...)` 호출과 ECharts 비활성 시 treemap intraday 조회 생략을 검증
+- 오늘 실제 현금이 원장 현금과 맞는 경우 기존처럼 actual cash를 사용하는지 검증
+- 오늘 실제 현금이 매수/매도를 반영하지 않은 값이면 ledger/implied cash로 fallback하는지 검증
+- `dashboard_previous_day_delta_value()`가 날짜 정렬 후 마지막 두 `principal_profit_loss`/`principal_profit_rate` 값을 비교하는지 검증
+- `build_dashboard_metric_specs()`가 손익 KPI에 `전일 대비 +₩...`, 수익률 KPI에 `전일 대비 +...%p` caption을 넣는지 검증
+- `render_dashboard_metric_card_option2()`가 델타 tone class를 렌더링하는지 검증
 
 ## 미수행 항목
-- 운영 DB 데이터 직접 수정은 수행하지 않았다.
+- 로컬/운영 Streamlit 브라우저 화면 검증과 배포는 수행하지 않았다.

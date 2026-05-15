@@ -8,6 +8,16 @@
 ## 최근 완료 변경 요약
 
 ### 2026-05-15
+- Dashboard KPI 값 급등 보정.
+  - 오늘 평가 스냅샷에서 `account.cash_balance`가 거래 원장 현금과 크게 다르면 보유 평가액과 현금이 이중 계산되지 않도록 `implied_cash`를 사용.
+  - 로컬 재현 계좌에서 `account.cash_balance=17,400,000`, 원장 현금 `9,643,800` 불일치를 확인.
+  - 오늘 실제 현금이 원장 현금과 맞는 정상 케이스는 기존처럼 actual cash를 유지.
+  - `tests/test_valuation.py`, `tests/test_app_dashboard.py`, 전체 compileall/unittest discover 검증 완료.
+- Dashboard KPI 전일 대비 델타 표시.
+  - 상단 Overview KPI 카드 중 `입금 대비 손익`은 직전 평가일 대비 원화 델타를 표시.
+  - `입금 대비 수익률`은 직전 평가일 대비 `%p` 델타를 표시.
+  - 추이 데이터는 날짜 정렬 후 마지막 두 값을 비교하고, 델타 방향에 따라 positive/negative/neutral 색상을 적용.
+  - `tests/test_app_dashboard.py`, 전체 compileall/unittest discover 검증 완료.
 - temporal normalize migration 사전 점검.
   - 운영 Supabase project `iyszkybxostbjfzbbymq`에서 `migrations/2026-05-14_normalize_temporal_columns.sql` 대상 temporal 컬럼을 `pg_input_is_valid()` read-only SQL로 점검.
   - `accounts`, `holdings`, `trade_logs`, `daily_interest`, `daily_account_snapshot`, `realtime_price_ticks`, `realtime_worker_status` 대상 컬럼의 cast 실패 행이 없는 것을 확인.

@@ -329,6 +329,12 @@ def account_snapshot_cash_by_date(account_snapshots: list[dict[str, Any]] | None
     return cash_by_date
 
 
+def should_use_today_actual_cash(actual_cash: float, implied_cash: float) -> bool:
+    """오늘 실제 현금이 거래 원장 현금과 같은 수준인지 판별한다."""
+
+    return abs(round_won(actual_cash) - round_won(implied_cash)) <= 1
+
+
 def current_invested_cost(lots_by_symbol: dict[str, list[Lot]]) -> float:
     """현재 잔여 보유상품 매입원가를 반환한다."""
 
@@ -462,9 +468,13 @@ def build_company_principal_valuation_snapshots(
         over_invested_amount = max(-ledger_cash, 0.0)
 
         if valuation_date == normalized_today:
-            cash_value = safe_float(account.get("cash_balance"))
-            actual_cash_balance: float | None = cash_value
-            cash_source = "actual"
+            actual_cash_balance = safe_float(account.get("cash_balance"))
+            if should_use_today_actual_cash(actual_cash_balance, implied_cash):
+                cash_value = actual_cash_balance
+                cash_source = "actual"
+            else:
+                cash_value = implied_cash
+                cash_source = "implied"
         elif valuation_date in snapshot_cash_by_date:
             cash_value = snapshot_cash_by_date[valuation_date]
             actual_cash_balance = cash_value
