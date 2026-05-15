@@ -89,6 +89,10 @@ streamlit run app.py --server.port 8501 --server.address 0.0.0.0 --server.fileWa
 
 ## 최신 검증 결과
 - 작업 범위: 평가액 기록 현금흐름 산식 재점검 및 실제 일별 현금 우선 보정
+- 배포 코드 커밋: `01a005aaab717a29db431032d0e0d43ade3b521e` (`Fix valuation cashflow snapshots`)
+- 배포 방법: 요청 범위 파일만 선별 커밋 후 `git push origin main`
+- 원격 배포 검증: `python scripts/verify_streamlit_deployment.py --page valuation --expect-backend supabase --wait-ms 30000 ...` 성공, `logged_in=true`, `workspace_visible=true`, `backend_storage_code=supabase`
+- 원격 검증 산출물: `artifacts/deploy-verify-valuation-cashflow-20260515-0352.txt`, `artifacts/deploy-verify-valuation-cashflow-20260515-0352.png`
 - 운영 read-only 점검: `jhonkim2025@gmail.com`의 미래에셋(account 23), 신한(account 24) 거래/평가/일별 스냅샷 조회
 - `python -m compileall src/valuation.py src/ui/app_core.py src/db.py scripts/run_daily_rollup.py tests/test_valuation.py tests/test_run_daily_rollup.py` 성공
 - `python -m unittest tests.test_valuation tests.test_app_dashboard tests.test_run_daily_rollup` 성공, 120 tests
@@ -98,7 +102,7 @@ streamlit run app.py --server.port 8501 --server.address 0.0.0.0 --server.fileWa
 
 ## Git/GitHub 상태
 - 기본 브랜치: `main`
-- 최근 배포 코드 커밋: `ddf61a2 Include dependent sells in bulk delete`
+- 최근 배포 코드 커밋: `01a005a Fix valuation cashflow snapshots`
 - 워크트리에는 이번 요청 전부터 `data/portfolio.db`, 로컬 도구 디렉터리, 산출물 등 여러 변경/미추적 파일이 함께 있었다.
 - 커밋 시 요청 관련 파일만 선별하고 `data/portfolio.db`, `.local/`, `.playtools*/`, `.playwright-browsers/`, `.vscode/`, `artifacts/`, `data/kis_cache/` 등 로컬 산출물은 제외한다.
 

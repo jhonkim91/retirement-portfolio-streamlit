@@ -20,6 +20,8 @@
 - `python -m unittest tests.test_valuation tests.test_app_dashboard tests.test_run_daily_rollup` 성공, 120 tests
 - `python -m compileall app.py src scripts tests` 성공
 - `python -m unittest discover -s tests -p "test_*.py"` 성공, 251 tests
+- `git push origin main` 성공, 배포 코드 커밋 `01a005aaab717a29db431032d0e0d43ade3b521e`
+- `python scripts/verify_streamlit_deployment.py --page valuation --expect-backend supabase --wait-ms 30000 --text-output artifacts/deploy-verify-valuation-cashflow-20260515-0352.txt --screenshot artifacts/deploy-verify-valuation-cashflow-20260515-0352.png --debug-dir artifacts/deploy-verify-valuation-cashflow-20260515-0352-debug` 성공
 
 ## 검증 범위
 - 평가액 기록 산식이 오늘 실제 현금, 과거 일별 계좌 스냅샷 현금, 원장 fallback 순서로 현금을 선택하는지 검증
@@ -27,6 +29,7 @@
 - 보유 lot에 매칭되지 않는 매도 기록이 현금과 향후 lot을 변경하지 않는지 검증
 - daily rollup과 수동 재계산 경로가 `daily_account_snapshot` 목록을 평가 스냅샷 재계산에 전달하는지 검증
 - 전체 unittest suite가 기존 기능 회귀 없이 통과하는지 검증
+- 원격 Streamlit 평가액 기록 페이지가 로그인 후 Supabase backend로 로드되는지 검증
 - 운영 Supabase 데이터는 read-only 조회만 수행했고, 거래 기록 삭제/수정이나 평가 스냅샷 재작성은 수행하지 않았다.
 
 ## 계좌 산출 점검
@@ -38,4 +41,3 @@
 ## 미수행 항목
 - 운영 거래 원장의 중복/비정상 거래 id 삭제 또는 수정은 destructive 작업이므로 수행하지 않았다.
 - 운영 `daily_valuation_snapshot` 재작성은 운영 DB 파생 데이터 변경이므로 수행하지 않았다.
-- 배포 후 원격 Streamlit 평가액 기록 페이지 검증은 아직 수행하지 않았다.
