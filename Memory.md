@@ -26,6 +26,7 @@
 - [x] Supabase/SQLite 실시간 tick retention 전용 인덱스 보강
 - [x] 평가액 기록 수익률 계산 시 일반 출금을 순입금 원금에서 차감
 - [x] 거래 기록 선택 삭제 UI/로직 추가
+- [x] 거래 기록 선택 삭제 시 연관 매도 자동 포함으로 음수 보유수량 오류 방지
 - [ ] temporal normalize migration 실제 적용 전 운영 `realtime_price_bars` 테이블 생성/노출 여부 결정
 
 ## 프로젝트 개요
@@ -40,6 +41,8 @@
 - 배포 앱: `https://retirement-portfolio-app-nh2vq9ferqnpehsslbykbe.streamlit.app/`
 
 ## 최근 변경 파일
+- `src/ui/app_core.py`: 거래 기록 선택 삭제 시 선택 매수 제거로 음수 보유수량을 만드는 연관 매도 기록을 삭제 확인 대상에 자동 포함
+- `tests/test_app_dashboard.py`: 연관 매도 자동 포함과 기존 원장 불일치 차단 회귀 테스트 추가
 - `src/ui/app_core.py`: 거래 기록 표에 행 선택 체크박스, 현재 페이지 선택, 선택 해제, 선택 삭제 toolbar, 선택 삭제 확인 dialog 추가
 - `tests/test_app_dashboard.py`: 거래 기록 선택 상태 helper와 선택 삭제 dialog/source 회귀 테스트 추가
 - `src/valuation.py`, `src/ui/app_core.py`, `tests/test_valuation.py`: 평가액 기록 수익률을 일반 출금을 차감한 순입금 원금 기준으로 보정
@@ -60,6 +63,7 @@
 - Dashboard는 오늘 평가 스냅샷이 있으면 `보유 평가액`, `입금 원금`, `현재 보유현금`, `입금 대비 손익`, `입금 대비 수익률`을 우선 표시한다.
 - 평가액 기록 조회와 화면 표시는 `valuation_date DESC, id DESC` 최신 기준일 우선 순서를 사용한다.
 - 거래 기록 삭제는 개별 행 삭제 버튼 대신 선택 id 목록을 세션에 저장하고, 선택 삭제 dialog에서 기존 `delete_trade_log()`와 평가액 기록 재계산 경로를 반복 호출한다.
+- 선택 매수 삭제로 남은 매도 원장이 보유 수량을 음수로 만들 경우 해당 연관 매도 기록을 확인 dialog의 삭제 대상에 자동 포함한다.
 - 선택 삭제는 매도/매수 종속성으로 인한 중간 상태 오류를 줄이기 위해 거래일/id 역순으로 삭제한다.
 - Dashboard 히어로의 `전일 대비` 값은 입금 대비 손익이 아니라 추이 데이터의 마지막 두 `total_value` 차이로 계산한다.
 - 사이드바 계좌 카드에서는 계좌명만 표시하고 `연금(IRP/퇴직연금)` 유형 뱃지는 표시하지 않는다.
@@ -78,20 +82,16 @@ streamlit run app.py --server.port 8501 --server.address 0.0.0.0 --server.fileWa
 ```
 
 ## 최신 검증 결과
-- 작업 범위: 거래 기록 선택 삭제 UI/로직 추가
-- 배포 코드 커밋: `6fbe753593cf9f6a72f79e8cdea71b92a6133ba9` (`Add trade log bulk delete`)
-- 배포 방법: 요청 범위 파일만 선별 커밋 후 `git push origin main`
-- 원격 배포 검증: `python scripts/verify_streamlit_deployment.py --page trades --expect-backend supabase --wait-ms 30000 ...` 성공, `logged_in=true`, `workspace_visible=true`, `backend_storage_code=supabase`
-- 원격 검증 산출물: `artifacts/deploy-verify-trades-bulk-delete-20260515-0255.txt`, `artifacts/deploy-verify-trades-bulk-delete-20260515-0255.png`
+- 작업 범위: 거래 기록 선택 삭제 연관 매도 자동 포함 보강
 - `python -m compileall src/ui/app_core.py tests/test_app_dashboard.py` 성공
-- `python -m unittest tests.test_app_dashboard` 성공, 102 tests
+- `python -m unittest tests.test_app_dashboard` 성공, 104 tests
 - `python -m compileall app.py src scripts tests` 성공
-- `python -m unittest discover -s tests -p "test_*.py"` 성공, 247 tests
+- `python -m unittest discover -s tests -p "test_*.py"` 성공, 249 tests
 - 테스트 중 Streamlit bare mode 경고가 출력됐으나 모든 테스트는 성공했다.
 
 ## Git/GitHub 상태
 - 기본 브랜치: `main`
-- 최근 배포 코드 커밋: `6fbe753 Add trade log bulk delete`
+- 최근 배포 코드 커밋: `5f4c95e Record trade log bulk delete deployment`
 - 워크트리에는 이번 요청 전부터 `data/portfolio.db`, 로컬 도구 디렉터리, 산출물 등 여러 변경/미추적 파일이 함께 있었다.
 - 커밋 시 요청 관련 파일만 선별하고 `data/portfolio.db`, `.local/`, `.playtools*/`, `.playwright-browsers/`, `.vscode/`, `artifacts/`, `data/kis_cache/` 등 로컬 산출물은 제외한다.
 

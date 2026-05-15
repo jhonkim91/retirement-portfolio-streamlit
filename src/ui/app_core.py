@@ -891,6 +891,16 @@ DASHBOARD_OVERVIEW_PERIOD_LIMITS: dict[str, int | None] = {
 }
 
 
+@dataclass(frozen=True)
+class TradeLogBulkDeletePlan:
+    """선택 삭제 실행 전 확정된 삭제 대상과 자동 포함 대상을 담는다."""
+
+    selected_ids: tuple[int, ...]
+    dependent_ids: tuple[int, ...]
+    delete_ids: tuple[int, ...]
+    invalid_existing_ids: tuple[int, ...] = ()
+
+
 def dashboard_overview_period_limit(period: str) -> int | None:
     """Dashboard Overview 기간 버튼에 대응하는 sparkline 표시 개수를 반환한다."""
 
@@ -1271,6 +1281,104 @@ def clear_trade_log_selection(
     session_state[selected_ids_key] = []
     for log_id in log_ids:
         session_state.pop(trade_log_select_checkbox_key(int(account_id), int(log_id)), None)
+
+
+def trade_log_replay_sort_key(log: dict[str, Any]) -> tuple[str, str, int]:
+    """매수/매도 원장 검증용 오래된 순 정렬 key를 반환한다."""
+
+    return (
+        str(log.get("trade_date") or ""),
+        str(log.get("created_at") or ""),
+        int(log.get("id") or 0),
+    )
+
+
+def invalid_sell_trade_log_ids_after_removal(
+    trade_logs: Iterable[dict[str, Any]],
+    remove_ids: Iterable[int],
+) -> list[int]:
+    """지정 id를 제거한 뒤 보유 수량을 음수로 만드는 매도 로그 id를 반환한다."""
+
+    remove_id_set = {int(log_id) for log_id in remove_ids if int(log_id) > 0}
+    quantities_by_symbol: dict[str, float] = {}
+    invalid_ids: list[int] = []
+    for log in sorted(trade_logs, key=trade_log_replay_sort_key):
+        log_id = int(log.get("id") or 0)
+        if log_id <= 0 or log_id in remove_id_set:
+            continue
+        trade_type = normalize_trade_log_type(log.get("trade_type"))
+        if trade_type not in {"buy", "sell"}:
+            continue
+
+        symbol = str(log.get("symbol") or "").strip().upper()
+        quantity = float(log.get("quantity") or 0)
+        if not symbol or quantity <= 0:
+            continue
+
+        current_quantity = float(quantities_by_symbol.get(symbol, 0.0))
+        if trade_type == "buy":
+            quantities_by_symbol[symbol] = current_quantity + quantity
+            continue
+
+        if current_quantity + 0.000001 < quantity:
+            invalid_ids.append(log_id)
+            continue
+        quantities_by_symbol[symbol] = max(current_quantity - quantity, 0.0)
+    return invalid_ids
+
+
+def build_trade_log_bulk_delete_plan(
+    trade_logs: Iterable[dict[str, Any]],
+    selected_ids: Iterable[int],
+) -> TradeLogBulkDeletePlan:
+    """선택 삭제 시 함께 삭제해야 하는 연관 매도 기록을 계산한다."""
+
+    logs = [dict(log) for log in trade_logs if log.get("id") is not None]
+    log_by_id = {int(log["id"]): log for log in logs}
+    normalized_selected_ids = tuple(
+        log_id
+        for log_id in selected_trade_log_ids({"selected": list(selected_ids)}, "selected")
+        if log_id in log_by_id
+    )
+    invalid_existing_ids = tuple(invalid_sell_trade_log_ids_after_removal(logs, ()))
+    if invalid_existing_ids:
+        return TradeLogBulkDeletePlan(
+            selected_ids=normalized_selected_ids,
+            dependent_ids=(),
+            delete_ids=normalized_selected_ids,
+            invalid_existing_ids=invalid_existing_ids,
+        )
+
+    delete_ids = set(normalized_selected_ids)
+    dependent_ids: list[int] = []
+    for _ in range(len(logs) + 1):
+        invalid_ids = invalid_sell_trade_log_ids_after_removal(logs, delete_ids)
+        new_dependent_ids = [
+            log_id
+            for log_id in invalid_ids
+            if log_id not in delete_ids and normalize_trade_log_type(log_by_id.get(log_id, {}).get("trade_type")) == "sell"
+        ]
+        if not new_dependent_ids:
+            break
+        for log_id in new_dependent_ids:
+            delete_ids.add(log_id)
+            if log_id not in dependent_ids:
+                dependent_ids.append(log_id)
+
+    ordered_delete_ids = tuple(
+        log_id
+        for log_id in sorted(
+            delete_ids,
+            key=lambda item: trade_log_replay_sort_key(log_by_id.get(item, {"id": item})),
+            reverse=True,
+        )
+        if log_id in log_by_id
+    )
+    return TradeLogBulkDeletePlan(
+        selected_ids=normalized_selected_ids,
+        dependent_ids=tuple(dependent_ids),
+        delete_ids=ordered_delete_ids,
+    )
 
 
 def trade_log_editor_option_label(log: dict[str, Any]) -> str:
@@ -2786,11 +2894,14 @@ def render_trade_log_bulk_delete_dialog(
     *,
     selected_ids_key: str,
     bulk_delete_state_key: str,
+    delete_plan: TradeLogBulkDeletePlan | None = None,
 ) -> None:
     """선택한 거래 기록을 확인 후 일괄 삭제한다."""
 
     confirm_key = f"trade-log-bulk-delete-confirm:{account_id}"
     selected_log_ids = [int(log["id"]) for log in selected_logs if log.get("id") is not None]
+    dependent_log_ids = set(delete_plan.dependent_ids if delete_plan else ())
+    invalid_existing_ids = set(delete_plan.invalid_existing_ids if delete_plan else ())
     if not selected_logs:
         st.info("삭제할 거래 기록을 먼저 선택해 주세요.")
         if st.button("닫기", key=f"trade-log-bulk-delete-empty-close:{account_id}", width="stretch"):
@@ -2805,13 +2916,23 @@ def render_trade_log_bulk_delete_dialog(
             "종목명": str(log.get("product_name") or "미지정"),
             "유형": label_transaction_type(normalize_trade_log_type(log.get("trade_type"))),
             "총금액": f'{float(log.get("total_amount") or 0):,.0f}원',
+            "삭제 사유": "연관 매도" if int(log.get("id") or 0) in dependent_log_ids else "선택",
         }
         for log in selected_logs
     ]
-    st.warning(f"선택한 거래 기록 {len(selected_logs):,}건을 삭제합니다.")
+    if dependent_log_ids:
+        st.warning(
+            f"선택한 거래 기록 {len(delete_plan.selected_ids if delete_plan else selected_logs):,}건을 삭제하려면 "
+            f"연관 매도 기록 {len(dependent_log_ids):,}건도 함께 삭제해야 합니다. "
+            f"총 {len(selected_logs):,}건을 삭제합니다."
+        )
+    else:
+        st.warning(f"선택한 거래 기록 {len(selected_logs):,}건을 삭제합니다.")
     st.dataframe(pd.DataFrame(preview_rows), hide_index=True, width="stretch")
     st.caption("삭제 후 보유 종목, 현금 흐름, 대시보드 계산 데이터가 다시 갱신됩니다.")
-    confirmed = st.checkbox("선택한 거래 기록 삭제를 확인했습니다.", key=confirm_key)
+    if invalid_existing_ids:
+        st.error("현재 거래 원장에 이미 보유 수량을 음수로 만드는 매도 기록이 있어 선택 삭제를 실행할 수 없습니다.")
+    confirmed = st.checkbox("위 삭제 대상 전체를 확인했습니다.", key=confirm_key)
 
     action_col_1, action_col_2 = st.columns(2, gap="small")
     with action_col_1:
@@ -2820,7 +2941,7 @@ def render_trade_log_bulk_delete_dialog(
             key=f"trade-log-bulk-delete-submit:{account_id}",
             width="stretch",
             type="primary",
-            disabled=not confirmed,
+            disabled=not confirmed or bool(invalid_existing_ids),
         ):
             errors: list[str] = []
             deleted_count = 0
@@ -7977,9 +8098,13 @@ def trade_entry_page(account: dict[str, Any], holdings: list[dict[str, Any]], ac
                 st.session_state.pop(delete_state_key, None)
                 delete_log_id = None
 
+            bulk_delete_plan = build_trade_log_bulk_delete_plan(
+                visible_logs,
+                selected_trade_log_ids(st.session_state, selected_ids_key),
+            )
             selected_logs_for_delete = [
                 editable_log_by_id[log_id]
-                for log_id in selected_trade_log_ids(st.session_state, selected_ids_key)
+                for log_id in bulk_delete_plan.delete_ids
                 if log_id in editable_log_by_id
             ]
             if st.session_state.get(bulk_delete_state_key):
@@ -7990,6 +8115,7 @@ def trade_entry_page(account: dict[str, Any], holdings: list[dict[str, Any]], ac
                     selected_logs_for_delete,
                     selected_ids_key=selected_ids_key,
                     bulk_delete_state_key=bulk_delete_state_key,
+                    delete_plan=bulk_delete_plan,
                 )
             elif editing_log_id in log_by_id:
                 st.session_state.pop(delete_state_key, None)

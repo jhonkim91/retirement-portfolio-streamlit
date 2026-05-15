@@ -400,6 +400,33 @@ class TradeFormResetTests(unittest.TestCase):
         dashboard_app.sync_trade_log_row_selection(session_state, "selected", "checkbox:1", 1)
         self.assertEqual(session_state["selected"], [2])
 
+    def test_trade_log_bulk_delete_plan_includes_dependent_sells(self) -> None:
+        logs = [
+            {"id": 1, "trade_date": "2025-01-01", "trade_type": "buy", "symbol": "ABC", "quantity": 10},
+            {"id": 2, "trade_date": "2025-01-02", "trade_type": "sell", "symbol": "ABC", "quantity": 7},
+            {"id": 3, "trade_date": "2025-01-03", "trade_type": "buy", "symbol": "ABC", "quantity": 2},
+            {"id": 4, "trade_date": "2025-01-04", "trade_type": "sell", "symbol": "ABC", "quantity": 2},
+        ]
+
+        plan = dashboard_app.build_trade_log_bulk_delete_plan(logs, [1])
+
+        self.assertEqual(plan.selected_ids, (1,))
+        self.assertEqual(plan.dependent_ids, (2,))
+        self.assertEqual(set(plan.delete_ids), {1, 2})
+        self.assertFalse(plan.invalid_existing_ids)
+
+    def test_trade_log_bulk_delete_plan_blocks_already_invalid_ledger(self) -> None:
+        logs = [
+            {"id": 1, "trade_date": "2025-01-01", "trade_type": "buy", "symbol": "ABC", "quantity": 1},
+            {"id": 2, "trade_date": "2025-01-02", "trade_type": "sell", "symbol": "ABC", "quantity": 2},
+        ]
+
+        plan = dashboard_app.build_trade_log_bulk_delete_plan(logs, [1])
+
+        self.assertEqual(plan.selected_ids, (1,))
+        self.assertEqual(plan.delete_ids, (1,))
+        self.assertEqual(plan.invalid_existing_ids, (2,))
+
     def test_trade_log_table_fields_exclude_cash_delta_column(self) -> None:
         """거래 기록 표 구성에서 현금증감 컬럼을 제외한다."""
 
@@ -929,6 +956,8 @@ class TradeFormResetTests(unittest.TestCase):
         self.assertIn('@st.dialog("선택 거래 기록 삭제 확인")', dialog_source)
         self.assertIn("render_trade_log_bulk_delete_dialog(", page_source)
         self.assertIn("selected_logs_for_delete", page_source)
+        self.assertIn("build_trade_log_bulk_delete_plan(", page_source)
+        self.assertIn("연관 매도", dialog_source)
         self.assertIn("delete_trade_log(int(account_id), int(log_id))", dialog_source)
         self.assertIn('rebuild_valuation_snapshots_for_account(int(account_id), "trade_deleted")', dialog_source)
 
