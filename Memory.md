@@ -31,6 +31,7 @@
 - [x] 외부 CDN 폰트 import 제거 및 시스템 폰트 스택 전환
 - [x] 거래 페이지 계좌 간 이체 기능 삭제
 - [x] 보유현금 수정 로그 비노출 및 거래 흐름 분리
+- [x] Streamlit 초기 렌더/새로고침 안정화 패치 적용
 - [ ] 다음 장중 자동 스케줄(`UTC 00:00`, `UTC 02:55`) 1회 추가 확인
 - [x] 배포 대시보드에서 자산 배분 상태 칩이 실제로 `실시간 연동 중`으로 보이는지 화면 검증
 
@@ -144,6 +145,15 @@ streamlit run app.py
 - 배포 웹 검증이 불안정하던 원인을 `반복 로그인에 따른 인증 rate limit`과 `실패 시 마지막 화면 증거 부족`으로 분리했고, `scripts/verify_streamlit_deployment.py`에 `--storage-state`, `--debug-dir` 옵션과 `auth_error`/`rate_limited` 진단 필드를 추가
 - 검증 실패 시 단계별 `txt/png/url` 아티팩트를 남기도록 보강해, 로그인 실패/페이지 전환 실패/배포 미반영 상태를 이후 세션에서도 바로 재확인할 수 있게 정리
 
+### 2026-05-12
+- `app.py`의 `load_design_tokens()`와 `render_app_stylesheet()`에 `st.cache_data(show_spinner=False)`를 적용해 Streamlit rerun마다 `.streamlit/config.toml`과 `.streamlit/app.css`를 반복 파싱/렌더링하던 비용을 줄임
+- `.streamlit/app.css`는 기존 상태를 확인했고 외부 Pretendard CDN `@import` 없이 `system-ui`, `-apple-system`, `"Segoe UI"`, `"Apple SD Gothic Neo"`, `"Noto Sans KR"` fallback 폰트 스택을 사용 중임
+- `src/market.py`의 공개 `search_products()` 함수에도 `st.cache_data(ttl=3600, max_entries=300, show_spinner=False)`를 적용했고, 기존 정규화 질의 기반 `_search_products_cached()`는 유지해 공백 차이가 있는 검색어도 외부 검색 재호출을 피하도록 유지함
+- 테스트에 남아 있던 SQLite 격리용 `importlib.reload(sqlite_db)`를 `patch.object(sqlite_db, "DB_PATH", database_path)` 방식으로 바꿔 모듈 재로딩 없이 임시 DB를 사용하도록 정리함
+- 저장소 활성 코드와 테스트 기준 `importlib.reload()`와 `st.experimental_rerun()` 호출이 없음을 확인함
+- `st.rerun()` 호출부를 점검하고, 인증 콜백 URL 처리와 잘못된 계좌 선택 복구처럼 자동 반복 가능성이 있는 경로에 세션 상태 가드를 추가해 같은 조건에서 자동 rerun이 1회만 발생하도록 제한함
+- 남은 작업: 실제 Streamlit Cloud 운영 세션에서 흰 화면/초기 로딩 지연 재현 여부를 일정 시간 관찰하고, 필요하면 브라우저 콘솔/네트워크 타이밍까지 추가 수집
+
 ## 최신 검증 결과
 - `python3 -m compileall app.py src scripts tests` 성공
 - `python3 -m unittest discover -s tests -p "test_*.py"` 성공
@@ -191,6 +201,12 @@ streamlit run app.py
   - `./.venv/bin/python scripts/verify_streamlit_deployment.py --page trades --expect-backend supabase --debug-dir artifacts/deploy-verify-cash-adjustment-e7a445c` 성공
   - `./.venv/bin/python scripts/verify_streamlit_deployment.py --page data --expect-backend supabase --debug-dir artifacts/deploy-verify-cash-adjustment-data-e7a445c` 성공
   - 원격 검증 결과: `backend_storage=supabase`, `logged_in=true`, `workspace_visible=true`, `target_page in {"trades","data"}`
+- 이번 턴 Streamlit 초기 렌더/새로고침 안정화 패치 검증:
+  - `python -m py_compile app.py src/market.py src/db.py` 성공
+  - `python -m py_compile tests/test_db.py` 성공
+  - `python -m unittest tests.test_app_dashboard tests.test_market tests.test_db` 성공 (`88`건)
+  - `rg` 기준 `app.py`, `src`, `scripts`, `tests`에서 `importlib.reload()`와 `st.experimental_rerun()` 호출 없음 확인
+  - `.streamlit/app.css`에서 외부 Pretendard CDN `@import` 없음과 시스템 폰트 스택 사용 확인
 - 이번 턴 디자인 토큰/CSS 구조 검증:
   - `python3 -m compileall app.py tests/test_app_dashboard.py` 성공
   - `python3 -m unittest tests.test_app_dashboard` 성공 (`22`건)
@@ -754,3 +770,204 @@ python scripts/verify_streamlit_deployment.py --page data --expect-backend supab
 - `python -m compileall app.py` 성공
 - `python -m unittest tests.test_app_dashboard` 성공 (`44`건)
 - `python -m unittest discover -s tests -p "test_*.py"` 성공 (`128`건)
+
+## 2026-05-12 04:51 대시보드 카드/좌우 패널 높이 실제 DOM 기준 재정렬
+
+### 변경 파일
+- `app.py`
+- `.streamlit/app.css`
+- `tests/test_app_dashboard.py`
+
+### 변경 내용
+- `선택 종목 트렌드` 차트 높이를 `보유 종목 수익률` 비교 차트 높이와 같은 상수로 공유하도록 변경.
+- Streamlit 실제 DOM에서 `key` 클래스가 붙는 `stVerticalBlock` 자체에 상단 카드 `120px`, 좌우 보조 패널 `560px` 최소 높이를 직접 적용.
+- 상단 5개 카드가 `보유 현금` 카드 기준으로 같은 높이를 갖도록 정렬하고, 금액 텍스트가 좁은 폭에서 잘리지 않도록 요약 카드 전용 글자 크기와 ghost action slot 폭을 조정.
+- CSS 높이 계약과 선택/보유 차트 높이 동기화를 `tests/test_app_dashboard.py` 회귀 테스트에 추가.
+
+### 검증 결과
+- `python3 -m compileall app.py src scripts tests` 성공
+- `python3 -m unittest tests.test_app_dashboard` 성공 (`45`건)
+- `python3 -m unittest discover -s tests -p "test_*.py"` 성공 (`129`건)
+- `python3 -m streamlit run app.py --server.port 8526 --server.headless true` 로컬 기동 성공
+- `agent-browser` 데모 대시보드 측정:
+  - 상단 카드 5개 모두 `height=120`, `minHeight=120px`
+  - `선택 종목 트렌드`, `보유 종목 수익률` 모두 `height=560`, `minHeight=560px`
+  - 상단 카드 값 텍스트 5개 모두 `clipped=false`
+  - 에러 오버레이 없음, 본문 렌더 확인
+- 브라우저 검증 산출물: `artifacts/dashboard-height-final-polished.png`, `artifacts/dashboard-height-final-verified.png`
+
+## 2026-05-15 review_report.md 전체 반영 패치 진행 중단 기록
+
+### 변경 파일
+- `app.py`
+- `src/ui/app_core.py`
+- `src/ui/__init__.py`
+- `src/ui/charts.py`
+- `src/ui/forms.py`
+- `src/ui/layout.py`
+- `pages/dashboard.py`
+- `pages/trades.py`
+- `pages/data.py`
+- `.streamlit/app.css`
+- `requirements.txt`
+- `Memory.md`
+
+### 반영한 내용
+- `app.py`를 얇은 엔트리포인트/호환 레이어로 바꾸고, 기존 4천 줄대 구현을 `src/ui/app_core.py`로 이동.
+- `pages/dashboard.py`, `pages/trades.py`, `pages/data.py`를 추가해 `st.Page`/`st.navigation` 기반 라우팅 구조를 만들기 시작함.
+- `src/ui/charts.py`, `src/ui/forms.py`, `src/ui/layout.py`는 기존 `app_core` 헬퍼를 re-export하는 호환 모듈로 추가.
+- `TRADE_LOG_TABLE_COLUMN_WEIGHTS`를 `TRADE_LOG_TABLE_COLUMN_WEIGHT_BY_LABEL` dict에서 파생되도록 변경.
+- 차트 색상 상수를 `ChartColors` dataclass/`CHART_COLORS`로 묶고 기존 상수명 alias는 유지.
+- `st_keyup`, `st_echarts` fallback을 제거하고 필수 의존성 오류를 명시적으로 발생시키도록 변경.
+- `streamlit-echarts` v2 component manifest가 import 전에 등록되도록 `_discover_streamlit_component_manifests()`를 추가.
+- Supabase hotfix 상세 안내는 `PORTFOLIO_SHOW_HOTFIX_GUIDE=true`일 때만 노출되도록 변경.
+- `page_icon`을 `💼`로 변경.
+- `.streamlit/app.css`에 `prefers-color-scheme: dark` 변수와 모바일 세로 스택 보강, 인증/온보딩 화면 자동 pages nav 숨김 CSS를 추가.
+- `requirements.txt`의 `altair==5.0.1`을 `altair>=5.4,<6`으로 변경했고 로컬 환경은 `altair 5.5.0` 설치 완료.
+- 현재가 갱신과 orphan holdings 정리에 `st.status` 진행 상태 표시를 추가.
+
+### 검증 결과
+- `python -m compileall app.py src scripts tests pages` 성공.
+- `python -m unittest discover -s tests -p "test_*.py"` 성공 (`129`건), Altair 5.5.0 설치 후에도 재성공.
+- `python scripts/run_kis_quote_worker.py --backend sqlite --preflight-only` 성공 (`accounts=8`, `holdings=34`).
+- `python -m pip install -r requirements.txt` 성공, `altair 5.5.0`, `narwhals 2.21.0` 설치됨.
+
+### 미완료/주의 사항
+- 로컬 Streamlit 브라우저 검증은 아직 통과하지 못함.
+- `python -m streamlit run app.py --server.port 8527 --server.headless true`는 서버 기동 자체는 성공하지만, Playwright 확인 시 본문이 기대대로 렌더되지 않고 Streamlit chrome/nav만 보이는 상태가 있었음.
+- 원인 후보:
+  - `app.py`를 lazy import/호환 레이어로 바꾸면서 Streamlit ScriptRunner 실행 컨텍스트 판별이 안정적이지 않음.
+  - `pages/` 디렉터리를 추가하자 인증/온보딩 화면에서도 Streamlit 자동 pages navigation이 노출되어 `st.navigation` 전환 방식과 충돌 가능성이 있음.
+  - `hide_implicit_pages_navigation()`에서 `st.navigation(..., position="hidden")`을 실행했을 때 auth 본문 렌더가 막혀서 현재는 no-op + CSS 숨김 방식으로 되돌려 둠.
+- 다음 세션은 우선 `app.py` 실행 가드를 단순화하고, 로그인 전/온보딩 화면에서는 자동 pages nav가 본문 렌더를 막지 않는지부터 확인해야 함.
+- 필요하면 대형 분리 대신 `app.py` 원본 구조를 복구한 뒤 `requirements`, hotfix 플래그, 색상/컬럼 dict, CSS, status UX 같은 저위험 패치부터 분리 적용하는 편이 안전함.
+- 현재 작업트리에 기존 사용자 변경/산출물(`data/portfolio.db`, `docs/review_report.md`, 여러 untracked 파일)이 섞여 있으므로 커밋 전 `git status`와 변경 범위를 반드시 재확인할 것.
+
+## 2026-05-15 review_report.md 다음 단계 로컬 검증
+
+### 확인한 문서
+- `docs/review_report.md`
+- `docs/PLAN.md`
+- `docs/progress-memory.md`
+- `Memory.md`
+
+### 진행 내용
+- 이전 중단 기록의 핵심 이슈였던 로컬 Streamlit 본문 렌더 상태를 재검증.
+- `python -m streamlit run app.py --server.port 8527 --server.headless true`로 별도 포트 기동 후 Playwright로 인증 화면과 데모 작업공간 진입을 확인.
+- 첫 브라우저 접근 직후 약 9~15초 동안 Streamlit skeleton만 보일 수 있으나, 이후 인증 화면이 정상 렌더됨을 확인.
+- `데모 모드` → `데모 작업공간 시작하기` 흐름으로 로컬 SQLite 데모 세션에 진입했고, `st.navigation` 기반 대시보드 본문과 사이드바가 정상 표시됨을 확인.
+- 검증 산출물:
+  - `artifacts/local-streamlit-8527-current.png`
+  - `artifacts/local-streamlit-8527-long-wait.png`
+  - `artifacts/local-streamlit-8527-demo-mode.png`
+  - `artifacts/local-streamlit-8527-demo-dashboard.png`
+
+### 검증 결과
+- `python -m compileall app.py src scripts tests pages` 성공.
+- `python -m unittest discover -s tests -p "test_*.py"` 성공 (`129`건).
+- `python scripts/run_kis_quote_worker.py --backend sqlite --preflight-only` 성공 (`accounts=8`, `holdings=34`).
+- 로컬 Streamlit 브라우저 검증 성공:
+  - 인증 화면 렌더 확인
+  - 데모 모드 화면 렌더 확인
+  - 데모 대시보드 진입 확인
+  - 브라우저 콘솔 오류 없음
+
+### 남은 주의 사항
+- 첫 렌더가 즉시 표시되지 않고 skeleton 상태가 몇 초 이상 지속될 수 있으므로, 이후 성능 개선 단계에서는 `src/ui/app_core.py`의 무거운 import와 인증 전 초기화 비용을 줄이는 작업을 우선 검토한다.
+- 데모 브라우저 검증 과정에서 로컬 `data/portfolio.db`가 갱신될 수 있으므로 커밋/배포 전 제외 여부를 반드시 재확인한다.
+- 이번 턴에서는 사용자의 명시적 커밋 요청이 없어 커밋과 원격 배포는 수행하지 않음.
+
+## 2026-05-15 첫 렌더 지연 축소 및 인증 화면 경고 제거
+
+### 변경 파일
+- `src/ui/app_core.py`
+- `src/auth.py`
+- `Memory.md`
+
+### 변경 내용
+- 인증 화면 첫 렌더에서 필요 없는 무거운 의존성을 지연 로드하도록 변경.
+  - `streamlit-echarts` / `JsCode`
+  - `streamlit-keyup`
+  - `src.analytics` / `src.market` / `yfinance`
+  - `src.db` / `requests` / SQLite 관련 import
+- 기존 공개 함수명은 `app.py` 호환 레이어와 테스트 monkey patch가 유지되도록 래퍼 함수로 보존.
+- `src/auth.py`의 Supabase 클라이언트 생성도 실제 인증/세션 작업 시점에만 `create_client()`를 import하도록 변경.
+- ECharts 옵션 생성 테스트가 직접 옵션 함수를 호출해도 `JsCode`가 필요하면 지연 로드되도록 `get_jscode_runtime()`을 추가.
+- Supabase Python 클라이언트 초기화 방식은 공식 문서의 `create_client(url, key)` 흐름을 유지했고, 관련 변경 전 Supabase changelog와 Python initializing docs를 확인함.
+- 인증이 비활성화된 로컬 환경에서 `st.form_submit_button(disabled=True)`가 Streamlit `Missing Submit Button` 경고를 띄우는 문제를 피하도록, 비활성 로그인/회원가입 화면은 form 없이 disabled input/button으로 렌더링.
+
+### 성능 측정
+- `src.ui.app_core` 단독 import 측정:
+  - 이전 관측값: 약 `2.631s`
+  - Supabase 클라이언트 지연 로드 후: 약 `1.818s`
+  - analytics/market/db 지연 로드 후: 약 `1.470s`
+- 로컬 브라우저 인증 화면 ready 시간:
+  - 이전 관측값: 약 `9.33s`
+  - 이번 최종 관측값: 약 `1.29s`
+
+### 검증 결과
+- `python -m compileall app.py src scripts tests pages` 성공.
+- `python -m unittest tests.test_app_dashboard.SelectedHoldingTrendOptionTests tests.test_auth` 성공 (`9`건).
+- `python -m unittest discover -s tests -p "test_*.py"` 성공 (`129`건).
+- `python scripts/run_kis_quote_worker.py --backend sqlite --preflight-only` 성공 (`accounts=8`, `holdings=34`).
+- `python -m streamlit run app.py --server.port 8528 --server.headless true` 로컬 기동 후 Playwright 검증 성공.
+  - 인증 화면 ready `1.29s`
+  - `Missing Submit Button` 경고 없음
+  - 데모 모드 진입 후 대시보드 렌더 확인
+  - ECharts 경고 없음
+  - 브라우저 콘솔 오류 없음
+
+### 검증 산출물
+- `artifacts/importtime-app-core-before.txt`
+- `artifacts/importtime-app-core-after.txt`
+- `artifacts/importtime-app-core-after-auth-lazy.txt`
+- `artifacts/importtime-app-core-after-lazy-runtime.txt`
+- `artifacts/importtime-app-core-after-db-lazy.txt`
+- `artifacts/local-streamlit-8528-auth-ready.png`
+- `artifacts/local-streamlit-8528-auth-ready-fixed.png`
+- `artifacts/local-streamlit-8528-demo-dashboard.png`
+- `artifacts/local-streamlit-8528-demo-dashboard-fixed.png`
+
+### 남은 주의 사항
+- 로컬 데모 검증으로 `data/portfolio.db`가 갱신됐을 수 있으므로 커밋 전 제외 여부를 확인해야 한다.
+- 현재 작업트리에는 기존 untracked 산출물과 review 문서가 많아, 커밋/배포 전 요청 범위 파일만 선별해야 한다.
+- 이번 턴에서는 사용자의 명시적 커밋 요청이 없어 커밋과 원격 배포는 수행하지 않음.
+
+## 2026-05-15 st.navigation 페이지 전환 로컬 검증
+
+### 변경 파일
+- `src/ui/app_core.py`
+- `Memory.md`
+
+### 진행 내용
+- 성능 패치 이후 다음 단계로 `st.navigation` 기반 대시보드/거래/데이터 페이지 전환을 로컬 브라우저에서 검증.
+- `python -m streamlit run app.py --server.port 8530 --server.headless true`로 서버를 재기동하고 Playwright로 데모 세션 진입 후 페이지 전환을 확인.
+- 검증 중 사이드바의 `열려 있는 페이지` 문구가 페이지 전환보다 한 박자 늦게 표시되는 문제를 발견.
+- Streamlit 페이지 파일 실행 타이밍과 맞지 않는 동적 상태 문구라서, 잘못된 상태를 보여주지 않도록 `페이지는 좌측 내비게이션에서 전환합니다.` 정적 안내로 교체.
+
+### 검증 결과
+- `python -m compileall app.py src scripts tests pages` 성공.
+- `python -m unittest tests.test_app_dashboard` 성공 (`45`건).
+- `python -m unittest discover -s tests -p "test_*.py"` 성공 (`129`건).
+- `python scripts/run_kis_quote_worker.py --backend sqlite --preflight-only` 성공 (`accounts=8`, `holdings=34`).
+- Playwright 로컬 브라우저 검증 성공.
+  - 대시보드: `자산 배분`, `현재 보유 종목` 표시
+  - 거래: `상품 등록`, `거래 기록` 표시
+  - 데이터: `운영 상태`, `데이터 저장소` 표시
+  - 사이드바 정적 안내 문구 표시
+  - `열려 있는 페이지:` stale 문구 제거 확인
+  - `Traceback`/주요 런타임 오류 없음
+  - `Missing Submit Button`/ECharts 경고 없음
+
+### 검증 산출물
+- `artifacts/local-streamlit-8529-dashboard-start.png`
+- `artifacts/local-streamlit-8529-dashboard.png`
+- `artifacts/local-streamlit-8529-trades.png`
+- `artifacts/local-streamlit-8529-data.png`
+- `artifacts/local-streamlit-8530-dashboard-navigation-final.png`
+- `artifacts/local-streamlit-8530-trades-navigation-final.png`
+- `artifacts/local-streamlit-8530-data-navigation-final.png`
+
+### 남은 주의 사항
+- 브라우저 데모 검증으로 `data/portfolio.db`와 KIS 캐시 시간이 갱신됐을 수 있으므로 커밋 전 제외 여부를 재확인해야 한다.
+- 현재 변경은 로컬 검증까지 완료됐지만, 원격 반영은 아직 하지 않았다.

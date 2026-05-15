@@ -2,7 +2,7 @@ streamlit==1.55.0
 streamlit-keyup>=0.3,<0.4
 requests>=2.31,<3
 pandas>=2.2,<3
-altair==5.0.1
+altair>=5.4,<6
 streamlit-echarts==0.6.0
 yfinance>=0.2.66,<0.3
 supabase>=2.0.0,<3

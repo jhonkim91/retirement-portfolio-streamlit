@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import os
 import time
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import streamlit as st
-from supabase import Client, create_client
+
+if TYPE_CHECKING:
+    from supabase import Client
 
 
 DEFAULT_SUPABASE_URL = "https://iyszkybxostbjfzbbymq.supabase.co"
@@ -164,6 +166,14 @@ def _raw_session() -> dict[str, Any] | None:
     return session if isinstance(session, dict) else None
 
 
+def _create_client() -> Client:
+    """Supabase 클라이언트를 실제 네트워크 인증 작업 직전에 로드해 생성한다."""
+
+    from supabase import create_client
+
+    return create_client(_supabase_url(), _supabase_key())
+
+
 def get_client(*, refresh_if_needed: bool = False) -> Client:
     """현재 세션 기준 Supabase 클라이언트를 반환한다.
     
@@ -175,7 +185,7 @@ def get_client(*, refresh_if_needed: bool = False) -> Client:
     state = _client_state()
     client = state.get("client")
     if client is None:
-        client = create_client(_supabase_url(), _supabase_key())
+        client = _create_client()
         state["client"] = client
         state["session_signature"] = ""
 
@@ -200,7 +210,7 @@ def get_client(*, refresh_if_needed: bool = False) -> Client:
         response = client.auth.set_session(access_token, refresh_token)
     except Exception:
         clear_session()
-        return create_client(_supabase_url(), _supabase_key())
+        return _create_client()
 
     if response.session:
         _save_session(response.session)

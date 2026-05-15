@@ -46,6 +46,36 @@
     --dashboard-secondary-panel-min-height: 560px;
 }
 
+@media (prefers-color-scheme: dark) {
+    :root {
+        --theme-bg: #101923;
+        --theme-secondary-bg: #172435;
+        --theme-text: #E5EEF8;
+        --panel: #172435;
+        --panel-alt: #101923;
+        --surface: rgba(23, 36, 53, 0.96);
+        --surface-strong: #1E2D3F;
+        --line-soft: #2D3E53;
+        --border-emphasis: #3D526A;
+        --text-muted: #A9B7C8;
+        --dim-text: #7F91A7;
+        --mid-text: #C6D1DF;
+        --ink-strong: #E5EEF8;
+        --brand-deep: #F2F6FB;
+        --brand-accent: #7BB4D6;
+        --brand-hover: #9BC9E2;
+        --brand-soft: rgba(123, 180, 214, 0.18);
+        --card-shadow: rgba(0, 0, 0, 0.26);
+        --chart-canvas-bg: #172435;
+        --chart-canvas-border: #2D3E53;
+        --chart-title-bg: rgba(23, 36, 53, 0.98);
+        --chart-title-border: rgba(61, 82, 106, 0.92);
+        --chart-title-text: #F2F6FB;
+        --chart-tooltip-bg: rgba(8, 13, 20, 0.96);
+        --chart-tooltip-text: #F8FAFC;
+    }
+}
+
 /* 기본 토대 */
 html,
 body,
@@ -170,6 +200,11 @@ h6 {
 
 .stApp:has(.auth-page-shell) [data-testid="stHeader"] {
     background: transparent;
+}
+
+.stApp:has(.auth-page-shell) [data-testid="stSidebarNav"],
+.stApp:has(.empty-state-shell) [data-testid="stSidebarNav"] {
+    display: none;
 }
 
 .block-container:has(.auth-page-shell) {
@@ -1484,7 +1519,17 @@ h6 {
 
     .st-key-dashboard-summary-strip [data-testid="stHorizontalBlock"],
     .st-key-dashboard-secondary-grid [data-testid="stHorizontalBlock"] {
+        flex-direction: column;
+        flex-wrap: nowrap;
+        overflow-x: visible;
         gap: 0.4rem;
+    }
+
+    .st-key-dashboard-summary-strip [data-testid="column"],
+    .st-key-dashboard-secondary-grid [data-testid="column"] {
+        width: 100% !important;
+        min-width: 100% !important;
+        flex: 1 1 auto !important;
     }
 
     .dashboard-treemap-legend__range {
