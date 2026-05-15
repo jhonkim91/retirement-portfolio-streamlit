@@ -34,6 +34,7 @@
 - [x] 펀드성 코드(`K...`)의 1,000좌 기준가 단위를 보유 평가/거래 UI/저장 경로에 일관 적용
 - [x] Dashboard KPI 카드의 입금 대비 손익/수익률 전일 대비 델타 표시
 - [x] Dashboard KPI 값 급등 방지를 위해 오늘 평가 스냅샷 현금 산정 fallback 추가
+- [x] `?demo=1` URL query parameter 기반 데모 자동 진입 추가
 - [ ] temporal normalize migration 실제 적용 전 운영 `realtime_price_bars` 테이블 생성/노출 여부 결정
 
 ## 프로젝트 개요
@@ -48,10 +49,10 @@
 - 배포 앱: `https://retirement-portfolio-app-nh2vq9ferqnpehsslbykbe.streamlit.app/`
 
 ## 최근 변경 파일
-- `src/ui/app_core.py`: Dashboard KPI 카드의 손익/수익률 전일 대비 델타 계산과 표시 추가
+- `src/ui/app_core.py`: `?demo=1` 자동 데모 진입 처리와 Dashboard KPI 카드 손익/수익률 전일 대비 델타 표시 추가
 - `src/valuation.py`: 오늘 `account.cash_balance`가 거래 원장 현금과 크게 다르면 `implied_cash`로 fallback하도록 보정
 - `.streamlit/app.css`: KPI 델타 caption의 positive/negative/neutral 색상 class 추가
-- `tests/test_valuation.py`, `tests/test_app_dashboard.py`: 오늘 현금 fallback과 KPI 델타 계산/렌더링 회귀 테스트 추가
+- `tests/test_valuation.py`, `tests/test_app_dashboard.py`: 자동 데모 query parameter, 오늘 현금 fallback, KPI 델타 계산/렌더링 회귀 테스트 추가
 - `docs/VALIDATION.md`, `docs/CHANGELOG.md`, `Memory.md`: 최신 검증 결과와 변경 요약 갱신
 
 ## 핵심 설계 결정
@@ -83,6 +84,7 @@
 - Dashboard 히어로의 `전일 대비` 값은 입금 대비 손익이 아니라 추이 데이터의 마지막 두 `total_value` 차이로 계산한다.
 - 사이드바 계좌 카드에서는 계좌명만 표시하고 `연금(IRP/퇴직연금)` 유형 뱃지는 표시하지 않는다.
 - 스냅샷이 없으면 기존 summary와 `daily_account_snapshot` 기반 표시로 fallback한다.
+- `?demo=1`, `?demo=true`, `?demo=yes`, `?demo=demo`는 비로그인 사용자에게만 기존 데모 버튼과 같은 `start_demo_workspace_session()` 흐름을 자동 실행한다. 이미 인증된 사용자는 query parameter로 세션을 바꾸지 않는다.
 - KIS WebSocket worker는 운영 중 `ping/pong timed out` 후 재연결할 수 있지만, 종료 신호 수신 시에는 WebSocket을 닫고 재연결 루프 대신 `stopped` 상태 저장 경로로 이동한다.
 - realtime retention은 시간 범위 count/delete 성능을 우선해 `quote_time, id` 정렬 인덱스를 사용하고, 집계 정확도는 `aggregate_ticks()` 내부 정렬로 유지한다.
 
@@ -97,20 +99,19 @@ streamlit run app.py --server.port 8501 --server.address 0.0.0.0 --server.fileWa
 ```
 
 ## 최신 검증 결과
-- 작업 범위: Dashboard KPI 카드 값 급등 원인 점검, 오늘 평가 스냅샷 현금 산정 fallback, 손익/수익률 전일 대비 델타 표시
-- 변경 파일: `src/valuation.py`, `src/ui/app_core.py`, `.streamlit/app.css`, `tests/test_valuation.py`, `tests/test_app_dashboard.py`, `docs/VALIDATION.md`, `docs/CHANGELOG.md`, `Memory.md`
-- `python -m unittest tests.test_valuation tests.test_app_dashboard` 성공, 134 tests
+- 작업 범위: `?demo=1` URL query parameter 기반 자동 데모 진입, Dashboard KPI 카드 값 보정/전일 대비 델타 표시
+- 변경 파일: `src/ui/app_core.py`, `tests/test_app_dashboard.py`, `docs/VALIDATION.md`, `docs/CHANGELOG.md`, `Memory.md`
+- `python -m unittest tests.test_app_dashboard` 성공, 116 tests
 - `python -m compileall app.py src scripts tests` 성공
-- `python -m unittest discover -s tests -p "test_*.py"` 성공, 276 tests
+- `python -m unittest discover -s tests -p "test_*.py"` 성공, 280 tests
 - 테스트 중 Streamlit bare mode 경고가 출력됐으나 모든 테스트는 성공했다.
-- 로컬 재현 계좌에서 `account.cash_balance=17,400,000`, 거래 원장 현금 합계 `9,643,800` 불일치를 확인했고, 패치 후 해당 케이스는 오늘 현금을 원장 기준으로 fallback한다.
+- Supabase changelog를 확인했고 이번 작업과 직접 충돌하는 Auth breaking change는 확인되지 않았다.
 - 운영 DB 데이터 직접 수정, migration 추가, 배포는 수행하지 않았다.
 
 ## Git/GitHub 상태
 - 기본 브랜치: `main`
-- 최근 배포 코드 커밋: `fe566aa Normalize fund unit pricing`
-- 이번 패치 코드 커밋: `67643c0 Normalize fund trade amounts`
-- 이번 패치 검증 기록 커밋: `3c5078f Record fund normalization validation`
+- 최근 배포 코드 커밋: `ea6d125 Fix dashboard KPI valuation deltas`
+- 이번 자동 데모 링크 패치는 아직 커밋/배포하지 않았다.
 - 워크트리에는 이번 요청 전부터 `data/portfolio.db`, 로컬 도구 디렉터리, 산출물 등 여러 변경/미추적 파일이 함께 있었다.
 - 커밋 시 요청 관련 파일만 선별하고 `data/portfolio.db`, `.local/`, `.playtools*/`, `.playwright-browsers/`, `.vscode/`, `artifacts/`, `data/kis_cache/` 등 로컬 산출물은 제외한다.
 

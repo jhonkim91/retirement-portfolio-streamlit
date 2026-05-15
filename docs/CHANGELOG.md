@@ -8,6 +8,11 @@
 ## 최근 완료 변경 요약
 
 ### 2026-05-15
+- AI/자동 접근용 데모 링크 진입 추가.
+  - `?demo=1` URL query parameter가 있으면 비로그인 사용자에 한해 기존 데모 진입 흐름을 자동 실행.
+  - 데모 버튼과 동일하게 데모 로그인, 데이터 seed, 선택 계좌 설정을 `start_demo_workspace_session()`으로 처리.
+  - 이미 인증된 사용자는 query parameter가 있어도 세션을 바꾸지 않도록 보호.
+  - `tests/test_app_dashboard.py`, 전체 compileall/unittest discover 검증 완료.
 - Dashboard KPI 값 급등 보정.
   - 오늘 평가 스냅샷에서 `account.cash_balance`가 거래 원장 현금과 크게 다르면 보유 평가액과 현금이 이중 계산되지 않도록 `implied_cash`를 사용.
   - 로컬 재현 계좌에서 `account.cash_balance=17,400,000`, 원장 현금 `9,643,800` 불일치를 확인.

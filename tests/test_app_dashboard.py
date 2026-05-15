@@ -266,6 +266,64 @@ class ThemeStylesheetTests(unittest.TestCase):
         self.assertIn('dashboard-metric-card__delta">-10,000', metric_html)
 
 
+class DemoQueryParamTests(unittest.TestCase):
+    """URL query parameter 기반 데모 자동 진입을 검증한다."""
+
+    def test_is_demo_query_requested_accepts_supported_values(self) -> None:
+        """demo query parameter는 명시 허용값만 자동 진입으로 해석한다."""
+
+        for value in ("1", "true", "yes", "demo", ["demo"]):
+            self.assertTrue(dashboard_app.is_demo_query_requested(value))
+        for value in ("", "0", "false", "user", []):
+            self.assertFalse(dashboard_app.is_demo_query_requested(value))
+
+    def test_maybe_enter_demo_from_query_param_starts_demo_for_guest(self) -> None:
+        """비로그인 상태에서 ?demo=1이면 기존 데모 진입 흐름을 실행한다."""
+
+        original_query_params = dashboard_app.st.query_params
+        original_is_authenticated = dashboard_app.app_auth.is_authenticated
+        original_start_demo = dashboard_app.start_demo_workspace_session
+        calls: list[str] = []
+        dashboard_app.st.query_params = {"demo": "1"}
+        dashboard_app.app_auth.is_authenticated = lambda: False
+        dashboard_app.start_demo_workspace_session = lambda: calls.append("start")
+        try:
+            dashboard_app.maybe_enter_demo_from_query_param()
+        finally:
+            dashboard_app.st.query_params = original_query_params
+            dashboard_app.app_auth.is_authenticated = original_is_authenticated
+            dashboard_app.start_demo_workspace_session = original_start_demo
+
+        self.assertEqual(calls, ["start"])
+
+    def test_maybe_enter_demo_from_query_param_skips_authenticated_user(self) -> None:
+        """이미 로그인한 사용자는 ?demo=1이 있어도 세션을 바꾸지 않는다."""
+
+        original_query_params = dashboard_app.st.query_params
+        original_is_authenticated = dashboard_app.app_auth.is_authenticated
+        original_start_demo = dashboard_app.start_demo_workspace_session
+        calls: list[str] = []
+        dashboard_app.st.query_params = {"demo": "1"}
+        dashboard_app.app_auth.is_authenticated = lambda: True
+        dashboard_app.start_demo_workspace_session = lambda: calls.append("start")
+        try:
+            dashboard_app.maybe_enter_demo_from_query_param()
+        finally:
+            dashboard_app.st.query_params = original_query_params
+            dashboard_app.app_auth.is_authenticated = original_is_authenticated
+            dashboard_app.start_demo_workspace_session = original_start_demo
+
+        self.assertEqual(calls, [])
+
+    def test_main_checks_demo_query_before_auth_page(self) -> None:
+        """main은 로그인 화면 렌더링 전에 데모 query parameter를 처리한다."""
+
+        source = inspect.getsource(dashboard_app._load_app_core().main)
+
+        self.assertIn("maybe_enter_demo_from_query_param()", source)
+        self.assertLess(source.index("maybe_enter_demo_from_query_param()"), source.index("auth_page(auth_enabled=auth_enabled)"))
+
+
 class TradeFormResetTests(unittest.TestCase):
     """거래 페이지의 rerun 기반 폼 초기화 헬퍼를 검증한다."""
 

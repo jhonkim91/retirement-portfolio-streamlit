@@ -6,24 +6,24 @@
 - 기준일: `2026-05-15`
 
 ## 최신 대표 검증 결과
-- 작업 범위: Dashboard KPI 카드 값 급등 원인 점검과 평가 스냅샷 현금 산정 보정
-- 원인: 오늘 평가 스냅샷에서 `account.cash_balance`를 무조건 실제 현금으로 사용해, 매수/매도로 줄어든 원장 현금과 보유 평가액이 이중 계산될 수 있었다.
-- 확인: 로컬 재현 계좌에서 `account.cash_balance=17,400,000`, 거래 원장 현금 합계 `9,643,800`으로 불일치했고, 이 때문에 `입금 대비 손익`과 `수익률`이 과대 표시됐다.
-- 수정: 오늘 `account.cash_balance`가 거래 원장 기준 현금과 원 단위로 맞을 때만 실제 현금으로 사용하고, 크게 어긋나면 원장 기준 `implied_cash`로 fallback한다.
-- 유지: 저장소 스키마와 DB 데이터는 변경하지 않았다.
+- 작업 범위: `?demo=1` URL query parameter 기반 데모 자동 진입
+- 원인: 버튼 클릭과 Streamlit `session_state` 유지가 어려운 AI/자동 접근 도구는 기존 데모 버튼 흐름을 안정적으로 통과하지 못할 수 있었다.
+- 수정: `src/ui/app_core.py`에 `maybe_enter_demo_from_query_param()`을 추가해 `?demo=1`, `true`, `yes`, `demo` 요청 시 비로그인 사용자만 기존 데모 진입 흐름을 실행한다.
+- 수정: 자동 진입은 `start_demo_workspace_session()`을 재사용해 데모 로그인, 데모 데이터 seed, 선택 계좌 설정이 버튼 클릭과 동일하게 처리되도록 했다.
+- 보안: 이미 인증된 사용자는 query parameter가 있어도 세션을 바꾸지 않는다. 새 시크릿, RLS, DB 스키마 변경은 없다.
+- 확인: Supabase changelog에서 이번 작업과 직접 충돌하는 Auth breaking change는 확인되지 않았다.
 - 환경: 로컬 Python 3.11, Streamlit bare mode 테스트 실행.
 
 ## 명령 검증
-- `python -m unittest tests.test_valuation tests.test_app_dashboard` 성공, 134 tests
+- `python -m unittest tests.test_app_dashboard` 성공, 116 tests
 - `python -m compileall app.py src scripts tests` 성공
-- `python -m unittest discover -s tests -p "test_*.py"` 성공, 276 tests
+- `python -m unittest discover -s tests -p "test_*.py"` 성공, 280 tests
 
 ## 검증 범위
-- 오늘 실제 현금이 원장 현금과 맞는 경우 기존처럼 actual cash를 사용하는지 검증
-- 오늘 실제 현금이 매수/매도를 반영하지 않은 값이면 ledger/implied cash로 fallback하는지 검증
-- `dashboard_previous_day_delta_value()`가 날짜 정렬 후 마지막 두 `principal_profit_loss`/`principal_profit_rate` 값을 비교하는지 검증
-- `build_dashboard_metric_specs()`가 손익 KPI에 `전일 대비 +₩...`, 수익률 KPI에 `전일 대비 +...%p` caption을 넣는지 검증
-- `render_dashboard_metric_card_option2()`가 델타 tone class를 렌더링하는지 검증
+- `is_demo_query_requested()`가 허용값과 거부값을 올바르게 판별하는지 검증
+- 비로그인 상태에서 `?demo=1`이면 기존 데모 진입 흐름을 호출하는지 검증
+- 이미 로그인한 사용자는 `?demo=1`이 있어도 데모 세션으로 전환하지 않는지 검증
+- `main()`이 로그인 화면 렌더링 전에 query parameter를 처리하는지 검증
 
 ## 미수행 항목
-- 로컬/운영 Streamlit 브라우저 화면 검증과 배포는 수행하지 않았다.
+- 로컬/운영 Streamlit 브라우저 화면 검증, 커밋, 배포는 수행하지 않았다.

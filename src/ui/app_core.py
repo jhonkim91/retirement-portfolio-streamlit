@@ -3399,6 +3399,23 @@ def start_demo_workspace_session() -> None:
     st.rerun()
 
 
+def is_demo_query_requested(raw_value: Any) -> bool:
+    """URL query parameter 값이 데모 자동 진입 요청인지 판별한다."""
+
+    value = raw_value[0] if isinstance(raw_value, list) and raw_value else raw_value
+    return str(value or "").strip().lower() in {"1", "true", "yes", "demo"}
+
+
+def maybe_enter_demo_from_query_param() -> None:
+    """URL query parameter로 데모모드 자동 진입을 처리한다."""
+
+    if not is_demo_query_requested(st.query_params.get("demo", "")):
+        return
+    if app_auth.is_authenticated():
+        return
+    start_demo_workspace_session()
+
+
 def render_auth_mode_links(current_mode: str) -> None:
     """카드 하단의 인증 모드 전환 링크를 렌더링한다."""
 
@@ -8682,6 +8699,7 @@ def main() -> None:
 
     if auth_enabled or app_auth.is_demo_user():
         app_auth.refresh_session_state()
+    maybe_enter_demo_from_query_param()
     user = app_auth.get_user()
     if not user:
         hide_implicit_pages_navigation()
