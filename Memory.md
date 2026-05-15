@@ -91,12 +91,12 @@ streamlit run app.py --server.port 8501 --server.address 0.0.0.0 --server.fileWa
 - `python -m pytest tests/test_valuation.py tests/test_db.py tests/test_app_dashboard.py tests/test_run_daily_rollup.py tests/test_verify_streamlit_deployment.py` 성공, 164 tests
 - `git diff --check -- README.md docs/VALIDATION.md setup_supabase.sql migrations/2026-05-14_add_daily_valuation_snapshot.sql src/valuation.py src/market.py src/sqlite_db.py src/db.py src/ui/app_core.py scripts/run_daily_rollup.py scripts/verify_streamlit_deployment.py pages/valuation.py tests/test_valuation.py tests/test_db.py tests/test_setup_supabase_sql.py tests/test_app_dashboard.py tests/test_run_daily_rollup.py tests/test_verify_streamlit_deployment.py` 성공
 - 로컬 Streamlit 서버 `http://127.0.0.1:8501` health `ok`
-- `python scripts/verify_streamlit_deployment.py --url https://retirement-portfolio-app-nh2vq9ferqnpehsslbykbe.streamlit.app/ --page valuation --expect-backend supabase --wait-ms 12000 ...` 성공, `ok=true`
+- `python scripts/verify_streamlit_deployment.py --url https://retirement-portfolio-app-nh2vq9ferqnpehsslbykbe.streamlit.app/ --page valuation --expect-backend supabase --wait-ms 12000 --screenshot artifacts/deploy-valuation-newest-first.png ...` 성공, `ok=true`
 - Supabase 운영 `jhonkim2025` 계정 재계산: account 23 스냅샷 686건, account 24 스냅샷 99건, account 25/26은 입금 원장 없음으로 0건
 
 ## Git/GitHub 상태
 - 기본 브랜치: `main`
-- 최근 커밋: `e571b7c Document valuation ledger cash verification`
+- 최근 커밋: `8d10cb6 List valuation snapshots newest first`
 - 워크트리에는 이번 요청 전부터 `data/portfolio.db`, `.streamlit/app.css`, `src/auth.py`, `docs/review_report.md` 삭제, 로컬 도구 디렉터리, 산출물 등 여러 변경/미추적 파일이 함께 있었다.
 - 커밋 시 요청 관련 파일만 선별하고 `data/portfolio.db`, `.local/`, `.playtools*/`, `.playwright-browsers/`, `.vscode/`, `artifacts/`, `data/kis_cache/` 등 로컬 산출물은 제외한다.
 

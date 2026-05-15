@@ -42,13 +42,13 @@ python scripts/verify_streamlit_deployment.py \
   --page valuation \
   --expect-backend supabase \
   --wait-ms 12000 \
-  --screenshot artifacts/deploy-valuation-ledger-cash.png \
-  --text-output artifacts/deploy-valuation-ledger-cash.txt \
-  --debug-dir artifacts/deploy-valuation-ledger-cash-debug
+  --screenshot artifacts/deploy-valuation-newest-first.png \
+  --text-output artifacts/deploy-valuation-newest-first.txt \
+  --debug-dir artifacts/deploy-valuation-newest-first-debug
 ```
 - 결과: 성공, `ok=true`
 - 확인값: `target_page=valuation`, `logged_in=true`, `backend_storage=Supabase`, `backend_storage_code=supabase`, `workspace_visible=true`
-- 산출물: `artifacts/deploy-valuation-ledger-cash.png`, `artifacts/deploy-valuation-ledger-cash.txt`, `artifacts/deploy-valuation-ledger-cash-debug/`
+- 산출물: `artifacts/deploy-valuation-newest-first.png`, `artifacts/deploy-valuation-newest-first.txt`, `artifacts/deploy-valuation-newest-first-debug/`
 
 ## 운영 데이터 검증
 - 대상: Supabase 운영 `jhonkim2025@gmail.com`
