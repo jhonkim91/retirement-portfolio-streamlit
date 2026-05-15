@@ -19,6 +19,8 @@
 - `python -m unittest tests.test_app_dashboard` 성공, 102 tests
 - `python -m compileall app.py src scripts tests` 성공
 - `python -m unittest discover -s tests -p "test_*.py"` 성공, 247 tests
+- `git push origin main` 성공, 배포 코드 커밋 `6fbe753593cf9f6a72f79e8cdea71b92a6133ba9`
+- `python scripts/verify_streamlit_deployment.py --page trades --expect-backend supabase --wait-ms 30000 --text-output artifacts/deploy-verify-trades-bulk-delete-20260515-0255.txt --screenshot artifacts/deploy-verify-trades-bulk-delete-20260515-0255.png --debug-dir artifacts/deploy-verify-trades-bulk-delete-20260515-0255-debug` 성공
 
 ## 검증 범위
 - 거래 기록 선택 id가 정수/중복/비정상 값이 섞여도 안전하게 정규화되는지 검증
@@ -26,6 +28,7 @@
 - 거래 기록 화면 source에 행 선택, 선택 삭제 버튼, 선택 삭제 dialog 호출 경로가 포함되는지 검증
 - 선택 삭제 dialog가 기존 `delete_trade_log()`와 `rebuild_valuation_snapshots_for_account(..., "trade_deleted")` 경로를 사용하는지 검증
 - 전체 unittest suite가 기존 기능 회귀 없이 통과하는지 검증
+- 원격 Streamlit 거래 페이지가 로그인 후 Supabase backend로 로드되는지 검증
 
 ## 미수행 항목
-- 브라우저 수동 UI 검증과 원격 배포 검증은 이번 로컬 패치 범위에서 수행하지 않았다.
+- 브라우저에서 선택 삭제 버튼을 직접 클릭하는 수동 destructive 검증은 수행하지 않았다.
