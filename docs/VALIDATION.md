@@ -7,6 +7,8 @@
 
 ## 최신 대표 검증 결과
 - 작업 범위: 입금액 기준 일별 평가액 기록 기능 추가
+- 추가 운영 점검: `migrations/2026-05-14_normalize_temporal_columns.sql` 적용 전 Supabase temporal 컬럼 cast 실패 행 점검
+- 추가 worker 수정: KIS WebSocket worker가 GitHub Actions timeout 종료 신호를 WebSocket 오류로 처리한 뒤 재연결하다 `137`로 kill되는 흐름을 방지
 - 추가 UI 조정: 사이드바 연금 유형 뱃지 제거, Dashboard 히어로 전일 대비 자산 증감 표시, 입금 대비 손익/수익률 KPI 차트 확대
 - 현금 계산 수정: 평가액 기록의 과거 현금을 `입금원금 - 잔여매입원가`가 아니라 거래 원장의 `cash_delta` 누적 기준으로 계산
 - 정렬 수정: 평가액 기록 스냅샷 조회/표시를 최신 기준일 우선으로 변경
@@ -23,8 +25,11 @@
 - 환경: 로컬 Python 3.11, Streamlit, SQLite backend 검증
 
 ## 명령 검증
+- `python -m unittest tests.test_run_kis_quote_worker` 성공, 7 tests
+- `python scripts/run_kis_quote_worker.py --backend sqlite --preflight-only` 성공, `accounts=8`, `holdings=34`
+- `python scripts/run_kis_quote_worker.py --backend supabase --preflight-only` 성공, `accounts=4`, `holdings=6`
 - `python -m compileall app.py src scripts tests pages` 성공
-- `python -m unittest discover -s tests -p "test_*.py"` 성공, 236 tests
+- `python -m unittest discover -s tests -p "test_*.py"` 성공, 237 tests
 - `python -m pytest tests/test_db.py -k "valuation_snapshots"` 성공, 3 tests
 - `python -m pytest tests/test_run_daily_rollup.py` 성공, 1 test
 - `python -m pytest tests/test_valuation.py tests/test_db.py tests/test_app_dashboard.py` 성공, 154 tests
@@ -56,6 +61,29 @@ python scripts/verify_streamlit_deployment.py \
 - 결과: account 23 스냅샷 686건, account 24 스냅샷 99건 재계산 저장
 - 입금 원장이 없는 account 25/26은 평가 스냅샷 0건으로 정리
 - IRP account 24 확인값: `2026-05-07` 원장 현금 `80,483.722`, `2026-05-14` 실제 현금 `82,071`, 보유 평가액 `1,007,666`
+
+## Supabase Migration 사전 점검
+- 대상: 운영 Supabase project `iyszkybxostbjfzbbymq`
+- migration: `migrations/2026-05-14_normalize_temporal_columns.sql`
+- 방식: `pg_input_is_valid()` 기반 read-only SQL로 `date(left10)`/`timestamptz` 변환 가능 여부 확인
+- 결과: 대상 컬럼 전체 `invalid_rows=0`
+- 확인 row 수:
+  - `accounts`: 4 rows
+  - `holdings`: 28 rows
+  - `trade_logs`: 86 rows
+  - `daily_interest`: 0 rows
+  - `daily_account_snapshot`: 25 rows
+  - `realtime_price_ticks`: 12,449 rows
+  - `realtime_worker_status`: 4 rows
+- 주의: 운영 DB에는 현재 `public.realtime_price_bars`가 없어, 해당 migration 전체 적용 전에는 cast 실패가 아니라 테이블 존재 조건을 먼저 맞춰야 한다.
+
+## KIS Worker 운영 점검
+- 최신 GitHub Actions `KIS Realtime Worker` run `25845045857` 확인: `2026-05-14T06:13:25Z` 시작, `2026-05-14T09:59:45Z` 완료, conclusion `success`
+- 최신 job `75938329587` 확인: `KIS realtime worker 실행` 단계가 `2026-05-14T06:14:09Z`부터 `2026-05-14T09:59:39Z`까지 실행
+- 운영 Supabase `realtime_worker_status`: account 23/24/25/26 모두 `connection_state=stopped`, `stop_reason=github-actions-session-complete`
+- 운영 Supabase `realtime_price_ticks`: 총 12,449건, 최초 quote `2026-05-11T09:50:53`, 최신 quote `2026-05-14T15:59:40`, 4개 계좌/7개 종목 기록
+- 운영 로그 관찰: 세션 중 `ping/pong timed out` 이후 5초 재연결과 `KIS WebSocket 연결 완료: 6개 종목 구독` 복구가 반복됨
+- 수정: 종료 신호 수신 시 WebSocket을 닫고 재연결 루프로 복귀하지 않도록 worker shutdown flag를 추가했으며, workflow timeout은 `--signal=SIGINT`로 맞춤
 
 ## 계산 검증 범위
 - 최초 입금성 거래 발생일부터 series 생성

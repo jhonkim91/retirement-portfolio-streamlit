@@ -3,10 +3,20 @@
 ## 기준
 - 이 문서는 `Memory.md`에서 분리한 완료 변경 이력 요약이다.
 - 날짜별 상세 로그 원문은 `docs/archive/memory-YYYY-MM-DD.md`에 보존했다.
-- 정리 기준일은 `2026-05-14`이다.
-- `2026-05-15`로 기록된 섹션은 현재 기준일보다 뒤라 날짜 오류 가능성으로 표시한다.
+- 정리 기준일은 `2026-05-15`이다.
 
 ## 최근 완료 변경 요약
+
+### 2026-05-15
+- temporal normalize migration 사전 점검.
+  - 운영 Supabase project `iyszkybxostbjfzbbymq`에서 `migrations/2026-05-14_normalize_temporal_columns.sql` 대상 temporal 컬럼을 `pg_input_is_valid()` read-only SQL로 점검.
+  - `accounts`, `holdings`, `trade_logs`, `daily_interest`, `daily_account_snapshot`, `realtime_price_ticks`, `realtime_worker_status` 대상 컬럼의 cast 실패 행이 없는 것을 확인.
+  - 운영 DB에 `public.realtime_price_bars`가 아직 없어 migration 전체 적용 전 테이블 선행 적용 여부를 별도 주의 사항으로 기록.
+- KIS WebSocket worker 장중 운영 로그 점검 및 종료 복구 보강.
+  - 최신 GitHub Actions `KIS Realtime Worker` run `25845045857` 성공과 운영 Supabase tick 12,449건 저장을 확인.
+  - 운영 로그에서 `ping/pong timed out` 후 5초 재연결과 구독 복구가 반복되는 것을 확인.
+  - timeout 종료 신호가 WebSocket 오류 콜백으로 흡수된 뒤 재연결하다 `137`로 kill되는 흐름을 막기 위해 worker shutdown flag와 WebSocket close 처리를 추가.
+  - GitHub Actions workflow의 timeout 신호를 `--signal=SIGINT`로 명시하고 worker 회귀 테스트를 추가.
 
 ### 2026-05-14
 - RetirementPort Soft Wealth 라이트 디자인 적용.

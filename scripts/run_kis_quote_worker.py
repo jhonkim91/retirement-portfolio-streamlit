@@ -465,17 +465,42 @@ def main() -> int:
     client = KisApiClient()
     active_account_ids = list(preflight_account_ids)
     previous_signal_handlers: dict[int, Any] = {}
+    shutdown_requested: dict[str, Any] = {"requested": False, "reason": ""}
+    active_ws_app: dict[str, Any | None] = {"value": None}
 
-    def raise_keyboard_interrupt(signum: int, _frame: Any) -> None:
-        """SIGINT/SIGTERM을 KeyboardInterrupt로 바꿔 정리 루틴을 타게 한다."""
+    def request_shutdown(signum: int, _frame: Any) -> None:
+        """SIGINT/SIGTERM이 WebSocket 내부에서 흡수돼도 재연결하지 않게 표시한다."""
 
-        raise KeyboardInterrupt(f"signal:{signum}")
+        shutdown_requested["requested"] = True
+        shutdown_requested["reason"] = f"signal:{signum}"
+        ws_app = active_ws_app.get("value")
+        if ws_app is None:
+            return
+        try:
+            ws_app.close()
+        except Exception:
+            pass
+
+    def raise_if_shutdown_requested() -> None:
+        """종료 신호가 들어왔으면 바깥 정리 루틴으로 이동한다."""
+
+        if shutdown_requested["requested"]:
+            raise KeyboardInterrupt(str(shutdown_requested.get("reason") or "shutdown"))
+
+    def sleep_until_resume(seconds: float) -> None:
+        """종료 신호를 확인하면서 짧게 나누어 대기한다."""
+
+        end_time = time.monotonic() + max(float(seconds), 0.0)
+        while time.monotonic() < end_time:
+            raise_if_shutdown_requested()
+            time.sleep(min(0.5, max(end_time - time.monotonic(), 0.0)))
+        raise_if_shutdown_requested()
 
     for sig in (getattr(signal, "SIGINT", None), getattr(signal, "SIGTERM", None)):
         if sig is None:
             continue
         previous_signal_handlers[int(sig)] = signal.getsignal(sig)
-        signal.signal(sig, raise_keyboard_interrupt)
+        signal.signal(sig, request_shutdown)
 
     try:
         while True:
@@ -492,7 +517,7 @@ def main() -> int:
                     metadata_json={"reason": "국내 KIS 실시간 구독 대상 보유 종목이 없습니다.", "backend": backend},
                 )
                 print("구독할 국내 보유 종목이 없어 30초 뒤 다시 확인합니다.", flush=True)
-                time.sleep(30)
+                sleep_until_resume(30)
                 continue
 
             holdings_by_symbol: dict[str, list[HoldingRef]] = {}
@@ -559,6 +584,9 @@ def main() -> int:
 
             def on_error(_ws: Any, error: Any) -> None:
                 message = str(error or "알 수 없는 WebSocket 오류")
+                if shutdown_requested["requested"]:
+                    print(f"KIS WebSocket 종료 신호 수신: {shutdown_requested['reason']}", flush=True)
+                    return
                 update_status_for_accounts(
                     storage,
                     account_ids,
@@ -570,6 +598,12 @@ def main() -> int:
                 print(f"KIS WebSocket 오류: {message}", flush=True)
 
             def on_close(_ws: Any, status_code: Any, close_message: Any) -> None:
+                if shutdown_requested["requested"]:
+                    print(
+                        f"KIS WebSocket 종료 신호로 연결을 닫습니다: {shutdown_requested['reason']}",
+                        flush=True,
+                    )
+                    return
                 update_status_for_accounts(
                     storage,
                     account_ids,
@@ -593,10 +627,15 @@ def main() -> int:
                 on_close=on_close,
             )
             print(f"KIS quote worker 시작: backend={backend} env={settings['env']} ws={client.ws_url}", flush=True)
-            ws_app.run_forever(ping_interval=20, ping_timeout=10)
+            active_ws_app["value"] = ws_app
+            try:
+                ws_app.run_forever(ping_interval=20, ping_timeout=10)
+            finally:
+                active_ws_app["value"] = None
+            raise_if_shutdown_requested()
             backoff_seconds = reconnect_state["delay_seconds"]
             print(f"{backoff_seconds}초 뒤 KIS WebSocket 재연결을 시도합니다.", flush=True)
-            time.sleep(backoff_seconds)
+            sleep_until_resume(backoff_seconds)
             backoff_seconds = min(backoff_seconds * 2, 60)
     except KeyboardInterrupt:
         update_status_for_accounts(

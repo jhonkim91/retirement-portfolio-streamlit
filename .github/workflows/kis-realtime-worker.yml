@@ -131,7 +131,7 @@ jobs:
         run: |
           echo "segment=${WORKER_SEGMENT} seconds=${WORKER_SECONDS} backend=${WORKER_BACKEND}"
           set +e
-          timeout --kill-after=30s "${WORKER_SECONDS}" \
+          timeout --signal=SIGINT --kill-after=30s "${WORKER_SECONDS}" \
             python scripts/run_kis_quote_worker.py --backend "${WORKER_BACKEND}" --worker-name "${WORKER_NAME}"
           exit_code=$?
           set -e

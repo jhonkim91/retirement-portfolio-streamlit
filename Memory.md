@@ -21,8 +21,9 @@
 - [x] 계산/DB/스키마/UI/배치 회귀 테스트 추가 및 통과
 - [x] Supabase 운영 DB에 `migrations/2026-05-14_add_daily_valuation_snapshot.sql` 적용 및 평가 스냅샷 재계산
 - [x] 운영 `jhonkim2025` 계정 평가 스냅샷을 원장 현금 기준으로 재계산
-- [ ] 기존 `migrations/2026-05-14_normalize_temporal_columns.sql` 적용 전 cast 실패 행 여부 점검
-- [ ] KIS WebSocket worker 장시간 실행 중 재연결/상태 복구를 장중 운영 로그 기준으로 추가 점검
+- [x] 기존 `migrations/2026-05-14_normalize_temporal_columns.sql` 적용 전 cast 실패 행 여부 점검
+- [x] KIS WebSocket worker 장시간 실행 중 재연결/상태 복구를 장중 운영 로그 기준으로 추가 점검
+- [ ] temporal normalize migration 실제 적용 전 운영 `realtime_price_bars` 테이블 생성/노출 여부 결정
 
 ## 프로젝트 개요
 - 유형: `Python + Streamlit`
@@ -48,9 +49,11 @@
 - `.streamlit/app.css`: 사이드바 단일 계좌 이름 박스 스타일과 손익/수익률 KPI sparkline 확대 스타일 추가
 - `pages/valuation.py`: Streamlit 평가액 기록 페이지 진입점 추가
 - `scripts/run_daily_rollup.py`: 기존 일별 계좌 스냅샷 저장 후 평가 스냅샷도 재계산 저장
+- `scripts/run_kis_quote_worker.py`: 종료 신호가 WebSocket 내부에서 오류 콜백으로 흡수돼도 재연결하지 않고 `stopped` 상태를 남기도록 보강
+- `.github/workflows/kis-realtime-worker.yml`: 장중 worker timeout 종료 신호를 `SIGINT`로 명시
 - `scripts/verify_streamlit_deployment.py`: `valuation` 페이지 검증 대상 추가
 - `tests/test_valuation.py`, `tests/test_run_daily_rollup.py`: 신규 계산/배치 테스트 추가
-- `tests/test_db.py`, `tests/test_setup_supabase_sql.py`, `tests/test_app_dashboard.py`, `tests/test_verify_streamlit_deployment.py`: 신규 저장소/스키마/UI 검증 확장
+- `tests/test_db.py`, `tests/test_setup_supabase_sql.py`, `tests/test_app_dashboard.py`, `tests/test_verify_streamlit_deployment.py`, `tests/test_run_kis_quote_worker.py`: 신규 저장소/스키마/UI/worker 검증 확장
 - `README.md`, `docs/VALIDATION.md`: 기능/검증 문서 갱신
 
 ## 핵심 설계 결정
@@ -69,6 +72,7 @@
 - Dashboard 히어로의 `전일 대비` 값은 입금 대비 손익이 아니라 추이 데이터의 마지막 두 `total_value` 차이로 계산한다.
 - 사이드바 계좌 카드에서는 계좌명만 표시하고 `연금(IRP/퇴직연금)` 유형 뱃지는 표시하지 않는다.
 - 스냅샷이 없으면 기존 summary와 `daily_account_snapshot` 기반 표시로 fallback한다.
+- KIS WebSocket worker는 운영 중 `ping/pong timed out` 후 재연결할 수 있지만, 종료 신호 수신 시에는 WebSocket을 닫고 재연결 루프 대신 `stopped` 상태 저장 경로로 이동한다.
 
 ## 실행 명령
 ```powershell
@@ -81,8 +85,13 @@ streamlit run app.py --server.port 8501 --server.address 0.0.0.0 --server.fileWa
 ```
 
 ## 최신 검증 결과
+- Supabase 운영 `migrations/2026-05-14_normalize_temporal_columns.sql` 사전 cast 점검: 대상 temporal 컬럼 전체 `invalid_rows=0`; 단, 운영 DB에 `public.realtime_price_bars`가 없어 migration 전체 적용 전 테이블 선행 적용 여부 확인 필요
+- GitHub Actions `KIS Realtime Worker` 최신 run `25845045857` 성공, 운영 Supabase tick 총 12,449건 및 account 23/24/25/26 `stopped` 상태 확인
+- `python -m unittest tests.test_run_kis_quote_worker` 성공, 7 tests
+- `python scripts/run_kis_quote_worker.py --backend sqlite --preflight-only` 성공, `accounts=8`, `holdings=34`
+- `python scripts/run_kis_quote_worker.py --backend supabase --preflight-only` 성공, `accounts=4`, `holdings=6`
 - `python -m compileall app.py src scripts tests pages` 성공
-- `python -m unittest discover -s tests -p "test_*.py"` 성공, 236 tests
+- `python -m unittest discover -s tests -p "test_*.py"` 성공, 237 tests
 - `python -m pytest tests/test_db.py -k "valuation_snapshots"` 성공, 3 tests
 - `python -m pytest tests/test_run_daily_rollup.py` 성공, 1 test
 - `python -m pytest tests/test_valuation.py tests/test_db.py tests/test_app_dashboard.py` 성공, 154 tests
@@ -96,7 +105,7 @@ streamlit run app.py --server.port 8501 --server.address 0.0.0.0 --server.fileWa
 
 ## Git/GitHub 상태
 - 기본 브랜치: `main`
-- 최근 커밋: `8d10cb6 List valuation snapshots newest first`
+- 최근 커밋: `d4b0797 Document valuation newest-first deploy check`
 - 워크트리에는 이번 요청 전부터 `data/portfolio.db`, `.streamlit/app.css`, `src/auth.py`, `docs/review_report.md` 삭제, 로컬 도구 디렉터리, 산출물 등 여러 변경/미추적 파일이 함께 있었다.
 - 커밋 시 요청 관련 파일만 선별하고 `data/portfolio.db`, `.local/`, `.playtools*/`, `.playwright-browsers/`, `.vscode/`, `artifacts/`, `data/kis_cache/` 등 로컬 산출물은 제외한다.
 

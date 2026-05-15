@@ -186,6 +186,92 @@ class QuoteWorkerShutdownTests(unittest.TestCase):
         self.assertEqual(status_updates[-1]["connection_state"], "stopped")
         self.assertEqual(status_updates[-1]["account_ids"], [24])
 
+    def test_main_stops_after_signal_even_when_websocket_returns_normally(self) -> None:
+        """종료 신호가 WebSocket 내부에서 처리돼도 재연결하지 않고 stopped를 남긴다."""
+
+        fake_args = type(
+            "Args",
+            (),
+            {
+                "backend": "supabase",
+                "account_id": None,
+                "worker_name": "kis-quote-worker",
+                "reconnect_delay": 5,
+                "preflight_only": False,
+            },
+        )()
+
+        class FakeStorage:
+            """main 테스트용 최소 저장소."""
+
+            def verify_runtime_ready(self) -> None:
+                return None
+
+            def known_account_ids(self, account_ids=None):
+                return [24]
+
+            def list_target_holdings(self, account_ids=None):
+                return [
+                    quote_worker.HoldingRef(
+                        account_id=24,
+                        holding_id=14,
+                        symbol="005930",
+                        product_name="삼성전자",
+                    )
+                ]
+
+        registered_handlers: dict[int, object] = {}
+
+        def fake_signal(sig, handler):
+            sig_num = int(sig)
+            previous_handler = registered_handlers.get(sig_num, quote_worker.signal.SIG_DFL)
+            registered_handlers[sig_num] = handler
+            return previous_handler
+
+        class FakeWebSocketApp:
+            """run_forever 중 종료 신호가 들어온 상황을 흉내 낸다."""
+
+            close_called = False
+
+            def __init__(self, *args, **kwargs) -> None:
+                return None
+
+            def run_forever(self, *args, **kwargs) -> None:
+                handler = registered_handlers[int(quote_worker.signal.SIGTERM)]
+                handler(int(quote_worker.signal.SIGTERM), None)
+
+            def close(self) -> None:
+                FakeWebSocketApp.close_called = True
+
+        fake_websocket = type("FakeWebSocketModule", (), {"WebSocketApp": FakeWebSocketApp, "ABNF": object()})
+        status_updates: list[dict[str, object]] = []
+
+        def record_status(storage, account_ids, *, worker_name, connection_state, last_seen_at=None, last_quote_at=None, metadata_json=None):
+            status_updates.append(
+                {
+                    "account_ids": list(account_ids),
+                    "worker_name": worker_name,
+                    "connection_state": connection_state,
+                    "metadata_json": dict(metadata_json or {}),
+                }
+            )
+
+        with patch.object(quote_worker, "parse_args", return_value=fake_args), \
+            patch.object(quote_worker, "choose_backend", return_value="supabase"), \
+            patch.object(quote_worker, "build_storage", return_value=FakeStorage()), \
+            patch.object(quote_worker, "kis_settings", return_value={"enabled": True, "env": "prod"}), \
+            patch.object(quote_worker, "KisApiClient", return_value=type("FakeClient", (), {"ws_url": "ws://example"})()), \
+            patch.object(quote_worker.signal, "signal", side_effect=fake_signal), \
+            patch.dict(sys.modules, {"websocket": fake_websocket}), \
+            patch.object(quote_worker, "update_status_for_accounts", side_effect=record_status):
+            result = quote_worker.main()
+
+        self.assertEqual(result, 0)
+        self.assertTrue(FakeWebSocketApp.close_called)
+        self.assertTrue(status_updates)
+        self.assertEqual(status_updates[-1]["connection_state"], "stopped")
+        self.assertEqual(status_updates[-1]["account_ids"], [24])
+
 
 class QuoteWorkerStatusPersistenceTests(unittest.TestCase):
     """worker 상태 갱신 시 마지막 quote 시각 보존을 검증한다."""
