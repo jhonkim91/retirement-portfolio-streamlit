@@ -79,6 +79,41 @@ class CompanyPrincipalValuationTests(unittest.TestCase):
         self.assertEqual(today_snapshot["cash_value"], 1500)
         self.assertEqual(today_snapshot["valuation_amount"], 7700)
 
+    def test_historical_account_snapshot_cash_overrides_ledger_cash(self) -> None:
+        """일별 계좌 스냅샷 현금이 있으면 과거 날짜도 실제 현금값으로 평가한다."""
+
+        trade_logs = [
+            {"id": 1, "trade_date": "2026-01-01", "trade_type": "employer_deposit", "total_amount": 10000},
+            {
+                "id": 2,
+                "trade_date": "2026-01-02",
+                "trade_type": "buy",
+                "symbol": "AAA",
+                "product_name": "테스트상품",
+                "quantity": 2,
+                "price": 3000,
+                "total_amount": 6000,
+            },
+        ]
+
+        snapshots = build_company_principal_valuation_snapshots(
+            account={"id": 1, "cash_balance": 1500},
+            trade_logs=trade_logs,
+            price_lookup={"AAA": {"2026-01-02": 3100, "2026-01-03": 3200}},
+            account_snapshots=[{"snapshot_date": "2026-01-02", "cash_balance": 3500}],
+            end_date=date(2026, 1, 3),
+            today_date=date(2026, 1, 4),
+            calculation_reason="test",
+        )
+
+        self.assertEqual(snapshots[1]["implied_cash"], 4000)
+        self.assertEqual(snapshots[1]["cash_source"], "actual")
+        self.assertEqual(snapshots[1]["actual_cash_balance"], 3500)
+        self.assertEqual(snapshots[1]["cash_value"], 3500)
+        self.assertEqual(snapshots[1]["valuation_amount"], 9700)
+        self.assertEqual(snapshots[2]["cash_source"], "implied")
+        self.assertEqual(snapshots[2]["cash_value"], 4000)
+
     def test_personal_deposit_starts_series_and_counts_as_principal(self) -> None:
         """개인 입금도 최초 시작일과 원금 누적에 포함한다."""
 
@@ -144,6 +179,30 @@ class CompanyPrincipalValuationTests(unittest.TestCase):
         self.assertEqual(final_snapshot["implied_cash"], 8000)
         self.assertEqual(final_snapshot["cash_value"], 8000)
         self.assertEqual(final_snapshot["valuation_amount"], 11200)
+
+    def test_unmatched_sell_does_not_add_cash_or_reduce_future_lots(self) -> None:
+        """보유 수량 없이 먼저 들어온 매도 기록은 평가 현금을 부풀리지 않는다."""
+
+        trade_logs = [
+            {"id": 1, "trade_date": "2026-01-01", "trade_type": "employer_deposit", "total_amount": 10000},
+            {"id": 2, "trade_date": "2026-01-02", "trade_type": "sell", "symbol": "AAA", "product_name": "A", "quantity": 1, "price": 5000},
+            {"id": 3, "trade_date": "2026-01-03", "trade_type": "buy", "symbol": "AAA", "product_name": "A", "quantity": 1, "price": 3000},
+        ]
+
+        snapshots = build_company_principal_valuation_snapshots(
+            account={"id": 1, "cash_balance": 0},
+            trade_logs=trade_logs,
+            price_lookup={"AAA": {"2026-01-03": 4000}},
+            end_date=date(2026, 1, 3),
+            today_date=date(2026, 1, 4),
+            calculation_reason="test",
+        )
+
+        self.assertEqual(snapshots[1]["implied_cash"], 10000)
+        self.assertEqual(snapshots[1]["valuation_amount"], 10000)
+        self.assertEqual(snapshots[2]["invested_cost"], 3000)
+        self.assertEqual(snapshots[2]["implied_cash"], 7000)
+        self.assertEqual(snapshots[2]["valuation_amount"], 11000)
 
     def test_cash_delta_events_change_ledger_cash_without_changing_principal(self) -> None:
         """이자, 배당, 수수료 등 cash_delta 원장 이벤트는 원금이 아니라 현금에 반영한다."""

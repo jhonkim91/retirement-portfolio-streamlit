@@ -6,32 +6,36 @@
 - 기준일: `2026-05-15`
 
 ## 최신 대표 검증 결과
-- 작업 범위: 거래 기록 선택 삭제 연관 매도 자동 포함 보강
-- 원인: 선택한 매수 기록만 먼저 삭제하면 남아 있는 매도 기록 재계산 중 보유 수량이 음수가 되어 기존 단건 삭제 경로가 실패했다.
-- 수정: 선택 삭제 실행 전 남은 매수/매도 원장을 replay해 음수 보유수량을 만드는 연관 매도 기록을 삭제 확인 대상에 자동 포함한다.
-- 안전 장치: 기존 원장 자체가 이미 음수 보유수량을 만드는 상태면 선택 삭제 실행 버튼을 비활성화하고 오류를 안내한다.
-- 삭제 처리: 확인 dialog에서 선택 항목과 자동 포함된 `연관 매도` 항목을 함께 표시한 뒤 기존 `delete_trade_log()`와 평가액 기록 재계산 경로를 사용한다.
-- 삭제 순서: 매도/매수 종속성으로 인한 중간 상태 오류를 줄이기 위해 선택 거래를 `trade_date`, `id` 역순으로 삭제한다.
-- 회귀 테스트: 연관 매도 자동 포함, 기존 불일치 원장 차단, 선택 삭제 dialog/source 연결을 `tests/test_app_dashboard.py`에 추가했다.
+- 작업 범위: 평가액 기록 현금흐름 산식 재점검 및 실제 일별 현금 우선 보정
+- 원인: 과거 평가액 기록이 같은 날짜 `daily_account_snapshot.cash_balance`가 있어도 거래 원장 기반 현금 추정값을 우선 사용해, 중복/비정상 거래 기록이 있는 계좌에서 현금과 수익률이 크게 부풀려졌다.
+- 추가 원인: 보유 수량 없이 먼저 들어온 매도 기록도 현금 유입으로 반영되어, 잘못 입력된 매도 데이터가 평가 현금을 증가시킬 수 있었다.
+- 수정: 오늘은 `accounts.cash_balance`, 과거일은 `daily_account_snapshot.cash_balance`가 있으면 실제 현금을 사용하고, 스냅샷이 없는 날짜만 거래 원장 기반 현금으로 fallback한다.
+- 수정: 매도 현금 유입은 FIFO lot에 실제 매칭된 수량 비율만 반영해 미매칭 매도가 평가 현금을 부풀리지 않도록 했다.
+- 회귀 테스트: 일별 계좌 스냅샷 현금 우선 적용, 미매칭 매도 현금 부풀림 방지, daily rollup 스냅샷 현금 전달을 검증했다.
+- 운영 read-only 점검: `jhonkim2025@gmail.com`의 미래에셋(account 23), 신한(account 24) 계좌에 대해 거래 원장, 일별 계좌 스냅샷, 평가 스냅샷을 조회했다.
 - 환경: 로컬 Python 3.11, Streamlit bare mode 테스트 실행.
 
 ## 명령 검증
-- `python -m compileall src/ui/app_core.py tests/test_app_dashboard.py` 성공
-- `python -m unittest tests.test_app_dashboard` 성공, 104 tests
+- `python -m compileall src/valuation.py src/ui/app_core.py src/db.py scripts/run_daily_rollup.py tests/test_valuation.py tests/test_run_daily_rollup.py` 성공
+- `python -m unittest tests.test_valuation tests.test_app_dashboard tests.test_run_daily_rollup` 성공, 120 tests
 - `python -m compileall app.py src scripts tests` 성공
-- `python -m unittest discover -s tests -p "test_*.py"` 성공, 249 tests
-- `git push origin main` 성공, 배포 코드 커밋 `ddf61a2f939ae140f6c9da7ac7f52ea3e4f2f462`
-- `python scripts/verify_streamlit_deployment.py --page trades --expect-backend supabase --wait-ms 30000 --text-output artifacts/deploy-verify-trades-dependent-sells-20260515-0328.txt --screenshot artifacts/deploy-verify-trades-dependent-sells-20260515-0328.png --debug-dir artifacts/deploy-verify-trades-dependent-sells-20260515-0328-debug` 성공
+- `python -m unittest discover -s tests -p "test_*.py"` 성공, 251 tests
 
 ## 검증 범위
-- 거래 기록 선택 id가 정수/중복/비정상 값이 섞여도 안전하게 정규화되는지 검증
-- 행 체크박스 callback이 선택 삭제 id 목록을 추가/제거하는지 검증
-- 선택 매수 삭제 시 남은 매도 원장이 음수 보유수량을 만들면 해당 매도 id가 삭제 대상에 포함되는지 검증
-- 기존 원장 자체가 이미 불일치하면 선택 삭제 실행을 차단할 수 있는 plan을 반환하는지 검증
-- 거래 기록 화면 source에 행 선택, 선택 삭제 버튼, 선택 삭제 dialog 호출 경로가 포함되는지 검증
-- 선택 삭제 dialog가 기존 `delete_trade_log()`와 `rebuild_valuation_snapshots_for_account(..., "trade_deleted")` 경로를 사용하는지 검증
+- 평가액 기록 산식이 오늘 실제 현금, 과거 일별 계좌 스냅샷 현금, 원장 fallback 순서로 현금을 선택하는지 검증
+- 과거 실제 현금이 적용될 때 `cash_source`, `actual_cash_balance`, `valuation_amount`가 일관되게 계산되는지 검증
+- 보유 lot에 매칭되지 않는 매도 기록이 현금과 향후 lot을 변경하지 않는지 검증
+- daily rollup과 수동 재계산 경로가 `daily_account_snapshot` 목록을 평가 스냅샷 재계산에 전달하는지 검증
 - 전체 unittest suite가 기존 기능 회귀 없이 통과하는지 검증
-- 원격 Streamlit 거래 페이지가 로그인 후 Supabase backend로 로드되는지 검증
+- 운영 Supabase 데이터는 read-only 조회만 수행했고, 거래 기록 삭제/수정이나 평가 스냅샷 재작성은 수행하지 않았다.
+
+## 계좌 산출 점검
+- 미래에셋(account 23): 원장 기준 현금 합계가 `6,433,337,639.53719`원까지 부풀려져 있었고, 주요 원인은 1,000배 수준 중복 거래 id `874`-`879` 및 미매칭 매도성 기록 id `901`이었다.
+- 신한(account 24): 원장 기준 현금 합계가 `1,795,205.722`원이었고, 1,000배 수준 중복 거래 id `899`, `900`을 제외하면 `80,483.722`원으로 실제 현금 `82,071`원에 근접했다.
+- 신한 2026-05-14 산출 예시: 상품 평가액 `925,595`원 + 실제 현금 `82,071`원 = 보유 평가액 `1,007,666`원, 입금 원금 `800,000`원, 손익 `207,666`원, 수익률 `25.96%`.
+- 미래에셋 2026-05-14 산출 예시: 상품 평가액 `32,952,885`원 + 실제 현금 `17,449`원 = 보유 평가액 `32,970,334`원, 입금 원금 `17,500,000`원, 손익 `15,470,334`원, 수익률 `88.40%`.
 
 ## 미수행 항목
-- 브라우저에서 선택 삭제 버튼을 직접 클릭하는 수동 destructive 검증은 수행하지 않았다.
+- 운영 거래 원장의 중복/비정상 거래 id 삭제 또는 수정은 destructive 작업이므로 수행하지 않았다.
+- 운영 `daily_valuation_snapshot` 재작성은 운영 DB 파생 데이터 변경이므로 수행하지 않았다.
+- 배포 후 원격 Streamlit 평가액 기록 페이지 검증은 아직 수행하지 않았다.

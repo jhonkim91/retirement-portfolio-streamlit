@@ -37,6 +37,7 @@ class DailyRollupValuationSnapshotTests(unittest.TestCase):
                     price=3000,
                     trade_date="2026-01-02",
                 )
+                sqlite_db.update_cash_balance(account_id, 3500)
 
                 with patch(
                     "scripts.run_daily_rollup.build_price_lookup_for_trade_logs",
@@ -49,7 +50,7 @@ class DailyRollupValuationSnapshotTests(unittest.TestCase):
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0].valuation_snapshot_count, 2)
         self.assertEqual(len(rows), 2)
-        self.assertEqual(rows[0]["valuation_amount"], 10200)
+        self.assertEqual(rows[0]["valuation_amount"], 9700)
 
 
 if __name__ == "__main__":

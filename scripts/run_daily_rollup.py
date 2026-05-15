@@ -187,6 +187,18 @@ class SupabaseAdminClient:
         logs = list(rows) if isinstance(rows, list) else []
         return sorted(logs, key=lambda row: (str(row.get("trade_date") or ""), int(row.get("id") or 0)))
 
+    def list_account_snapshots(self, account_id: int, start_date: str | None = None) -> list[dict[str, Any]]:
+        """계좌의 일별 스냅샷을 날짜순으로 조회한다."""
+
+        filters = {
+            "account_id": f"eq.{account_id}",
+            "order": "snapshot_date.asc,id.asc",
+        }
+        if start_date:
+            filters["snapshot_date"] = f"gte.{start_date}"
+        rows = self.request("GET", "daily_account_snapshot", filters=filters) or []
+        return list(rows) if isinstance(rows, list) else []
+
     def upsert_snapshot(
         self,
         account_id: int,
@@ -266,15 +278,21 @@ def rebuild_sqlite_valuation_snapshots(account: dict[str, Any], target_date: dat
 
     account_id = int(account["id"])
     trade_logs = sqlite_db.list_trade_logs(account_id)
+    start_date = first_principal_deposit_date(trade_logs)
     price_lookup = build_price_lookup_for_trade_logs(
         trade_logs,
-        start_date=first_principal_deposit_date(trade_logs),
+        start_date=start_date,
         end_date=target_date,
+    )
+    account_snapshots = sqlite_db.list_account_snapshots(
+        account_id,
+        start_date=start_date.isoformat() if start_date else None,
     )
     snapshots = rebuild_daily_valuation_snapshots(
         account=account,
         trade_logs=trade_logs,
         price_lookup=price_lookup,
+        account_snapshots=account_snapshots,
         end_date=target_date,
         today_date=datetime.now(ZoneInfo(DEFAULT_ROLLUP_TIMEZONE)).date(),
         calculation_reason="daily_rollup",
@@ -296,15 +314,21 @@ def rebuild_supabase_valuation_snapshots(
 
     account_id = int(account["id"])
     trade_logs = client.list_trade_logs(account_id)
+    start_date = first_principal_deposit_date(trade_logs)
     price_lookup = build_price_lookup_for_trade_logs(
         trade_logs,
-        start_date=first_principal_deposit_date(trade_logs),
+        start_date=start_date,
         end_date=target_date,
+    )
+    account_snapshots = client.list_account_snapshots(
+        account_id,
+        start_date=start_date.isoformat() if start_date else None,
     )
     snapshots = rebuild_daily_valuation_snapshots(
         account=account,
         trade_logs=trade_logs,
         price_lookup=price_lookup,
+        account_snapshots=account_snapshots,
         end_date=target_date,
         today_date=datetime.now(ZoneInfo(DEFAULT_ROLLUP_TIMEZONE)).date(),
         calculation_reason="daily_rollup",

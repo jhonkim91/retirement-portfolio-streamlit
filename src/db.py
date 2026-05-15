@@ -4110,6 +4110,7 @@ def sync_account_rollup(
             account=account,
             trade_logs=trade_logs,
             price_lookup=price_lookup,
+            account_snapshots=snapshot_rows,
             end_date=today,
             today_date=today,
             calculation_reason="daily_rollup",

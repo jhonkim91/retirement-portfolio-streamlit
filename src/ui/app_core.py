@@ -567,6 +567,7 @@ def rebuild_valuation_snapshots_for_account(account_id: int, calculation_reason:
         if not account:
             return 0, "계좌를 찾을 수 없습니다."
         trade_logs = list_trade_logs(int(account_id))
+        account_snapshots = list_account_snapshots(int(account_id))
         today = valuation_today()
         price_lookup = get_valuation_module().build_price_lookup_for_trade_logs(
             trade_logs,
@@ -577,6 +578,7 @@ def rebuild_valuation_snapshots_for_account(account_id: int, calculation_reason:
             account=account,
             trade_logs=trade_logs,
             price_lookup=price_lookup,
+            account_snapshots=account_snapshots,
             end_date=today,
             today_date=today,
             calculation_reason=calculation_reason,

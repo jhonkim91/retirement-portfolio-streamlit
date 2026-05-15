@@ -160,6 +160,7 @@ def source_hash_for_inputs(
     price_lookup: dict[str, dict[str, float]],
     end_date: date,
     today_date: date,
+    account_snapshots: list[dict[str, Any]] | None = None,
 ) -> str:
     """재계산 기준 입력값 해시를 생성한다."""
 
@@ -185,6 +186,22 @@ def source_hash_for_inputs(
             ),
         )
     ]
+    snapshot_rows = [
+        {
+            "snapshot_date": str(row.get("snapshot_date") or ""),
+            "cash_balance": safe_float(row.get("cash_balance")),
+            "market_value": safe_float(row.get("market_value")),
+            "total_value": safe_float(row.get("total_value")),
+            "total_cost": safe_float(row.get("total_cost")),
+        }
+        for row in sorted(
+            account_snapshots or [],
+            key=lambda row: (
+                str(row.get("snapshot_date") or ""),
+                int(row.get("id") or 0),
+            ),
+        )
+    ]
 
     payload = {
         "account_id": account.get("id"),
@@ -192,6 +209,7 @@ def source_hash_for_inputs(
         "end_date": end_date.isoformat(),
         "today_date": today_date.isoformat(),
         "trade_logs": source_rows,
+        "account_snapshots": snapshot_rows,
         "price_lookup": _canonical_price_lookup(price_lookup),
     }
     payload_text = json.dumps(payload, sort_keys=True, ensure_ascii=False)
@@ -252,18 +270,19 @@ def apply_buy(lots_by_symbol: dict[str, list[Lot]], log: dict[str, Any]) -> None
     )
 
 
-def apply_sell(lots_by_symbol: dict[str, list[Lot]], log: dict[str, Any]) -> None:
-    """매도 로그를 FIFO 기준으로 잔여 lot에서 차감한다."""
+def apply_sell(lots_by_symbol: dict[str, list[Lot]], log: dict[str, Any]) -> float:
+    """매도 로그를 FIFO 기준으로 잔여 lot에서 차감하고 실제 매칭 수량을 반환한다."""
 
     symbol = normalize_symbol(log.get("symbol"))
     if not symbol:
-        return
+        return 0.0
 
     remaining_quantity = safe_float(log.get("quantity"))
     if remaining_quantity <= 0:
-        return
+        return 0.0
 
     updated_lots: list[Lot] = []
+    matched_total = 0.0
     for lot in lots_by_symbol.get(symbol) or []:
         if remaining_quantity <= 0:
             updated_lots.append(lot)
@@ -276,11 +295,25 @@ def apply_sell(lots_by_symbol: dict[str, list[Lot]], log: dict[str, Any]) -> Non
         lot.quantity -= matched_quantity
         lot.cost -= lot.cost * ratio
         remaining_quantity -= matched_quantity
+        matched_total += matched_quantity
 
         if lot.quantity > 0.000001:
             updated_lots.append(lot)
 
     lots_by_symbol[symbol] = updated_lots
+    return matched_total
+
+
+def account_snapshot_cash_by_date(account_snapshots: list[dict[str, Any]] | None) -> dict[date, float]:
+    """일별 계좌 스냅샷에 저장된 실제 현금을 날짜별로 반환한다."""
+
+    cash_by_date: dict[date, float] = {}
+    for snapshot in account_snapshots or []:
+        snapshot_date = parse_iso_date(snapshot.get("snapshot_date"))
+        if snapshot_date is None:
+            continue
+        cash_by_date[snapshot_date] = safe_float(snapshot.get("cash_balance"))
+    return cash_by_date
 
 
 def current_invested_cost(lots_by_symbol: dict[str, list[Lot]]) -> float:
@@ -322,6 +355,7 @@ def build_company_principal_valuation_snapshots(
     account: dict[str, Any],
     trade_logs: list[dict[str, Any]],
     price_lookup: dict[str, dict[str, float]],
+    account_snapshots: list[dict[str, Any]] | None = None,
     end_date: date | None = None,
     today_date: date | None = None,
     calculation_reason: str = "auto",
@@ -363,25 +397,34 @@ def build_company_principal_valuation_snapshots(
         price_lookup=price_lookup,
         end_date=target_end_date,
         today_date=normalized_today,
+        account_snapshots=account_snapshots,
     )
     lots_by_symbol: dict[str, list[Lot]] = {}
     company_principal = 0.0
     ledger_cash = 0.0
+    snapshot_cash_by_date = account_snapshot_cash_by_date(account_snapshots)
     snapshots: list[dict[str, Any]] = []
 
     for valuation_date in date_range(start_date, target_end_date):
         for log in logs_by_date.get(valuation_date, []):
             trade_type = str(log.get("trade_type") or "").strip().lower()
-            ledger_cash += trade_cash_delta(log)
 
             if trade_type in PRINCIPAL_DEPOSIT_TYPES:
+                ledger_cash += trade_cash_delta(log)
                 company_principal += trade_amount(log)
             elif trade_type in PRINCIPAL_WITHDRAW_TYPES:
+                ledger_cash += trade_cash_delta(log)
                 company_principal = max(company_principal - principal_withdraw_amount(log), 0.0)
             elif trade_type == "buy":
+                ledger_cash += trade_cash_delta(log)
                 apply_buy(lots_by_symbol, log)
             elif trade_type == "sell":
-                apply_sell(lots_by_symbol, log)
+                sell_quantity = safe_float(log.get("quantity"))
+                matched_quantity = apply_sell(lots_by_symbol, log)
+                matched_ratio = min(matched_quantity / sell_quantity, 1.0) if sell_quantity > 0 else 0.0
+                ledger_cash += trade_cash_delta(log) * matched_ratio
+            else:
+                ledger_cash += trade_cash_delta(log)
 
         if company_principal <= 0:
             continue
@@ -398,6 +441,10 @@ def build_company_principal_valuation_snapshots(
         if valuation_date == normalized_today:
             cash_value = safe_float(account.get("cash_balance"))
             actual_cash_balance: float | None = cash_value
+            cash_source = "actual"
+        elif valuation_date in snapshot_cash_by_date:
+            cash_value = snapshot_cash_by_date[valuation_date]
+            actual_cash_balance = cash_value
             cash_source = "actual"
         else:
             cash_value = implied_cash
@@ -483,6 +530,7 @@ def rebuild_daily_valuation_snapshots(
     account: dict[str, Any],
     trade_logs: list[dict[str, Any]],
     price_lookup: dict[str, dict[str, float]],
+    account_snapshots: list[dict[str, Any]] | None = None,
     end_date: date | None = None,
     today_date: date | None = None,
     calculation_reason: str,
@@ -493,6 +541,7 @@ def rebuild_daily_valuation_snapshots(
         account=account,
         trade_logs=trade_logs,
         price_lookup=price_lookup,
+        account_snapshots=account_snapshots,
         end_date=end_date,
         today_date=today_date,
         calculation_reason=calculation_reason,
@@ -504,6 +553,7 @@ def rebuild_and_save_daily_valuation_snapshots(
     account: dict[str, Any],
     trade_logs: list[dict[str, Any]],
     price_lookup: dict[str, dict[str, float]],
+    account_snapshots: list[dict[str, Any]] | None = None,
     end_date: date | None = None,
     today_date: date | None = None,
     calculation_reason: str,
@@ -517,6 +567,7 @@ def rebuild_and_save_daily_valuation_snapshots(
         account=account,
         trade_logs=trade_logs,
         price_lookup=price_lookup,
+        account_snapshots=account_snapshots,
         end_date=end_date,
         today_date=today_date,
         calculation_reason=calculation_reason,
