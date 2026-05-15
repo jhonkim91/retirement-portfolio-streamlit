@@ -560,8 +560,22 @@ def valuation_today() -> date:
     return datetime.now(KST_TIMEZONE).date()
 
 
-def rebuild_valuation_snapshots_for_account(account_id: int, calculation_reason: str) -> tuple[int, str]:
-    """현재 계좌의 평가액 기록을 재계산하고 결과 건수와 오류 메시지를 반환한다."""
+def coerce_valuation_start_date(value: Any) -> date | None:
+    """평가 스냅샷 부분 재계산 시작일 값을 date로 정규화한다."""
+
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    return get_valuation_module().parse_iso_date(value)
+
+
+def rebuild_valuation_snapshots_for_account(
+    account_id: int,
+    calculation_reason: str,
+    affected_start_date: Any | None = None,
+) -> tuple[int, str]:
+    """현재 계좌의 평가액 기록을 전체 또는 영향 시작일 이후로 재계산한다."""
 
     try:
         account = get_account(int(account_id))
@@ -570,9 +584,12 @@ def rebuild_valuation_snapshots_for_account(account_id: int, calculation_reason:
         trade_logs = list_trade_logs(int(account_id))
         account_snapshots = list_account_snapshots(int(account_id))
         today = valuation_today()
+        valuation_module = get_valuation_module()
+        first_deposit_date = valuation_module.first_principal_deposit_date(trade_logs)
+        output_start_date = coerce_valuation_start_date(affected_start_date)
         price_lookup = get_valuation_module().build_price_lookup_for_trade_logs(
             trade_logs,
-            start_date=get_valuation_module().first_principal_deposit_date(trade_logs),
+            start_date=output_start_date or first_deposit_date,
             end_date=today,
         )
         snapshots = rebuild_and_save_daily_valuation_snapshots(
@@ -582,6 +599,7 @@ def rebuild_valuation_snapshots_for_account(account_id: int, calculation_reason:
             account_snapshots=account_snapshots,
             end_date=today,
             today_date=today,
+            output_start_date=output_start_date,
             calculation_reason=calculation_reason,
         )
     except Exception as exc:  # noqa: BLE001
@@ -1816,6 +1834,18 @@ def trade_log_default_date_range(logs: list[dict[str, Any]]) -> tuple[date, date
     return min(parsed_dates), max(parsed_dates)
 
 
+def earliest_trade_log_date(logs: Iterable[dict[str, Any]]) -> date | None:
+    """거래 기록 목록에서 가장 이른 거래일을 반환한다."""
+
+    parsed_dates = [
+        parsed_date
+        for log in logs
+        for parsed_date in [parse_log_date(log.get("trade_date"))]
+        if parsed_date is not None
+    ]
+    return min(parsed_dates) if parsed_dates else None
+
+
 def filter_trade_logs_by_date_range(
     logs: list[dict[str, Any]],
     *,
@@ -2566,7 +2596,11 @@ def render_trade_log_import_panel(account: dict[str, Any], existing_logs: list[d
         if saved_count:
             mark_rollup_dirty()
             with st.spinner("평가액 기록 재계산 중..."):
-                _, valuation_error = rebuild_valuation_snapshots_for_account(account_id, "trade_created")
+                _, valuation_error = rebuild_valuation_snapshots_for_account(
+                    account_id,
+                    "trade_created",
+                    affected_start_date=earliest_trade_log_date(rows_to_save),
+                )
             st.session_state[TRADE_PAGE_SUCCESS_MESSAGE_KEY] = (
                 f"CSV 거래 기록 {saved_count:,}건을 저장했습니다."
                 + (f" 실패 {len(save_errors):,}건은 제외했습니다." if save_errors else "")
@@ -2814,7 +2848,11 @@ def render_trade_log_edit_dialog_body(
                 st.error(str(exc))
             else:
                 with st.spinner("평가액 기록 재계산 중..."):
-                    _, valuation_error = rebuild_valuation_snapshots_for_account(int(account["id"]), "trade_updated")
+                    _, valuation_error = rebuild_valuation_snapshots_for_account(
+                        int(account["id"]),
+                        "trade_updated",
+                        affected_start_date=min(selected_trade_date, edit_trade_date),
+                    )
                 st.session_state.pop(edit_state_key, None)
                 mark_rollup_dirty()
                 st.session_state[TRADE_PAGE_SUCCESS_MESSAGE_KEY] = (
@@ -2876,7 +2914,11 @@ def render_trade_log_edit_dialog_body(
             st.error(str(exc))
         else:
             with st.spinner("평가액 기록 재계산 중..."):
-                _, valuation_error = rebuild_valuation_snapshots_for_account(int(account["id"]), "trade_updated")
+                _, valuation_error = rebuild_valuation_snapshots_for_account(
+                    int(account["id"]),
+                    "trade_updated",
+                    affected_start_date=min(selected_trade_date, edit_trade_date),
+                )
             st.session_state.pop(edit_state_key, None)
             mark_rollup_dirty()
             st.session_state[TRADE_PAGE_SUCCESS_MESSAGE_KEY] = (
@@ -2976,7 +3018,11 @@ def render_trade_log_bulk_delete_dialog(
 
             if deleted_count:
                 with st.spinner("평가액 기록 재계산 중..."):
-                    _, valuation_error = rebuild_valuation_snapshots_for_account(int(account_id), "trade_deleted")
+                    _, valuation_error = rebuild_valuation_snapshots_for_account(
+                        int(account_id),
+                        "trade_deleted",
+                        affected_start_date=earliest_trade_log_date(selected_logs),
+                    )
                 clear_trade_log_selection(
                     st.session_state,
                     selected_ids_key,
@@ -3025,7 +3071,11 @@ def render_trade_log_delete_dialog(
                 st.error(str(exc))
             else:
                 with st.spinner("평가액 기록 재계산 중..."):
-                    _, valuation_error = rebuild_valuation_snapshots_for_account(int(account_id), "trade_deleted")
+                    _, valuation_error = rebuild_valuation_snapshots_for_account(
+                        int(account_id),
+                        "trade_deleted",
+                        affected_start_date=earliest_trade_log_date([selected_log]),
+                    )
                 st.session_state.pop(delete_state_key, None)
                 mark_rollup_dirty()
                 st.session_state[TRADE_PAGE_SUCCESS_MESSAGE_KEY] = (
@@ -4113,7 +4163,11 @@ def render_dashboard_cash_card(account_id: int, display_cash: float, display_tot
                         st.session_state[cash_edit_state_key] = False
                         mark_rollup_dirty()
                         with st.spinner("평가액 기록 재계산 중..."):
-                            rebuild_valuation_snapshots_for_account(account_id, "cash_updated")
+                            rebuild_valuation_snapshots_for_account(
+                                account_id,
+                                "cash_updated",
+                                affected_start_date=valuation_today(),
+                            )
                         st.rerun()
             with cancel_col:
                 if st.button("취소", key=f"dashboard-cash-cancel:{account_id}", width="stretch"):
@@ -7314,7 +7368,11 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]], roll
         if updated:
             mark_rollup_dirty()
             with st.spinner("평가액 기록 재계산 중..."):
-                _, valuation_error = rebuild_valuation_snapshots_for_account(account_id, "price_updated")
+                _, valuation_error = rebuild_valuation_snapshots_for_account(
+                    account_id,
+                    "price_updated",
+                    affected_start_date=valuation_today(),
+                )
             st.success(f"{updated}개 종목 가격을 갱신했습니다.")
             if valuation_error:
                 st.warning(f"평가액 기록 재계산을 건너뛰었습니다: {valuation_error}")
@@ -7652,6 +7710,7 @@ def trade_entry_page(account: dict[str, Any], holdings: list[dict[str, Any]], ac
                             _, valuation_error = rebuild_valuation_snapshots_for_account(
                                 int(account["id"]),
                                 "trade_created",
+                                affected_start_date=trade_date,
                             )
                         st.session_state[TRADE_FORM_RESET_PENDING_KEY] = True
                         st.session_state[TRADE_PAGE_SUCCESS_MESSAGE_KEY] = (
@@ -7727,6 +7786,7 @@ def trade_entry_page(account: dict[str, Any], holdings: list[dict[str, Any]], ac
                                     _, valuation_error = rebuild_valuation_snapshots_for_account(
                                         int(account["id"]),
                                         "company_deposit_created" if flow_type == "employer_deposit" else "trade_created",
+                                        affected_start_date=trade_date,
                                     )
                                 st.session_state[CASH_FLOW_FORM_RESET_PENDING_KEY] = True
                                 st.session_state[TRADE_PAGE_SUCCESS_MESSAGE_KEY] = (

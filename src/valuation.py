@@ -373,6 +373,7 @@ def build_company_principal_valuation_snapshots(
     account_snapshots: list[dict[str, Any]] | None = None,
     end_date: date | None = None,
     today_date: date | None = None,
+    output_start_date: date | None = None,
     calculation_reason: str = "auto",
 ) -> list[dict[str, Any]]:
     """입금액 기준 일별 평가 스냅샷을 생성한다."""
@@ -385,6 +386,12 @@ def build_company_principal_valuation_snapshots(
     normalized_today = today_date or date.today()
     target_end_date = end_date or normalized_today
     if target_end_date < start_date:
+        return []
+
+    normalized_output_start_date = output_start_date or start_date
+    if normalized_output_start_date < start_date:
+        normalized_output_start_date = start_date
+    if normalized_output_start_date > target_end_date:
         return []
 
     ordered_logs = sorted(
@@ -442,7 +449,7 @@ def build_company_principal_valuation_snapshots(
             else:
                 ledger_cash += trade_cash_delta(log)
 
-        if company_principal <= 0:
+        if company_principal <= 0 or valuation_date < normalized_output_start_date:
             continue
 
         invested_cost = current_invested_cost(lots_by_symbol)
@@ -560,9 +567,10 @@ def rebuild_daily_valuation_snapshots(
     account_snapshots: list[dict[str, Any]] | None = None,
     end_date: date | None = None,
     today_date: date | None = None,
+    output_start_date: date | None = None,
     calculation_reason: str,
 ) -> list[dict[str, Any]]:
-    """계좌의 입금 기준 평가액 기록을 전체 재계산한다."""
+    """계좌의 입금 기준 평가액 기록을 전체 또는 출력 시작일 이후로 재계산한다."""
 
     return build_company_principal_valuation_snapshots(
         account=account,
@@ -571,6 +579,7 @@ def rebuild_daily_valuation_snapshots(
         account_snapshots=account_snapshots,
         end_date=end_date,
         today_date=today_date,
+        output_start_date=output_start_date,
         calculation_reason=calculation_reason,
     )
 
@@ -583,6 +592,7 @@ def rebuild_and_save_daily_valuation_snapshots(
     account_snapshots: list[dict[str, Any]] | None = None,
     end_date: date | None = None,
     today_date: date | None = None,
+    output_start_date: date | None = None,
     calculation_reason: str,
 ) -> list[dict[str, Any]]:
     """평가액 기록을 재계산하고 DB에 저장한다."""
@@ -597,10 +607,11 @@ def rebuild_and_save_daily_valuation_snapshots(
         account_snapshots=account_snapshots,
         end_date=end_date,
         today_date=today_date,
+        output_start_date=output_start_date,
         calculation_reason=calculation_reason,
     )
 
-    delete_valuation_snapshots(account_id)
+    delete_valuation_snapshots(account_id, start_date=output_start_date.isoformat() if output_start_date else None)
     if snapshots:
         record_valuation_snapshots(account_id, snapshots)
     return snapshots

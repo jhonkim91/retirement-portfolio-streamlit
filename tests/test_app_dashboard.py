@@ -966,7 +966,22 @@ class TradeFormResetTests(unittest.TestCase):
         self.assertIn("build_trade_log_bulk_delete_plan(", page_source)
         self.assertIn("연관 매도", dialog_source)
         self.assertIn("delete_trade_log(int(account_id), int(log_id))", dialog_source)
-        self.assertIn('rebuild_valuation_snapshots_for_account(int(account_id), "trade_deleted")', dialog_source)
+        self.assertIn("affected_start_date=earliest_trade_log_date(selected_logs)", dialog_source)
+
+    def test_trade_log_mutations_rebuild_valuation_from_affected_date(self) -> None:
+        """거래 변경 후 평가액 기록 재계산은 영향 시작일 이후로 제한한다."""
+
+        page_source = inspect.getsource(dashboard_app.trade_entry_page)
+        edit_source = inspect.getsource(dashboard_app.render_trade_log_edit_dialog_body)
+        bulk_delete_source = inspect.getsource(dashboard_app.render_trade_log_bulk_delete_dialog)
+        single_delete_source = inspect.getsource(dashboard_app.render_trade_log_delete_dialog)
+        valuation_source = inspect.getsource(dashboard_app.valuation_page)
+
+        self.assertIn("affected_start_date=trade_date", page_source)
+        self.assertIn("affected_start_date=min(selected_trade_date, edit_trade_date)", edit_source)
+        self.assertIn("affected_start_date=earliest_trade_log_date(selected_logs)", bulk_delete_source)
+        self.assertIn("affected_start_date=earliest_trade_log_date([selected_log])", single_delete_source)
+        self.assertIn('rebuild_valuation_snapshots_for_account(account_id, "manual_rebuild")', valuation_source)
 
     def test_trade_log_import_parses_export_csv_format(self) -> None:
         """CSV 불러오기는 내보내기와 같은 컬럼을 저장 가능한 행으로 변환한다."""

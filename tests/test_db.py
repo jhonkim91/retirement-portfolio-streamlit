@@ -19,6 +19,7 @@ from src.db import (
     _sqlite_update_trade_log,
     _supabase_adjust_cash_balance,
     _supabase_delete_trade_log,
+    _supabase_delete_valuation_snapshots,
     _sync_legacy_interest_history_for_buy,
     _run_with_fallback,
     _should_fallback,
@@ -677,6 +678,45 @@ class ValuationSnapshotStorageTests(unittest.TestCase):
                 sqlite_db.delete_valuation_snapshots(account_id)
                 self.assertEqual(sqlite_db.list_valuation_snapshots(account_id), [])
 
+    def test_sqlite_deletes_valuation_snapshots_from_start_date_only(self) -> None:
+        """SQLite 부분 삭제는 시작일 이전 평가 스냅샷을 보존한다."""
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            database_path = Path(temp_dir) / "valuation-partial-delete.db"
+            with patch.object(sqlite_db, "DB_PATH", database_path):
+                sqlite_db.initialize_database()
+                account_id = sqlite_db.create_account("user-1::평가 부분 삭제", opening_cash=0)
+                base_snapshot = {
+                    "account_id": account_id,
+                    "company_principal": 10000,
+                    "invested_cost": 0,
+                    "implied_cash": 10000,
+                    "actual_cash_balance": None,
+                    "cash_value": 10000,
+                    "cash_source": "implied",
+                    "holdings_market_value": 0,
+                    "valuation_amount": 10000,
+                    "profit_loss": 0,
+                    "profit_rate": 0,
+                    "over_invested_amount": 0,
+                    "missing_price_symbols": [],
+                    "source_hash": "hash",
+                    "calculation_reason": "test",
+                }
+                sqlite_db.record_valuation_snapshots(
+                    account_id,
+                    [
+                        dict(base_snapshot, valuation_date="2026-01-01"),
+                        dict(base_snapshot, valuation_date="2026-01-02"),
+                        dict(base_snapshot, valuation_date="2026-01-03"),
+                    ],
+                )
+
+                sqlite_db.delete_valuation_snapshots(account_id, start_date="2026-01-02")
+                rows = sqlite_db.list_valuation_snapshots(account_id)
+
+                self.assertEqual([row["valuation_date"] for row in rows], ["2026-01-01"])
+
     def test_sqlite_lists_valuation_snapshots_newest_first(self) -> None:
         """평가 스냅샷 조회는 최근 기준일이 먼저 오도록 정렬한다."""
 
@@ -758,6 +798,18 @@ class ValuationSnapshotStorageTests(unittest.TestCase):
         self.assertEqual(call_args.kwargs["prefer_resolution"], "merge-duplicates")
         self.assertEqual(call_args.kwargs["prefer_return"], "minimal")
         self.assertEqual(call_args.kwargs["data"][0]["updated_at"], "2026-05-14T00:00:00")
+
+    @patch("src.db._supabase_request")
+    def test_supabase_delete_valuation_snapshots_uses_start_date_filter(self, request_mock) -> None:
+        """Supabase 부분 삭제는 valuation_date gte 필터를 함께 전달한다."""
+
+        _supabase_delete_valuation_snapshots(7, start_date="2026-01-02")
+
+        request_mock.assert_called_once_with(
+            "DELETE",
+            "daily_valuation_snapshot",
+            filters={"account_id": "eq.7", "valuation_date": "gte.2026-01-02"},
+        )
 
 
 class SyncAccountRollupTests(unittest.TestCase):

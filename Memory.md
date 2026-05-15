@@ -30,6 +30,7 @@
 - [x] 평가액 기록 현금값을 일별 실제 계좌 스냅샷 현금 우선으로 보정
 - [x] 평가액 기록/원화 표시 금액을 원 단위 일반 반올림으로 보정
 - [x] 1,000배 총액 중복 거래와 국내 종목 코드 접미사 차이로 인한 평가/실현손익 왜곡 보정
+- [x] 거래 기록 생성/수정/삭제 후 평가액 기록을 영향 시작일 이후만 부분 재계산하도록 최적화
 - [ ] temporal normalize migration 실제 적용 전 운영 `realtime_price_bars` 테이블 생성/노출 여부 결정
 
 ## 프로젝트 개요
@@ -44,6 +45,10 @@
 - 배포 앱: `https://retirement-portfolio-app-nh2vq9ferqnpehsslbykbe.streamlit.app/`
 
 ## 최근 변경 파일
+- `src/valuation.py`: `output_start_date`를 받아 원장 상태는 최초 입금일부터 누적하되 반환/저장할 평가 스냅샷은 영향 시작일 이후로 제한
+- `src/db.py`, `src/sqlite_db.py`: `delete_valuation_snapshots(account_id, start_date=None)`로 확장해 Supabase/SQLite 평가 스냅샷 부분 삭제 지원
+- `src/ui/app_core.py`: 거래 생성/수정/삭제/CSV import는 거래일 기준, 현금/가격 갱신은 오늘 기준으로 평가액 기록 부분 재계산 호출
+- `tests/test_valuation.py`, `tests/test_db.py`, `tests/test_app_dashboard.py`: 부분 재계산, 부분 삭제, UI 호출부 회귀 테스트 추가
 - `src/trade_log_filters.py`: 펀드 좌수/기준가 총액을 1,000좌당 가격 기준으로 정규화하고, 같은 날짜/유형/종목/수량/단가에서 총액만 1,000배 수준으로 큰 중복 매수/매도 행을 계산 입력에서 제외하는 helper 추가
 - `src/valuation.py`, `src/analytics.py`: 평가 스냅샷과 실현손익 계산에서 펀드 금액/평가액을 `좌수 * 기준가 / 1000`으로 처리하고, 국내 종목 `.KS/.KQ` 접미사와 앞자리 0 차이를 같은 종목으로 정규화
 - `tests/test_valuation.py`, `tests/test_analytics.py`: 펀드 좌수/기준가 정규화, 총액 스케일 중복 제외, 국내 종목 코드 정규화 회귀 테스트 추가
@@ -71,8 +76,8 @@
 - UI/배치에서 넘기는 오늘 기준일은 Asia/Seoul 날짜를 사용한다.
 - 가격은 해당일 종가, 없으면 직전 종가, 그래도 없으면 lot 단가를 사용한다. `missing_price_symbols`에는 lot 단가 fallback 종목만 기록한다.
 - `source_hash`에는 거래 원장, 가격 lookup 요약, 오늘 실제 현금, 기준 날짜를 포함해 가격 갱신 재계산도 구분한다.
-- `rebuild_and_save_daily_valuation_snapshots()`는 stale row 방지를 위해 계좌의 기존 평가 스냅샷을 삭제한 뒤 전체 series를 다시 저장한다.
-- realtime tick마다 재계산하지 않고 거래 UI, CSV import 완료, 수동 가격 refresh, daily rollup에서 계좌별 1회 재계산한다.
+- `rebuild_and_save_daily_valuation_snapshots()`는 stale row 방지를 위해 전체 재계산 시 기존 평가 스냅샷을 전부 삭제하고, 거래 UI 등 부분 재계산 시 영향 시작일 이후 스냅샷만 삭제/재저장한다.
+- realtime tick마다 재계산하지 않고 거래 UI, CSV import 완료, 수동 가격 refresh, daily rollup에서 계좌별 1회 재계산한다. 거래 UI/CSV import/수동 현금·가격 갱신은 영향 시작일 이후만 부분 재계산하고, daily rollup과 수동 재계산 버튼은 전체 재계산을 유지한다.
 - Dashboard는 오늘 평가 스냅샷이 있으면 `보유 평가액`, `입금 원금`, `현재 보유현금`, `입금 대비 손익`, `입금 대비 수익률`을 우선 표시한다.
 - 평가액 기록 조회와 화면 표시는 `valuation_date DESC, id DESC` 최신 기준일 우선 순서를 사용한다.
 - 평가액 기록 현금값은 오늘은 `account.cash_balance`, 과거일은 같은 날짜 `daily_account_snapshot.cash_balance`가 있으면 실제 현금, 없으면 매수/매도/현금흐름 원장 현금으로 계산한다.
@@ -101,17 +106,14 @@ streamlit run app.py --server.port 8501 --server.address 0.0.0.0 --server.fileWa
 ```
 
 ## 최신 검증 결과
-- 작업 범위: `valuation_snapshots_23.csv`, `trade_logs_23.csv` 기준 펀드 좌수/기준가, 중복 총액, 종목코드 정규화 보정
-- 배포 코드 커밋: `fe566aae08f779c75c42f4cb9c7573d64d5e0ce2` (`Normalize fund unit pricing`)
-- 배포 방법: 요청 범위 파일만 선별 커밋 후 `git push origin main`
-- 원격 배포 검증: `python scripts/verify_streamlit_deployment.py --page valuation --expect-backend supabase --wait-ms 30000 ...` 성공, `logged_in=true`, `workspace_visible=true`, `backend_storage_code=supabase`
-- 원격 검증 산출물: `artifacts/deploy-verify-fund-unit-pricing-20260515-0504.txt`, `artifacts/deploy-verify-fund-unit-pricing-20260515-0504.png`
-- 산출 파일: `artifacts/trade_logs_23_reconciled.csv`, `artifacts/valuation_snapshots_23_recalculated.csv`
-- `python -m compileall src/valuation.py src/analytics.py src/trade_log_filters.py tests/test_valuation.py tests/test_analytics.py` 성공
-- `python -m unittest tests.test_valuation tests.test_analytics` 성공, 37 tests
+- 작업 범위: 거래 기록 생성/수정/삭제 후 평가액 기록 부분 재계산 최적화
+- 변경 파일: `src/valuation.py`, `src/db.py`, `src/sqlite_db.py`, `src/ui/app_core.py`, `tests/test_valuation.py`, `tests/test_db.py`, `tests/test_app_dashboard.py`
+- `python -m compileall src/valuation.py src/db.py src/sqlite_db.py src/ui/app_core.py tests/test_valuation.py tests/test_db.py tests/test_app_dashboard.py` 성공
+- `python -m unittest tests.test_valuation tests.test_db tests.test_app_dashboard` 성공, 175 tests
 - `python -m compileall app.py src scripts tests` 성공
-- `python -m unittest discover -s tests -p "test_*.py"` 성공, 259 tests
+- `python -m unittest discover -s tests -p "test_*.py"` 성공, 264 tests
 - 테스트 중 Streamlit bare mode 경고가 출력됐으나 모든 테스트는 성공했다.
+- 이번 요청에서는 로컬 코드/테스트만 수정했고 커밋/원격 배포는 수행하지 않았다.
 
 ## Git/GitHub 상태
 - 기본 브랜치: `main`

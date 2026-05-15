@@ -6,33 +6,27 @@
 - 기준일: `2026-05-15`
 
 ## 최신 대표 검증 결과
-- 작업 범위: `valuation_snapshots_23.csv`, `trade_logs_23.csv` 기준 펀드 좌수/기준가, 중복 총액, 종목코드 정규화 보정
-- 원인: 펀드성 코드(`K...`)는 수량이 좌수이고 기준가가 1,000좌당 가격인데, 일부 경로에서 `좌수 * 기준가` 총액이 그대로 반영될 수 있었다.
-- 추가 원인: 같은 날짜/유형/종목/수량/단가의 거래가 원 단위 총액과 1,000배 수준 총액으로 중복 저장되어 교보악사파워인덱스, 신한퇴직연금TopsValue40 매수/매도 금액이 계산에 중복 반영될 수 있었다.
-- 추가 원인: 국내 종목 코드가 `487240`과 `487240.KS`처럼 접미사 유무가 다르면 FIFO lot 매칭에서 다른 종목으로 처리될 수 있었다.
-- 수정: 펀드 거래금액과 보유 평가액은 `좌수 * 기준가 / 1000`으로 정규화한다.
-- 수정: 총액만 1,000배 수준으로 큰 중복 매수/매도 행은 평가 스냅샷과 실현손익 계산 입력에서 제외한다.
-- 수정: 국내 종목 코드는 `.KS/.KQ` 접미사를 제거하고 숫자 코드는 6자리로 정규화해 같은 종목으로 매칭한다.
-- 산출 파일: `artifacts/trade_logs_23_reconciled.csv`, `artifacts/valuation_snapshots_23_recalculated.csv`
+- 작업 범위: 거래 기록 생성/수정/삭제 후 평가액 기록 로딩 최적화
+- 원인: 거래 1건 변경 후에도 전체 기간 가격 히스토리 조회와 전체 `daily_valuation_snapshot` 삭제/재저장이 동기 실행되어 Streamlit UI 로딩이 길어질 수 있었다.
+- 수정: 평가 스냅샷 계산에 `output_start_date`를 추가해 원장 상태는 최초 입금일부터 누적하고, 반환/저장 스냅샷은 영향 시작일 이후로 제한한다.
+- 수정: Supabase/SQLite `delete_valuation_snapshots(account_id, start_date=None)`를 지원해 시작일 이후 평가 스냅샷만 삭제한다.
+- 수정: 거래 생성/수정/삭제/CSV import는 거래일 기준, 현금/가격 갱신은 오늘 기준으로 부분 재계산한다.
+- 유지: 평가액 기록 페이지 수동 재계산과 daily rollup은 기존 전체 재계산을 유지한다.
 - 환경: 로컬 Python 3.11, Streamlit bare mode 테스트 실행.
 
 ## 명령 검증
-- `python -m compileall src/valuation.py src/analytics.py src/trade_log_filters.py tests/test_valuation.py tests/test_analytics.py` 성공
-- `python -m unittest tests.test_valuation tests.test_analytics` 성공, 37 tests
+- `python -m compileall src/valuation.py src/db.py src/sqlite_db.py src/ui/app_core.py tests/test_valuation.py tests/test_db.py tests/test_app_dashboard.py` 성공
+- `python -m unittest tests.test_valuation tests.test_db tests.test_app_dashboard` 성공, 175 tests
 - `python -m compileall app.py src scripts tests` 성공
-- `python -m unittest discover -s tests -p "test_*.py"` 성공, 259 tests
-- `git push origin main` 성공, 배포 코드 커밋 `fe566aae08f779c75c42f4cb9c7573d64d5e0ce2`
-- `python scripts/verify_streamlit_deployment.py --page valuation --expect-backend supabase --wait-ms 30000 --text-output artifacts/deploy-verify-fund-unit-pricing-20260515-0504.txt --screenshot artifacts/deploy-verify-fund-unit-pricing-20260515-0504.png --debug-dir artifacts/deploy-verify-fund-unit-pricing-20260515-0504-debug` 성공
+- `python -m unittest discover -s tests -p "test_*.py"` 성공, 264 tests
 
 ## 검증 범위
-- 펀드성 코드의 거래금액, 보유 평가액, 실현손익이 `좌수 * 기준가 / 1000` 기준으로 계산되는지 검증
-- 총액만 1,000배 수준으로 큰 중복 매수/매도 행이 평가 스냅샷의 원장 현금, 잔여 매입원가, 실현손익 계산에서 제외되는지 검증
-- 국내 종목 코드의 `.KS/.KQ` 접미사 유무와 앞자리 0 차이가 FIFO 매칭을 깨지 않는지 검증
-- `trade_logs_23.csv` 기준 제외 행과 교보악사파워인덱스 정정 실현손익을 산출 파일에 기록했는지 검증
-- `valuation_snapshots_23.csv` 기준 현재 실제 보유현금 `17,449`원을 사용한 최신 보유 평가액을 산출 파일에 기록했는지 검증
+- `output_start_date` 이전 거래가 원금/현금/FIFO lot 누적에는 반영되고 반환 스냅샷에서는 제외되는지 검증
+- 과거 매수 lot이 부분 재계산 시작일 이후 매도 계산에 계속 반영되는지 검증
+- SQLite 평가 스냅샷 부분 삭제가 시작일 이전 행을 보존하는지 검증
+- Supabase 평가 스냅샷 부분 삭제가 `valuation_date=gte.<date>` 필터를 전달하는지 검증
+- 거래 생성/수정/삭제/CSV import/현금/가격 갱신 UI 호출부가 영향 시작일을 전달하는지 검증
 - 전체 unittest suite가 기존 기능 회귀 없이 통과하는지 검증
-- 원격 Streamlit 평가액 기록 페이지가 로그인 후 Supabase backend로 로드되는지 검증
 
 ## 미수행 항목
-- 운영 거래 원장의 중복/비정상 거래 id 삭제 또는 수정은 destructive 작업이므로 수행하지 않았다.
-- 운영 `daily_valuation_snapshot` 재작성은 운영 DB 파생 데이터 변경이므로 수행하지 않았다.
+- 커밋, 원격 push, Streamlit 운영 배포 검증은 명시 요청이 없어 수행하지 않았다.

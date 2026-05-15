@@ -435,6 +435,57 @@ class CompanyPrincipalValuationTests(unittest.TestCase):
         self.assertEqual(snapshots[-1]["holdings_market_value"], 5200)
         self.assertEqual(snapshots[-1]["missing_price_symbols"], ["BBB"])
 
+    def test_output_start_date_limits_returned_snapshots_only(self) -> None:
+        """부분 재계산은 이전 원장을 누적하되 시작일 이후 스냅샷만 반환한다."""
+
+        trade_logs = [
+            {"id": 1, "trade_date": "2026-01-01", "trade_type": "personal_deposit", "total_amount": 10000},
+            {"id": 2, "trade_date": "2026-01-02", "trade_type": "buy", "symbol": "AAA", "product_name": "A", "quantity": 2, "price": 3000},
+            {"id": 3, "trade_date": "2026-01-04", "trade_type": "sell", "symbol": "AAA", "product_name": "A", "quantity": 1, "price": 4500},
+        ]
+
+        snapshots = build_company_principal_valuation_snapshots(
+            account={"id": 1, "cash_balance": 0},
+            trade_logs=trade_logs,
+            price_lookup={"AAA": {"2026-01-04": 4000, "2026-01-05": 4100}},
+            end_date=date(2026, 1, 5),
+            today_date=date(2026, 1, 6),
+            output_start_date=date(2026, 1, 4),
+            calculation_reason="test",
+        )
+
+        self.assertEqual([row["valuation_date"] for row in snapshots], ["2026-01-04", "2026-01-05"])
+        self.assertEqual(snapshots[0]["company_principal"], 10000)
+        self.assertEqual(snapshots[0]["invested_cost"], 3000)
+        self.assertEqual(snapshots[0]["implied_cash"], 8500)
+        self.assertEqual(snapshots[0]["holdings_market_value"], 4000)
+        self.assertEqual(snapshots[0]["valuation_amount"], 12500)
+
+    def test_output_start_date_keeps_prior_fifo_lots_for_later_sell(self) -> None:
+        """부분 재계산 시작일 전 매수 lot도 이후 매도 계산에 반영한다."""
+
+        trade_logs = [
+            {"id": 1, "trade_date": "2026-01-01", "trade_type": "employer_deposit", "total_amount": 20000},
+            {"id": 2, "trade_date": "2026-01-02", "trade_type": "buy", "symbol": "AAA", "product_name": "A", "quantity": 2, "price": 3000},
+            {"id": 3, "trade_date": "2026-01-03", "trade_type": "buy", "symbol": "AAA", "product_name": "A", "quantity": 2, "price": 4000},
+            {"id": 4, "trade_date": "2026-01-05", "trade_type": "sell", "symbol": "AAA", "product_name": "A", "quantity": 3, "price": 5000},
+        ]
+
+        snapshots = build_company_principal_valuation_snapshots(
+            account={"id": 1, "cash_balance": 0},
+            trade_logs=trade_logs,
+            price_lookup={"AAA": {"2026-01-05": 4500}},
+            end_date=date(2026, 1, 5),
+            today_date=date(2026, 1, 6),
+            output_start_date=date(2026, 1, 5),
+            calculation_reason="test",
+        )
+
+        self.assertEqual([row["valuation_date"] for row in snapshots], ["2026-01-05"])
+        self.assertEqual(snapshots[0]["invested_cost"], 4000)
+        self.assertEqual(snapshots[0]["implied_cash"], 21000)
+        self.assertEqual(snapshots[0]["holdings_market_value"], 4500)
+
     def test_over_invested_amount_tracks_cost_above_company_principal(self) -> None:
         """잔여 매입원가가 입금 원금을 넘으면 초과 매입액을 따로 기록한다."""
 

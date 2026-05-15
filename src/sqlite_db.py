@@ -1155,12 +1155,22 @@ def record_valuation_snapshots(account_id: int, snapshots: list[dict[str, Any]])
         connection.commit()
 
 
-def delete_valuation_snapshots(account_id: int) -> None:
-    """계좌의 입금 기준 평가 스냅샷을 모두 삭제한다."""
+def delete_valuation_snapshots(account_id: int, start_date: str | None = None) -> None:
+    """계좌의 입금 기준 평가 스냅샷을 전체 또는 시작일 이후로 삭제한다."""
 
     with connect() as connection:
         _require_account(connection, account_id)
-        connection.execute("DELETE FROM daily_valuation_snapshot WHERE account_id = ?", (account_id,))
+        if start_date:
+            connection.execute(
+                """
+                DELETE FROM daily_valuation_snapshot
+                WHERE account_id = ?
+                  AND valuation_date >= ?
+                """,
+                (account_id, str(start_date)),
+            )
+        else:
+            connection.execute("DELETE FROM daily_valuation_snapshot WHERE account_id = ?", (account_id,))
         connection.commit()
 
 

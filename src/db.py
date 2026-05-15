@@ -2681,13 +2681,16 @@ def _supabase_record_valuation_snapshots(account_id: int, snapshots: list[dict[s
     )
 
 
-def _supabase_delete_valuation_snapshots(account_id: int) -> None:
-    """Supabase 계좌의 입금 기준 평가 스냅샷을 삭제한다."""
+def _supabase_delete_valuation_snapshots(account_id: int, start_date: str | None = None) -> None:
+    """Supabase 계좌의 입금 기준 평가 스냅샷을 전체 또는 시작일 이후로 삭제한다."""
 
+    filters: dict[str, str | int] = {"account_id": f"eq.{account_id}"}
+    if start_date:
+        filters["valuation_date"] = f"gte.{start_date}"
     _supabase_request(
         "DELETE",
         "daily_valuation_snapshot",
-        filters={"account_id": f"eq.{account_id}"},
+        filters=filters,
     )
 
 
@@ -4001,12 +4004,12 @@ def record_valuation_snapshots(account_id: int, snapshots: list[dict[str, Any]])
     mark_data_dirty()
 
 
-def delete_valuation_snapshots(account_id: int) -> None:
-    """계좌의 입금 기준 평가 스냅샷을 모두 삭제한다."""
+def delete_valuation_snapshots(account_id: int, start_date: str | None = None) -> None:
+    """계좌의 입금 기준 평가 스냅샷을 전체 또는 시작일 이후로 삭제한다."""
 
     _run_with_fallback(
-        supabase_call=lambda: _supabase_delete_valuation_snapshots(account_id),
-        sqlite_call=lambda: sqlite_db.delete_valuation_snapshots(account_id),
+        supabase_call=lambda: _supabase_delete_valuation_snapshots(account_id, start_date=start_date),
+        sqlite_call=lambda: sqlite_db.delete_valuation_snapshots(account_id, start_date=start_date),
     )
     mark_data_dirty()
 
