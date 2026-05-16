@@ -13,7 +13,7 @@ jobs:
     timeout-minutes: 20
     env:
       PORTFOLIO_BACKEND: sqlite
-      RETIREMENT_DB_PATH: ${{ runner.temp }}/portfolio-capture.db
+      RETIREMENT_DB_PATH: /tmp/portfolio-capture.db
       STREAMLIT_BROWSER_GATHER_USAGE_STATS: "false"
 
     steps:

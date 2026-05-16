@@ -59,7 +59,7 @@
 - `scripts/capture_app.py`: Playwright 기반 전체/블록 캡처, 로컬 Streamlit 자동 실행, page/viewport all, strict, manifest 생성, sidebar 상태 고정, loading 대기, selector 누락 로그 구현
 - `requirements-dev.txt`: UI 캡처용 `playwright`, `pyyaml` dev dependency 추가
 - `docs/ui_capture.md`, `README.md`: 로컬 설치/실행, 산출물 구조, 보안 주의 문서화
-- `.github/workflows/ui-capture.yml`: GitHub Actions에서 캡처 후 artifact 업로드 workflow 추가, checkout/setup-python 안정 버전 고정
+- `.github/workflows/ui-capture.yml`: GitHub Actions에서 캡처 후 artifact 업로드 workflow 추가, checkout/setup-python 안정 버전 고정, job env DB 경로를 `/tmp/portfolio-capture.db`로 변경
 - `src/db.py`: 캡처 모드 데모 seed 기준일 고정용 `snapshot_base_date` 인자 추가
 - `src/auth.py`: 운영 Supabase URL 하드코딩 제거와 `https://*.supabase.co` URL 검증 복구
 - `src/market.py`: KRX 심볼 판별, Naver 가격/이력 fallback, `fetch_price_history_range()` 호환 함수 복구
@@ -126,6 +126,7 @@ streamlit run app.py --server.port 8501 --server.address 0.0.0.0 --server.fileWa
 - `python -m unittest tests.test_app_dashboard` 성공, 122 tests
 - `python -m unittest discover -s tests -p "test_*.py"` 성공, 288 tests
 - `.github/workflows/ui-capture.yml` YAML 파싱 및 action version 확인 성공
+- `.github/workflows/ui-capture.yml`에서 job-level `env`의 `runner.temp` expression 제거 확인 성공
 - 운영 DB 데이터 직접 수정과 migration 추가는 수행하지 않았다.
 
 ## Git/GitHub 상태
@@ -136,7 +137,7 @@ streamlit run app.py --server.port 8501 --server.address 0.0.0.0 --server.fileWa
 - 최신 반응형 UI 보강은 `eec7ac1 Refine responsive dashboard UI`, `9828696 Record responsive UI publish` 커밋으로 `codex/ui-capture-automation` 브랜치에 반영했고 `origin/codex/ui-capture-automation`에 push했다.
 - UI Capture GitHub Actions 시작 실패 보정은 `fcab67a Fix UI capture workflow actions` 커밋으로 반영했다.
 - GitHub draft PR은 `https://github.com/jhonkim91/retirement-portfolio-streamlit/pull/1`이다.
-- 원격 UI Capture run `25968169216`은 job 로그 생성 전 실패했고, workflow action version 보정 후 재실행 대상이다.
+- 원격 UI Capture run `25968169216`, `25968290999`는 job 로그 생성 전 실패했고, workflow action version과 job env expression 보정 후 재실행 대상이다.
 - `gh` CLI는 `/home/vscode/.local/bin/gh`에 설치되어 있고 GitHub 계정 `jhonkim91` 인증 상태를 확인했다.
 - 워크트리에는 이번 요청 전부터 `data/portfolio.db`, 로컬 도구 디렉터리, 캡처 산출물 등 여러 변경/미추적 파일이 함께 있었다.
 - 커밋 시 요청 관련 파일만 선별하고 `data/portfolio.db`, `.local/`, `.playtools*/`, `.playwright-browsers/`, `.vscode/`, `artifacts/`, `data/kis_cache/` 등 로컬 산출물은 제외한다.

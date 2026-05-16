@@ -11,6 +11,7 @@
 - UI Capture GitHub Actions 시작 실패 보정.
   - `codex/ui-capture-automation` 브랜치 push 후 원격 run `25968169216`이 job 로그 생성 전 실패한 것을 확인.
   - workflow 시작 단계 호환성을 위해 `actions/checkout@v4`, `actions/setup-python@v5` 안정 버전으로 고정.
+  - job-level `env`의 `${{ runner.temp }}` expression을 제거하고 `/tmp/portfolio-capture.db` 고정 경로로 변경.
   - workflow YAML 파싱과 action version 확인을 로컬에서 검증.
 - 대시보드/거래 UI 반응형 보강.
   - Streamlit 1.55의 `class_name` 미지원에 맞춰 `key`와 `horizontal=True`로 상단 요약 카드, 선택 종목 트렌드 컨트롤, 거래 입력 패널의 flex wrapper를 구성.
