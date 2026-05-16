@@ -37,7 +37,8 @@
 - [x] `?demo=1` URL query parameter 기반 데모 자동 진입 추가
 - [x] 데모 데이터 `데모 IRP`/`데모 주식` 2계좌 구성, 현재 보유 17개 종목, 5년치 입출금/매매일지 규칙 보강
 - [x] 자산 배분 트리맵 예수금 중립색 처리와 타일 수익률 라벨 표시 개선
-- [x] Streamlit UI 캡처 자동화와 GitHub Actions artifact 업로드 workflow 추가
+- [x] Streamlit UI 캡처 자동화와 거래/평가액 기록 페이지 캡처 확장
+- [x] 대시보드 UI 개선 로컬 반영
 - [ ] temporal normalize migration 실제 적용 전 운영 `realtime_price_bars` 테이블 생성/노출 여부 결정
 
 ## 프로젝트 개요
@@ -52,17 +53,17 @@
 - 배포 앱: `https://retirement-portfolio-app-nh2vq9ferqnpehsslbykbe.streamlit.app/`
 
 ## 최근 변경 파일
-- `src/ui/app_core.py`: 대시보드/사이드바 주요 UI 영역에 캡처용 `capture_*` wrapper 추가, `capture=1` 기준일/animation 안정화 처리
-- `.streamlit/app.css`: Overview 기간 버튼 영역이 `capture_input_panel` key로도 기존 위치/스타일을 유지하도록 selector 조정
-- `config/capture_blocks.yaml`: 블록별 name, selector, PNG 파일명, required 여부 정의
-- `scripts/capture_app.py`: Playwright 기반 전체/블록 캡처, 로컬 Streamlit 자동 실행, viewport all, strict, manifest 생성, sidebar 상태 고정, loading 대기, selector 누락 로그 구현
+- `src/ui/app_core.py`: 대시보드/거래/평가액 기록 주요 UI 영역에 캡처용 `capture_*` wrapper 추가, `capture=1` 기준일과 거래 입력 기본 날짜 고정, overview 컬럼 비율 조정
+- `.streamlit/app.css`: dashboard max-width, overview hero/card, 기간 버튼, 패널 radius/shadow, treemap legend, 보유종목 테이블 스타일 보강
+- `config/capture_blocks.yaml`: 페이지별 블록 name, selector, PNG 파일명, required, hidden tab 활성화 설정 정의
+- `scripts/capture_app.py`: Playwright 기반 전체/블록 캡처, 로컬 Streamlit 자동 실행, page/viewport all, strict, manifest 생성, sidebar 상태 고정, loading 대기, selector 누락 로그 구현
 - `requirements-dev.txt`: UI 캡처용 `playwright`, `pyyaml` dev dependency 추가
 - `docs/ui_capture.md`, `README.md`: 로컬 설치/실행, 산출물 구조, 보안 주의 문서화
 - `.github/workflows/ui-capture.yml`: GitHub Actions에서 캡처 후 artifact 업로드 workflow 추가
 - `src/db.py`: 캡처 모드 데모 seed 기준일 고정용 `snapshot_base_date` 인자 추가
 - `src/auth.py`: 운영 Supabase URL 하드코딩 제거와 `https://*.supabase.co` URL 검증 복구
 - `src/market.py`: KRX 심볼 판별, Naver 가격/이력 fallback, `fetch_price_history_range()` 호환 함수 복구
-- `tests/test_app_dashboard.py`, `tests/test_db.py`: capture query와 고정 데모 기준일 테스트 추가
+- `tests/test_app_dashboard.py`, `tests/test_db.py`: capture query, 고정 데모 기준일, 거래/평가액 캡처 wrapper 테스트 추가
 - `docs/VALIDATION.md`, `docs/CHANGELOG.md`, `Memory.md`: 최신 검증 결과와 변경 요약 갱신
 
 ## 핵심 설계 결정
@@ -98,8 +99,8 @@
 - 스냅샷이 없으면 기존 summary와 `daily_account_snapshot` 기반 표시로 fallback한다.
 - `?demo=1`, `?demo=true`, `?demo=yes`, `?demo=demo`는 비로그인 사용자에게만 기존 데모 버튼과 같은 `start_demo_workspace_session()` 흐름을 자동 실행한다. 이미 인증된 사용자는 query parameter로 세션을 바꾸지 않는다.
 - UI 캡처 기본 URL은 `?demo=1&capture=1`을 사용한다. 캡처 스크립트가 로컬 앱을 직접 실행할 때는 `PORTFOLIO_BACKEND=sqlite`와 캡처 전용 SQLite 파일을 사용해 실제 사용자 데이터 캡처를 피한다.
-- `scripts/capture_app.py --viewport all`은 한 브라우저 세션에서 viewport 크기만 바꾸며 순차 캡처한다. 새 세션마다 데모 seed가 반복되어 선택 계좌 상태가 꼬이는 것을 방지하기 위한 동작이다.
-- 캡처 모드는 기본 기준일을 `2026-05-15`로 고정한다. 로컬 자동 실행 시 `PORTFOLIO_CAPTURE_REFERENCE_DATE`를 주입하고, `capture=1` 앱 화면에서는 이 기준일을 사용해 데모 seed, 그래프/테이블 표시 기준일을 안정화한다.
+- `scripts/capture_app.py --page all --viewport all`은 viewport별 같은 브라우저 세션에서 dashboard → trades → valuation 순서로 이동한다. 새 세션마다 데모 seed가 반복되어 선택 계좌 상태가 꼬이는 것을 방지하기 위한 동작이다.
+- 캡처 모드는 기본 기준일을 `2026-05-15`로 고정한다. 로컬 자동 실행 시 `PORTFOLIO_CAPTURE_REFERENCE_DATE`를 주입하고, `capture=1` 앱 화면에서는 이 기준일을 사용해 데모 seed, 그래프/테이블, 거래 입력 기본 날짜를 안정화한다.
 - 캡처 전 sidebar는 desktop에서 expanded, tablet/mobile에서 collapsed 상태로 고정하고, Playwright는 spinner/progress/skeleton 대기와 animation/transition 비활성화를 적용한다.
 - 데모 워크스페이스는 `데모 IRP`(`retirement`)와 `데모 주식`(`brokerage`) 두 계좌만 생성한다. 퇴직연금 계좌는 일반 주식 없이 ETF/채권/금/리츠 ETF 중심으로 구성하고, 일반 주식/해외주식은 주식 계좌에만 배치한다.
 - 기존 이름인 `데모 일반계좌`가 남아 있는 워크스페이스는 새 `데모 주식` seed와 중복되지 않도록 데모 재시드 때 함께 삭제한다.
@@ -118,21 +119,23 @@ streamlit run app.py --server.port 8501 --server.address 0.0.0.0 --server.fileWa
 ```
 
 ## 최신 검증 결과
-- 작업 범위: Streamlit UI 캡처 자동화 추가
-- 변경 파일: `.streamlit/app.css`, `src/ui/app_core.py`, `src/db.py`, `src/auth.py`, `src/market.py`, `config/capture_blocks.yaml`, `scripts/capture_app.py`, `requirements-dev.txt`, `docs/ui_capture.md`, `.github/workflows/ui-capture.yml`, `README.md`, 관련 테스트/문서
-- `python -m pip install -r requirements-dev.txt` 성공
-- `python -m playwright install chromium` 성공
+- 작업 범위: 대시보드 UI 개선 로컬 반영 및 Streamlit UI 캡처 자동화 거래/평가액 기록 확장
+- 변경 파일: `.streamlit/app.css`, `src/ui/app_core.py`, `config/capture_blocks.yaml`, `scripts/capture_app.py`, `docs/ui_capture.md`, `docs/VALIDATION.md`, `docs/CHANGELOG.md`, `.github/workflows/ui-capture.yml`, `README.md`, `tests/test_app_dashboard.py`
+- GitHub 원격에는 별도 디자인 패치 PR/커밋이 없어 참고안을 로컬에 직접 반영했다.
 - `python -m compileall app.py src scripts tests` 성공
-- `python -m unittest tests.test_app_dashboard.DemoQueryParamTests tests.test_db.DemoWorkspaceSeedTests` 성공, 10 tests
-- `python -m unittest discover -s tests -p "test_*.py"` 성공, 285 tests
-- 로컬 Streamlit `http://127.0.0.1:8522`를 캡처 전용 SQLite DB로 실행하고 `python scripts/capture_app.py --url "http://127.0.0.1:8522/?demo=1&capture=1" --viewport all --strict --out-dir artifacts/ui_captures --wait-ms 30000` 성공
-- 대표 산출물: `artifacts/ui_captures/2026-05-16_144429/` (`desktop`, `tablet`, `mobile` 모두 `manifest.status=success`, 누락 selector 없음)
+- CSS 중괄호 균형 확인 성공
+- `python -m unittest tests.test_app_dashboard` 성공, 121 tests
+- `python -m unittest discover -s tests -p "test_*.py"` 성공, 287 tests
+- 로컬 Streamlit `http://127.0.0.1:8525`를 캡처 전용 SQLite DB로 실행하고 `python scripts/capture_app.py --url "http://127.0.0.1:8525/?demo=1&capture=1" --page all --viewport all --strict --out-dir artifacts/ui_captures --wait-ms 30000` 성공
+- 대표 산출물: `artifacts/ui_captures/2026-05-16_161602/` (`dashboard/trades/valuation` × `desktop/tablet/mobile` 9개 manifest 모두 `success`, 누락 selector 없음)
+- 대시보드 UI 개선 확인 산출물: `artifacts/ui_captures/2026-05-16_162900/desktop/` (`manifest.status=success`, 누락 selector 없음)
 - 운영 DB 데이터 직접 수정, migration 추가, 배포, 원격 GitHub Actions 실행은 수행하지 않았다.
 
 ## Git/GitHub 상태
 - 기본 브랜치: `main`
 - 최근 배포 코드 커밋: `0f19336 Add demo query auto entry`
-- 이번 UI 캡처 자동화 코드는 `codex/ui-capture-automation` 브랜치에 `89c5e16 Add Streamlit UI capture automation`으로 커밋했고 `origin/codex/ui-capture-automation`에 push했다.
+- 기본 UI 캡처 자동화 코드는 `codex/ui-capture-automation` 브랜치에 `89c5e16 Add Streamlit UI capture automation`으로 커밋했고 `origin/codex/ui-capture-automation`에 push했다.
+- 이번 최신 변경은 `5773f96 Expand UI captures and refine dashboard design` 커밋으로 대시보드 UI 개선과 거래/평가액 기록 캡처 확장을 함께 반영한다.
 - `gh` CLI는 `/home/vscode/.local/bin/gh`에 설치되어 있고 GitHub 계정 `jhonkim91` 인증 상태를 확인했다.
 - 워크트리에는 이번 요청 전부터 `data/portfolio.db`, `src/analytics.py`, `src/db.py`, 테스트 파일, 로컬 도구 디렉터리, 산출물 등 여러 변경/미추적 파일이 함께 있었다.
 - 커밋 시 요청 관련 파일만 선별하고 `data/portfolio.db`, `.local/`, `.playtools*/`, `.playwright-browsers/`, `.vscode/`, `artifacts/`, `data/kis_cache/` 등 로컬 산출물은 제외한다.

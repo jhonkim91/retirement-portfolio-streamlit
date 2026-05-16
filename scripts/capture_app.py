@@ -35,6 +35,12 @@ DEFAULT_LOCAL_URL = "http://localhost:8501/?demo=1&capture=1"
 DEFAULT_WAIT_MS = 30_000
 CAPTURE_REFERENCE_DATE = "2026-05-15"
 SIDEBAR_EXPANDED_MIN_WIDTH = 1024
+PAGE_CHOICES = ("dashboard", "trades", "valuation", "all")
+PAGE_NAV_LABELS = {
+    "dashboard": "대시보드",
+    "trades": "거래",
+    "valuation": "평가액 기록",
+}
 VIEWPORTS: dict[str, dict[str, int]] = {
     "desktop": {"width": 1440, "height": 1200},
     "tablet": {"width": 768, "height": 1024},
@@ -93,6 +99,16 @@ class CaptureBlock:
     selector: str
     output: str
     required: bool = False
+    activate: str = ""
+
+
+@dataclass(frozen=True)
+class CapturePage:
+    """캡처 대상 Streamlit 페이지와 해당 블록 설정이다."""
+
+    name: str
+    path: str
+    blocks: list[CaptureBlock]
 
 
 @dataclass
@@ -111,14 +127,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--url", default="", help="접속할 앱 URL. 지정하지 않으면 CAPTURE_BASE_URL 또는 로컬 앱을 사용한다.")
     parser.add_argument("--out-dir", default=str(DEFAULT_OUT_DIR), help="캡처 산출물 루트 디렉터리")
     parser.add_argument("--viewport", choices=("desktop", "tablet", "mobile", "all"), default="desktop", help="캡처할 viewport")
+    parser.add_argument("--page", choices=PAGE_CHOICES, default="dashboard", help="캡처할 앱 페이지")
     parser.add_argument("--strict", action="store_true", help="required=false 블록 누락도 실패로 처리한다.")
     parser.add_argument("--config", default=str(DEFAULT_CONFIG_PATH), help="캡처 블록 YAML 설정 경로")
     parser.add_argument("--wait-ms", type=int, default=DEFAULT_WAIT_MS, help="페이지와 selector 대기 시간(ms)")
     return parser.parse_args()
 
 
-def load_capture_blocks(config_path: Path) -> list[CaptureBlock]:
-    """캡처 블록 YAML을 읽어 검증된 설정 목록으로 반환한다."""
+def load_capture_pages(config_path: Path) -> list[CapturePage]:
+    """캡처 블록 YAML을 읽어 페이지별 설정 목록으로 반환한다."""
 
     if yaml is None:
         raise RuntimeError("pyyaml이 설치되어 있지 않습니다. `python -m pip install -r requirements-dev.txt`를 실행해 주세요.")
@@ -126,24 +143,72 @@ def load_capture_blocks(config_path: Path) -> list[CaptureBlock]:
         raise FileNotFoundError(f"캡처 설정 파일을 찾지 못했습니다: {config_path}")
 
     config = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+    raw_pages = config.get("pages")
+    if isinstance(raw_pages, list):
+        pages: list[CapturePage] = []
+        for page_index, raw_page in enumerate(raw_pages, start=1):
+            if not isinstance(raw_page, dict):
+                raise ValueError(f"pages[{page_index}] 항목은 객체여야 합니다.")
+            page_name = str(raw_page.get("name") or "").strip()
+            page_path = normalize_page_path(raw_page.get("path"))
+            raw_blocks = raw_page.get("blocks")
+            if not page_name or not isinstance(raw_blocks, list):
+                raise ValueError(f"pages[{page_index}]에는 name, path, blocks가 필요합니다.")
+            pages.append(
+                CapturePage(
+                    name=page_name,
+                    path=page_path,
+                    blocks=parse_capture_blocks(raw_blocks, context=f"pages[{page_index}].blocks"),
+                )
+            )
+        return pages
+
     raw_blocks = config.get("blocks")
-    if not isinstance(raw_blocks, list):
-        raise ValueError("capture_blocks.yaml에는 `blocks` 목록이 필요합니다.")
+    if isinstance(raw_blocks, list):
+        return [CapturePage(name="dashboard", path="/", blocks=parse_capture_blocks(raw_blocks, context="blocks"))]
+
+    raise ValueError("capture_blocks.yaml에는 `pages` 목록 또는 기존 `blocks` 목록이 필요합니다.")
+
+
+def normalize_page_path(value: Any) -> str:
+    """YAML page path 값을 URL path로 정규화한다."""
+
+    path = str(value or "/").strip() or "/"
+    if not path.startswith("/"):
+        path = f"/{path}"
+    return path
+
+
+def parse_capture_blocks(raw_blocks: list[Any], *, context: str) -> list[CaptureBlock]:
+    """YAML blocks 항목을 검증된 CaptureBlock 목록으로 변환한다."""
 
     blocks: list[CaptureBlock] = []
     for index, raw_block in enumerate(raw_blocks, start=1):
         if not isinstance(raw_block, dict):
-            raise ValueError(f"blocks[{index}] 항목은 객체여야 합니다.")
+            raise ValueError(f"{context}[{index}] 항목은 객체여야 합니다.")
         name = str(raw_block.get("name") or "").strip()
         selector = str(raw_block.get("selector") or "").strip()
         output = str(raw_block.get("output") or "").strip()
         required = bool(raw_block.get("required", False))
+        activate = str(raw_block.get("activate") or "").strip()
         if not name or not selector or not output:
-            raise ValueError(f"blocks[{index}]에는 name, selector, output이 모두 필요합니다.")
+            raise ValueError(f"{context}[{index}]에는 name, selector, output이 모두 필요합니다.")
         if Path(output).is_absolute() or ".." in Path(output).parts:
-            raise ValueError(f"blocks[{index}] output은 blocks 디렉터리 내부 상대 경로여야 합니다: {output}")
-        blocks.append(CaptureBlock(name=name, selector=selector, output=output, required=required))
+            raise ValueError(f"{context}[{index}] output은 blocks 디렉터리 내부 상대 경로여야 합니다: {output}")
+        blocks.append(CaptureBlock(name=name, selector=selector, output=output, required=required, activate=activate))
     return blocks
+
+
+def resolve_capture_pages(page_option: str, pages: list[CapturePage]) -> list[CapturePage]:
+    """CLI page 옵션을 실제 캡처할 페이지 목록으로 변환한다."""
+
+    if page_option == "all":
+        return pages
+    page_by_name = {page.name: page for page in pages}
+    if page_option not in page_by_name:
+        available = ", ".join(sorted(page_by_name))
+        raise ValueError(f"캡처 설정에 `{page_option}` 페이지가 없습니다. 사용 가능: {available}")
+    return [page_by_name[page_option]]
 
 
 def resolve_viewports(viewport_option: str) -> list[tuple[str, dict[str, int]]]:
@@ -152,6 +217,28 @@ def resolve_viewports(viewport_option: str) -> list[tuple[str, dict[str, int]]]:
     if viewport_option == "all":
         return list(VIEWPORTS.items())
     return [(viewport_option, VIEWPORTS[viewport_option])]
+
+
+def build_page_url(base_url: str, page: CapturePage) -> str:
+    """기준 URL의 query를 유지하면서 지정 Streamlit 페이지 path를 적용한다."""
+
+    parsed = urlparse(base_url)
+    return parsed._replace(path=page.path).geturl()
+
+
+def build_navigation_start_url(page_url: str) -> str:
+    """Streamlit 세션과 demo/capture query를 유지하기 위한 최초 진입 URL을 반환한다."""
+
+    parsed = urlparse(page_url)
+    return parsed._replace(path="/").geturl()
+
+
+def viewport_dir_for_page(capture_root: Path, page: CapturePage, viewport_name: str, page_count: int) -> Path:
+    """페이지 수에 따라 backward compatible한 viewport 산출물 경로를 반환한다."""
+
+    if page_count == 1 and page.name == "dashboard":
+        return capture_root / viewport_name
+    return capture_root / page.name / viewport_name
 
 
 def run_git_command(*args: str) -> str:
@@ -443,6 +530,106 @@ def ensure_sidebar_default_state(page: Any, viewport_width: int) -> None:
         page.wait_for_timeout(600)
 
 
+def open_sidebar_for_navigation(page: Any) -> None:
+    """페이지 링크를 누를 수 있도록 접힌 Streamlit sidebar를 임시로 연다."""
+
+    try:
+        page.evaluate(
+            """
+            () => {
+              const isVisible = (element) => {
+                if (!element) return false;
+                const rect = element.getBoundingClientRect();
+                const style = window.getComputedStyle(element);
+                return rect.width > 0
+                  && rect.height > 0
+                  && style.display !== 'none'
+                  && style.visibility !== 'hidden'
+                  && Number(style.opacity || 1) !== 0;
+              };
+              const sidebar = document.querySelector('[data-testid="stSidebar"]');
+              if (isVisible(sidebar)) return true;
+              const controls = Array.from(document.querySelectorAll(
+                '[data-testid="collapsedControl"] button, button[aria-label], button[title]'
+              ));
+              for (const control of controls) {
+                const label = [
+                  control.getAttribute('aria-label') || '',
+                  control.getAttribute('title') || '',
+                  control.textContent || ''
+                ].join(' ');
+                if (isVisible(control) && /open sidebar|expand sidebar|사이드바 열기|sidebar/i.test(label)) {
+                  control.click();
+                  return true;
+                }
+              }
+              return false;
+            }
+            """
+        )
+    except Exception:
+        return
+    page.wait_for_timeout(600)
+
+
+def navigate_to_capture_page(page: Any, page_name: str, page_path: str, wait_ms: int) -> None:
+    """Streamlit sidebar 내비게이션을 클릭해 캡처 대상 페이지로 이동한다."""
+
+    if page_name == "dashboard" or page_path == "/":
+        return
+
+    label = PAGE_NAV_LABELS.get(page_name, page_name)
+    target_path = page_path.strip("/")
+    clicked = False
+    observed_links: list[str] = []
+    deadline = time.monotonic() + (min(wait_ms, 15_000) / 1000)
+    while time.monotonic() < deadline and not clicked:
+        open_sidebar_for_navigation(page)
+        links = page.locator('[data-testid="stSidebar"] a, a')
+        try:
+            link_count = links.count()
+        except Exception:
+            link_count = 0
+        observed_links = []
+        for index in range(min(link_count, 40)):
+            candidate = links.nth(index)
+            try:
+                href = str(candidate.get_attribute("href") or "")
+                href_path = href.split("?", 1)[0].rstrip("/").rsplit("/", 1)[-1]
+                text = " ".join(str(candidate.inner_text(timeout=1_000) or "").split())
+                visible = candidate.is_visible(timeout=500)
+                observed_links.append(f"{index}:visible={visible}:href={href}:text={text}")
+                if visible and (href_path == target_path or label in text):
+                    try:
+                        candidate.click(timeout=min(wait_ms, 5_000), force=True)
+                    except Exception:
+                        candidate.evaluate("(element) => element.click()")
+                    clicked = True
+                    break
+            except Exception as exc:
+                observed_links.append(f"{index}:error={exc}")
+                continue
+        if not clicked:
+            time.sleep(0.5)
+
+    if not clicked:
+        current_url = str(getattr(page, "url", "") or "")
+        observed_text = " | ".join(observed_links[:12])
+        raise RuntimeError(
+            f"캡처 대상 페이지로 이동하지 못했습니다: page={page_name} label={label} "
+            f"current_url={current_url} links={observed_text}"
+        )
+
+    try:
+        page.wait_for_url(f"**/{target_path}", timeout=min(wait_ms, 10_000))
+    except Exception:
+        current_url = str(getattr(page, "url", "") or "")
+        if not current_url.rstrip("/").endswith(f"/{target_path}"):
+            raise RuntimeError(f"캡처 대상 페이지 URL 전환 실패: page={page_name} current_url={current_url}")
+    page.wait_for_timeout(1_000)
+    wait_for_page_settle(page, wait_ms)
+
+
 def frame_selector_score(frame: Frame, blocks: list[CaptureBlock]) -> int:
     """frame 안에서 캡처 selector가 몇 개 발견되는지 계산한다."""
 
@@ -496,7 +683,7 @@ def first_visible_locator(frame: Frame, selector: str) -> Locator | None:
 def wait_for_required_blocks(frame: Frame, blocks: list[CaptureBlock], *, strict: bool, timeout_ms: int) -> list[CaptureBlock]:
     """필수 캡처 블록이 화면에 나타날 때까지 대기하고 누락 목록을 반환한다."""
 
-    required_blocks = [block for block in blocks if block.required or strict]
+    required_blocks = [block for block in blocks if (block.required or strict) and not block.activate]
     if not required_blocks:
         return []
 
@@ -550,6 +737,68 @@ def wait_for_chart_canvas(page: Any, wait_ms: int) -> None:
     page.wait_for_timeout(2_000)
 
 
+def activate_block_context(page: Any, block: CaptureBlock, wait_ms: int) -> None:
+    """숨겨진 탭 안의 블록 캡처를 위해 필요한 UI 탭을 활성화한다."""
+
+    if not block.activate:
+        return
+    print(f"[capture] block 활성화: {block.name} -> {block.activate}")
+    tab_locator = page.get_by_role("tab", name=block.activate, exact=True)
+    try:
+        if str(tab_locator.get_attribute("aria-selected") or "").lower() == "true":
+            return
+    except Exception:
+        pass
+    try:
+        tab_locator.click(timeout=min(wait_ms, 5_000), force=True)
+    except Exception:
+        try:
+            page.locator("button, [role='tab']").filter(has_text=block.activate).first.click(
+                timeout=min(wait_ms, 5_000),
+                force=True,
+            )
+        except Exception as exc:
+            try:
+                clicked = bool(
+                    page.evaluate(
+                        """
+                        (label) => {
+                          for (const element of Array.from(document.querySelectorAll('button, [role="tab"]'))) {
+                            const text = (element.textContent || '').replace(/\\s+/g, ' ').trim();
+                            if (text.includes(label)) {
+                              element.click();
+                              return true;
+                            }
+                          }
+                          return false;
+                        }
+                        """,
+                        block.activate,
+                    )
+                )
+            except Exception:
+                clicked = False
+            if not clicked:
+                print(
+                    f"[capture] warning: block 활성화 실패 name={block.name} activate={block.activate}: {exc}",
+                    file=sys.stderr,
+                )
+                return
+    wait_for_page_settle(page, wait_ms)
+
+
+def wait_for_block_locator(frame: Frame, block: CaptureBlock, timeout_ms: int) -> Locator | None:
+    """블록별 캡처 직전에 해당 selector가 visible 상태가 될 때까지 기다린다."""
+
+    deadline = time.monotonic() + (timeout_ms / 1000)
+    while time.monotonic() < deadline:
+        locator = first_visible_locator(frame, block.selector)
+        if locator is not None:
+            return locator
+        time.sleep(0.5)
+    return None
+
+
 def query_flag_enabled(url: str, key: str) -> bool:
     """URL query parameter가 캡처 안전 모드 값을 포함하는지 확인한다."""
 
@@ -560,6 +809,8 @@ def query_flag_enabled(url: str, key: str) -> bool:
 def capture_viewport(
     browser: Browser,
     *,
+    page_name: str,
+    page_path: str,
     url: str,
     timestamp: str,
     viewport_name: str,
@@ -586,7 +837,9 @@ def capture_viewport(
         "capture_timestamp": timestamp,
         "git_commit_hash": run_git_command("rev-parse", "HEAD"),
         "branch_name": run_git_command("rev-parse", "--abbrev-ref", "HEAD"),
+        "page_name": page_name,
         "app_url": url,
+        "resolved_app_url": "",
         "viewport": {"name": viewport_name, **viewport_size},
         "full_page_output_path": path_for_manifest(full_page_path),
         "blocks": captured_blocks,
@@ -606,14 +859,18 @@ def capture_viewport(
         print(f"[capture] {viewport_name} 접속: {url}")
         install_capture_init_script(active_page)
         active_page.set_viewport_size(viewport_size)
+        start_url = build_navigation_start_url(url)
         current_url = str(getattr(active_page, "url", "") or "")
-        if current_url and current_url != "about:blank":
-            active_page.wait_for_timeout(2_000)
+        should_load_start_url = owns_context or not current_url or current_url == "about:blank" or page_name == "dashboard"
+        if should_load_start_url:
+            active_page.goto(start_url, wait_until="domcontentloaded", timeout=wait_ms)
         else:
-            active_page.goto(url, wait_until="domcontentloaded", timeout=wait_ms)
+            active_page.wait_for_timeout(500)
         wait_for_page_settle(active_page, wait_ms)
+        navigate_to_capture_page(active_page, page_name, page_path, wait_ms)
         ensure_sidebar_default_state(active_page, int(viewport_size["width"]))
         wait_for_page_settle(active_page, wait_ms)
+        manifest["resolved_app_url"] = str(getattr(active_page, "url", "") or "")
         frame = select_capture_frame(active_page, blocks, timeout_ms=min(wait_ms, 10_000))
         missing_required = wait_for_required_blocks(frame, blocks, strict=strict, timeout_ms=wait_ms)
         for block in missing_required:
@@ -629,6 +886,8 @@ def capture_viewport(
 
         active_page.screenshot(path=str(full_page_path), full_page=True)
         for block in blocks:
+            activate_block_context(active_page, block, wait_ms)
+            frame = select_capture_frame(active_page, blocks, timeout_ms=min(wait_ms, 10_000))
             block_path = blocks_dir / block.output
             entry = {
                 **asdict(block),
@@ -638,7 +897,7 @@ def capture_viewport(
             }
             captured_blocks.append(entry)
 
-            locator = first_visible_locator(frame, block.selector)
+            locator = wait_for_block_locator(frame, block, timeout_ms=wait_ms)
             if locator is None:
                 entry["status"] = "missing"
                 entry["message"] = "selector를 찾지 못했거나 visible 상태가 아닙니다."
@@ -716,7 +975,8 @@ def main() -> int:
     timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
     capture_root = out_dir / timestamp
     capture_root.mkdir(parents=True, exist_ok=True)
-    blocks = load_capture_blocks(config_path)
+    configured_pages = load_capture_pages(config_path)
+    capture_pages = resolve_capture_pages(str(args.page), configured_pages)
     url, external_url = resolve_capture_url(args.url)
     if not query_flag_enabled(url, "demo") or not query_flag_enabled(url, "capture"):
         print(
@@ -734,42 +994,36 @@ def main() -> int:
             browser = playwright.chromium.launch(headless=True)
             try:
                 viewports = resolve_viewports(args.viewport)
-                if len(viewports) > 1:
-                    context = browser.new_context(viewport=viewports[0][1], device_scale_factor=1)
+                results: list[bool] = []
+                for viewport_name, viewport_size in viewports:
+                    context = browser.new_context(viewport=viewport_size, device_scale_factor=1)
                     shared_page = context.new_page()
                     try:
-                        results = [
-                            capture_viewport(
-                                browser,
-                                url=url,
-                                timestamp=timestamp,
-                                viewport_name=viewport_name,
-                                viewport_size=viewport_size,
-                                viewport_dir=capture_root / viewport_name,
-                                blocks=blocks,
-                                strict=bool(args.strict),
-                                wait_ms=int(args.wait_ms),
-                                page=shared_page,
+                        for capture_page in capture_pages:
+                            page_url = build_page_url(url, capture_page)
+                            results.append(
+                                capture_viewport(
+                                    browser,
+                                    page_name=capture_page.name,
+                                    page_path=capture_page.path,
+                                    url=page_url,
+                                    timestamp=timestamp,
+                                    viewport_name=viewport_name,
+                                    viewport_size=viewport_size,
+                                    viewport_dir=viewport_dir_for_page(
+                                        capture_root,
+                                        capture_page,
+                                        viewport_name,
+                                        len(capture_pages),
+                                    ),
+                                    blocks=capture_page.blocks,
+                                    strict=bool(args.strict),
+                                    wait_ms=int(args.wait_ms),
+                                    page=shared_page,
+                                )
                             )
-                            for viewport_name, viewport_size in viewports
-                        ]
                     finally:
                         context.close()
-                else:
-                    results = [
-                        capture_viewport(
-                            browser,
-                            url=url,
-                            timestamp=timestamp,
-                            viewport_name=viewport_name,
-                            viewport_size=viewport_size,
-                            viewport_dir=capture_root / viewport_name,
-                            blocks=blocks,
-                            strict=bool(args.strict),
-                            wait_ms=int(args.wait_ms),
-                        )
-                        for viewport_name, viewport_size in viewports
-                    ]
             finally:
                 browser.close()
     finally:

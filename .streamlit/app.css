@@ -87,9 +87,9 @@ h6 {
 }
 
 .block-container {
-    padding-top: 1rem;
-    padding-bottom: 3rem;
-    max-width: 1580px;
+    padding-top: 1.25rem;
+    padding-bottom: 3.5rem;
+    max-width: 1480px;
 }
 
 .dashboard-note {
@@ -834,6 +834,24 @@ h6 {
     gap: 0.68rem;
 }
 
+.st-key-dashboard-panel-allocation,
+.st-key-dashboard-panel-holdings-table {
+    border-radius: 26px !important;
+    box-shadow:
+        0 1px 2px rgba(23, 32, 51, 0.04),
+        0 16px 40px rgba(23, 32, 51, 0.065) !important;
+}
+
+.st-key-dashboard-panel-allocation [data-testid="stVerticalBlockBorderWrapper"],
+.st-key-dashboard-panel-holdings-table [data-testid="stVerticalBlockBorderWrapper"] {
+    border-radius: 26px !important;
+}
+
+.st-key-dashboard-panel-allocation .dashboard-section-header__title {
+    font-size: 1.18rem !important;
+    font-weight: 900 !important;
+}
+
 .st-key-dashboard-panel-allocation .dashboard-section-header,
 .st-key-dashboard-panel-selected-trend .dashboard-section-header,
 .st-key-dashboard-panel-holdings .dashboard-section-header,
@@ -899,8 +917,8 @@ h6 {
 .dashboard-treemap-legend__bar {
     position: relative;
     width: 100%;
-    height: 14px;
-    border-radius: 999px;
+    height: 12px;
+    border-radius: 8px;
     border: 1px solid var(--line-soft);
     background: color-mix(in srgb, var(--surface-strong) 22%, transparent);
     overflow: hidden;
@@ -1347,7 +1365,7 @@ h6 {
 
 .holdings-table__head,
 .holdings-table__cell {
-    padding: 0.8rem 0.9rem;
+    padding: 0.75rem 0.95rem;
     border-right: 1px solid #e5eaf0;
     border-bottom: 1px solid #e5eaf0;
     white-space: nowrap;
@@ -1359,10 +1377,12 @@ h6 {
     position: sticky;
     top: 0;
     z-index: 1;
-    background: #f8fafc;
+    background: #F4F7F6;
     color: var(--mid-text);
-    font-size: 0.84rem;
-    font-weight: 700;
+    font-size: 0.78rem;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+    border-bottom: 2px solid #E2E7EF;
     text-align: left;
 }
 
@@ -1374,7 +1394,7 @@ h6 {
 .holdings-table__cell {
     background: var(--surface-strong);
     color: var(--brand-deep);
-    font-size: 0.9rem;
+    font-size: 0.87rem;
     font-weight: 500;
 }
 
@@ -1383,12 +1403,12 @@ h6 {
 }
 
 .holdings-table__value--positive {
-    color: var(--chart-up);
+    color: #0E9E69;
     font-weight: 700;
 }
 
 .holdings-table__value--negative {
-    color: var(--chart-down);
+    color: #E85D75;
     font-weight: 700;
 }
 
@@ -2076,8 +2096,8 @@ div[role="dialog"] [data-testid="stFormSubmitButton"] > button {
 
 .dashboard-overview-hero {
     position: relative;
-    height: 206px;
-    min-height: 206px;
+    height: 220px;
+    min-height: 220px;
     margin: 0;
     padding: 1.18rem 1.35rem;
     border-radius: 22px;
@@ -2232,8 +2252,8 @@ div[role="dialog"] [data-testid="stFormSubmitButton"] > button {
     align-items: center;
     min-height: 1.9rem;
     padding: 0.32rem 0.7rem;
-    border-radius: 8px;
-    background: rgba(255, 255, 255, 0.12);
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.15);
     color: #ffffff;
     font-size: 0.82rem;
     font-weight: 900;
@@ -2250,10 +2270,10 @@ div[role="dialog"] [data-testid="stFormSubmitButton"] > button {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: 2rem;
-    min-height: 1.55rem;
+    min-width: 2.1rem;
+    min-height: 1.65rem;
     padding: 0 0.42rem;
-    border-radius: 7px;
+    border-radius: 8px;
     border: 1px solid rgba(255, 255, 255, 0.18);
     color: rgba(255, 255, 255, 0.72);
     font-size: 0.72rem;
@@ -2263,6 +2283,7 @@ div[role="dialog"] [data-testid="stFormSubmitButton"] > button {
 .dashboard-overview-hero__period.is-active {
     background: #ffffff;
     color: #1f2b69;
+    box-shadow: 0 2px 8px rgba(30, 43, 110, 0.18);
 }
 
 .dashboard-overview-hero__label {
@@ -2278,10 +2299,10 @@ div[role="dialog"] [data-testid="stFormSubmitButton"] > button {
     position: relative;
     z-index: 1;
     color: #ffffff !important;
-    font-size: clamp(2.05rem, 3.45vw, 2.85rem);
+    font-size: clamp(2.1rem, 3.6vw, 3rem);
     font-weight: 950;
     line-height: 1.05;
-    letter-spacing: -0.055em;
+    letter-spacing: -0.06em;
 }
 
 .dashboard-overview-hero__delta {
@@ -2388,14 +2409,23 @@ div[role="dialog"] [data-testid="stFormSubmitButton"] > button {
 .dashboard-overview-card {
     position: relative;
     box-sizing: border-box;
-    height: 206px;
-    min-height: 206px;
+    height: 220px;
+    min-height: 220px;
     padding: 1rem 0.95rem 1.24rem;
-    border-radius: 18px;
+    border-radius: 20px;
     border: 1px solid rgba(226, 232, 240, 0.92);
     background: rgba(255, 255, 255, 0.94);
-    box-shadow: 0 12px 28px rgba(23, 32, 51, 0.055);
+    box-shadow:
+        0 1px 3px rgba(23, 32, 51, 0.04),
+        0 8px 22px rgba(23, 32, 51, 0.055);
     overflow: hidden;
+    transition: transform 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.dashboard-overview-card:hover {
+    transform: translateY(-1px);
+    border-color: rgba(93, 187, 146, 0.32) !important;
+    box-shadow: 0 14px 32px rgba(23, 32, 51, 0.09) !important;
 }
 
 .dashboard-overview-card--no-sparkline {
@@ -2479,9 +2509,9 @@ div[role="dialog"] [data-testid="stFormSubmitButton"] > button {
 }
 
 .dashboard-overview-card__label {
-    color: var(--brand-deep);
-    font-size: 0.82rem;
-    font-weight: 900;
+    color: #4a5568;
+    font-size: 0.8rem;
+    font-weight: 800;
     line-height: 1.2;
 }
 
@@ -2489,10 +2519,10 @@ div[role="dialog"] [data-testid="stFormSubmitButton"] > button {
     position: relative;
     z-index: 1;
     color: var(--brand-deep);
-    font-size: clamp(1.05rem, 1.35vw, 1.45rem);
+    font-size: clamp(1.08rem, 1.4vw, 1.52rem);
     font-weight: 950;
     line-height: 1.1;
-    letter-spacing: -0.045em;
+    letter-spacing: -0.048em;
     overflow-wrap: anywhere;
 }
 

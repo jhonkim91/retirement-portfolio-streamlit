@@ -1,35 +1,99 @@
-blocks:
-  - name: header
-    selector: ".st-key-capture_header"
-    output: "01_header.png"
-    required: true
+pages:
+  - name: dashboard
+    path: "/"
+    blocks:
+      - name: header
+        selector: ".st-key-capture_header"
+        output: "01_header.png"
+        required: true
 
-  - name: input_panel
-    selector: ".st-key-capture_input_panel"
-    output: "02_input_panel.png"
-    required: true
+      - name: input_panel
+        selector: ".st-key-capture_input_panel"
+        output: "02_input_panel.png"
+        required: true
 
-  - name: summary_cards
-    selector: ".st-key-capture_summary_cards"
-    output: "03_summary_cards.png"
-    required: true
+      - name: summary_cards
+        selector: ".st-key-capture_summary_cards"
+        output: "03_summary_cards.png"
+        required: true
 
-  - name: asset_allocation_chart
-    selector: ".st-key-capture_asset_allocation_chart"
-    output: "04_asset_allocation_chart.png"
-    required: false
+      - name: asset_allocation_chart
+        selector: ".st-key-capture_asset_allocation_chart"
+        output: "04_asset_allocation_chart.png"
+        required: false
 
-  - name: retirement_projection_chart
-    selector: ".st-key-capture_retirement_projection_chart"
-    output: "05_retirement_projection_chart.png"
-    required: false
+      - name: retirement_projection_chart
+        selector: ".st-key-capture_retirement_projection_chart"
+        output: "05_retirement_projection_chart.png"
+        required: false
 
-  - name: holdings_table
-    selector: ".st-key-capture_holdings_table"
-    output: "06_holdings_table.png"
-    required: true
+      - name: holdings_table
+        selector: ".st-key-capture_holdings_table"
+        output: "06_holdings_table.png"
+        required: true
 
-  - name: recommendation_panel
-    selector: ".st-key-capture_recommendation_panel"
-    output: "07_recommendation_panel.png"
-    required: false
+      - name: recommendation_panel
+        selector: ".st-key-capture_recommendation_panel"
+        output: "07_recommendation_panel.png"
+        required: false
+
+  - name: trades
+    path: "/trades"
+    blocks:
+      - name: trades_header
+        selector: ".st-key-capture_trades_header"
+        output: "01_trades_header.png"
+        required: true
+
+      - name: trade_input_panel
+        selector: ".st-key-trade-form-cols"
+        output: "02_trade_input_panel.png"
+        required: true
+        activate: "거래 입력"
+
+      - name: trade_product_entry
+        selector: ".st-key-trade-product-entry"
+        output: "03_trade_product_entry.png"
+        required: true
+        activate: "거래 입력"
+
+      - name: trade_cash_flow_panel
+        selector: ".st-key-trade-cash-flow-entry"
+        output: "04_trade_cash_flow_panel.png"
+        required: true
+        activate: "거래 입력"
+
+      - name: trade_log_panel
+        selector: ".st-key-trade-log-panel"
+        output: "05_trade_log_panel.png"
+        required: true
+        activate: "거래 기록"
+
+      - name: trade_realized_panel
+        selector: ".st-key-trade-realized-summary"
+        output: "06_trade_realized_panel.png"
+        required: true
+        activate: "실현 손익"
+
+  - name: valuation
+    path: "/valuation"
+    blocks:
+      - name: valuation_header
+        selector: ".st-key-capture_valuation_header"
+        output: "01_valuation_header.png"
+        required: true
+
+      - name: valuation_summary_cards
+        selector: ".st-key-capture_valuation_summary_cards"
+        output: "02_valuation_summary_cards.png"
+        required: true
+
+      - name: valuation_chart
+        selector: ".st-key-capture_valuation_chart"
+        output: "03_valuation_chart.png"
+        required: false
+
+      - name: valuation_table
+        selector: ".st-key-capture_valuation_table"
+        output: "04_valuation_table.png"
+        required: true

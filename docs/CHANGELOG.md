@@ -8,13 +8,20 @@
 ## 최근 완료 변경 요약
 
 ### 2026-05-16
+- 대시보드 UI 개선 로컬 반영.
+  - GitHub 원격 PR/커밋에는 해당 패치가 없어 보고서의 변경 의도를 로컬에 직접 적용.
+  - 대시보드 block container 폭을 줄이고 overview hero/card 높이와 컬럼 비율을 조정해 첫 화면 균형을 개선.
+  - 기간 버튼, 카드 hover, 자산 배분/보유종목 패널 radius/shadow, treemap legend, 보유종목 테이블 대비/패딩을 보강.
+  - CSS 중괄호 균형, compileall, 전체 unittest discover, desktop dashboard strict 캡처 검증 완료.
 - Streamlit UI 캡처 자동화 추가.
   - 대시보드 주요 영역에 `capture_header`, `capture_input_panel`, `capture_summary_cards`, `capture_asset_allocation_chart`, `capture_retirement_projection_chart`, `capture_holdings_table`, `capture_recommendation_panel` wrapper를 추가.
-  - `config/capture_blocks.yaml`과 `scripts/capture_app.py`를 추가해 full page 및 블록별 PNG와 `manifest.json`을 `artifacts/ui_captures/{timestamp}/{viewport}/`에 생성.
+  - 거래 페이지 header와 평가액 기록 header/요약/차트/테이블에 캡처용 wrapper를 추가하고, `--page dashboard|trades|valuation|all` 옵션으로 페이지별 캡처를 지원.
+  - `config/capture_blocks.yaml`과 `scripts/capture_app.py`를 추가해 full page 및 블록별 PNG와 `manifest.json`을 단일 페이지는 `artifacts/ui_captures/{timestamp}/{viewport}/`, 여러 페이지는 `{timestamp}/{page}/{viewport}/`에 생성.
   - `requirements-dev.txt`, `docs/ui_capture.md`, `.github/workflows/ui-capture.yml`을 추가해 로컬/GitHub Actions 캡처 실행 절차를 문서화.
-  - 캡처 전 sidebar 기본 상태 고정, spinner/loading 대기, animation/transition 비활성화, `capture=1` 기준일 고정, selector 누락 로그를 보강.
+  - 캡처 전 sidebar 기본 상태 고정, spinner/loading 대기, animation/transition 비활성화, `capture=1` 기준일과 거래 입력 기본 날짜 고정, selector 누락 로그를 보강.
+  - 한 viewport 안에서는 같은 브라우저 세션으로 dashboard → trades → valuation 순서 이동을 유지해 데모 seed 반복과 선택 계좌 상태 꼬임을 방지.
   - 캡처 검증 중 기존 테스트 실패 원인이던 인증 기본 Supabase URL 하드코딩과 `src.market` 누락 호환 함수를 보정.
-  - 전체 compileall/unittest discover와 desktop/tablet/mobile strict 캡처 검증 완료.
+  - 전체 compileall/unittest discover와 dashboard/trades/valuation desktop/tablet/mobile strict 캡처 검증 완료.
 - Dashboard 자산 배분 트리맵 예수금 색상/라벨 개선.
   - 예수금을 수익률 `visualMap` 대상에서 제외하고 회색 중립 타일로 표시하도록 변경.
   - 보유 종목 타일은 종목명과 보유 수익률을 2줄 라벨로 표시하고, 예수금은 `예수금 / 현금` 라벨로 표시.

@@ -25,6 +25,12 @@ python -m playwright install --with-deps chromium
 python scripts/capture_app.py --viewport desktop
 ```
 
+대시보드, 거래, 평가액 기록 페이지를 모두 캡처하려면 아래처럼 실행한다.
+
+```powershell
+python scripts/capture_app.py --page all --viewport all
+```
+
 로컬 자동 실행 시 캡처 기준일은 기본 `2026-05-15`로 고정된다. 다른 기준일이 필요하면 `PORTFOLIO_CAPTURE_REFERENCE_DATE=YYYY-MM-DD`를 지정한다.
 
 이미 실행 중인 앱을 캡처하려면 URL을 직접 지정한다.
@@ -32,6 +38,7 @@ python scripts/capture_app.py --viewport desktop
 ```powershell
 python scripts/capture_app.py `
   --url "http://localhost:8501/?demo=1&capture=1" `
+  --page all `
   --viewport all `
   --out-dir artifacts/ui_captures
 ```
@@ -40,7 +47,7 @@ python scripts/capture_app.py `
 
 ```powershell
 $env:CAPTURE_BASE_URL = "http://localhost:8501/?demo=1&capture=1"
-python scripts/capture_app.py --viewport desktop
+python scripts/capture_app.py --page all --viewport desktop
 ```
 
 ## CLI 옵션
@@ -50,6 +57,7 @@ python scripts/capture_app.py --viewport desktop
 | `--url` | 접속할 앱 URL. 없으면 `CAPTURE_BASE_URL`, 그다음 로컬 자동 실행을 사용 |
 | `--out-dir` | 캡처 산출물 루트. 기본값은 `artifacts/ui_captures` |
 | `--viewport` | `desktop`, `tablet`, `mobile`, `all` 중 선택 |
+| `--page` | `dashboard`, `trades`, `valuation`, `all` 중 선택. 기본값은 `dashboard` |
 | `--strict` | `required: false` 블록 누락도 실패 처리 |
 | `--config` | 캡처 블록 YAML 경로. 기본값은 `config/capture_blocks.yaml` |
 | `--wait-ms` | 페이지, selector, loading 안정화 대기 시간. 기본값은 `30000` |
@@ -58,6 +66,7 @@ python scripts/capture_app.py --viewport desktop
 
 - 캡처 URL은 `?demo=1&capture=1`을 사용한다.
 - `capture=1`에서는 화면에 직접 영향을 주는 기준일을 고정해 데모 seed, 그래프 데이터, 테이블 행 수가 반복 실행마다 흔들리지 않게 한다.
+- `--page all`은 같은 viewport 안에서 dashboard → trades → valuation 순서로 이동해 데모 세션과 선택 계좌 상태를 유지한다.
 - Playwright 캡처 전 Streamlit sidebar는 desktop에서 expanded, tablet/mobile에서 collapsed 기본 상태로 맞춘다.
 - 캡처 전후로 Streamlit spinner/progress/skeleton이 사라질 때까지 대기하고, animation/transition CSS를 비활성화한다.
 - selector 누락 시 로그에 `viewport`, `name`, `selector`, `required` 여부를 출력하고, 같은 내용은 `manifest.json`의 `missing_selectors`에도 기록한다.
@@ -67,24 +76,40 @@ python scripts/capture_app.py --viewport desktop
 ```text
 artifacts/ui_captures/
 └── 2026-05-15_153000/
-    └── desktop/
-        ├── full_page.png
-        ├── blocks/
-        │   ├── 01_header.png
-        │   ├── 02_input_panel.png
-        │   ├── 03_summary_cards.png
-        │   ├── 04_asset_allocation_chart.png
-        │   ├── 05_retirement_projection_chart.png
-        │   ├── 06_holdings_table.png
-        │   └── 07_recommendation_panel.png
-        └── manifest.json
+    ├── dashboard/
+    │   └── desktop/
+    │       ├── full_page.png
+    │       ├── blocks/
+    │       │   ├── 01_header.png
+    │       │   └── ...
+    │       └── manifest.json
+    ├── trades/
+    │   └── desktop/
+    │       ├── full_page.png
+    │       ├── blocks/
+    │       │   ├── 01_trades_header.png
+    │       │   ├── 02_trade_input_panel.png
+    │       │   ├── 05_trade_log_panel.png
+    │       │   └── 06_trade_realized_panel.png
+    │       └── manifest.json
+    └── valuation/
+        └── desktop/
+            ├── full_page.png
+            ├── blocks/
+            │   ├── 01_valuation_header.png
+            │   ├── 02_valuation_summary_cards.png
+            │   ├── 03_valuation_chart.png
+            │   └── 04_valuation_table.png
+            └── manifest.json
 ```
+
+`--page dashboard`만 실행하면 기존 호환 구조인 `artifacts/ui_captures/{timestamp}/{viewport}/`에 저장된다. 여러 페이지를 캡처하면 `{timestamp}/{page}/{viewport}/` 구조를 사용한다.
 
 `manifest.json`에는 캡처 시각, git commit, 브랜치, 앱 URL, viewport, 블록별 selector, output path, 성공/실패 상태, 누락 selector가 기록된다.
 
 ## 캡처 블록 설정
 
-기본 설정은 `config/capture_blocks.yaml`에 있다. Streamlit `st.container(key="capture_xxx")`는 DOM에서 `.st-key-capture_xxx` CSS class로 노출되므로 Playwright selector는 해당 class를 사용한다.
+기본 설정은 `config/capture_blocks.yaml`에 있다. Streamlit `st.container(key="capture_xxx")`는 DOM에서 `.st-key-capture_xxx` CSS class로 노출되므로 Playwright selector는 해당 class를 사용한다. 거래 페이지의 숨겨진 탭 블록은 YAML의 `activate` 값으로 탭을 먼저 누른 뒤 블록 PNG를 저장한다.
 
 ## 보안 주의
 

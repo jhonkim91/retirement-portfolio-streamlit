@@ -3262,16 +3262,16 @@ def init_state() -> None:
     st.session_state.setdefault(TRADE_QUANTITY_KEY, 1.0)
     st.session_state.setdefault(TRADE_PRICE_KEY, 0.0)
     st.session_state.setdefault(TRADE_PRICE_AUTO_FILLED_KEY, False)
-    st.session_state.setdefault(TRADE_DATE_KEY, date.today())
+    st.session_state.setdefault(TRADE_DATE_KEY, capture_current_date())
     st.session_state.setdefault(TRADE_NOTES_KEY, "")
     st.session_state.setdefault(TRADE_PREFILL_MARKER_KEY, "")
     st.session_state.setdefault(CASH_FLOW_TYPE_KEY, "personal_deposit")
     st.session_state.setdefault(CASH_FLOW_AMOUNT_KEY, 0)
-    st.session_state.setdefault(CASH_FLOW_DATE_KEY, date.today())
+    st.session_state.setdefault(CASH_FLOW_DATE_KEY, capture_current_date())
     st.session_state.setdefault(CASH_FLOW_NOTES_KEY, "")
     for flow_type in CASH_FLOW_TYPES:
         st.session_state.setdefault(cash_flow_widget_key(CASH_FLOW_AMOUNT_KEY, flow_type), 0)
-        st.session_state.setdefault(cash_flow_widget_key(CASH_FLOW_DATE_KEY, flow_type), date.today())
+        st.session_state.setdefault(cash_flow_widget_key(CASH_FLOW_DATE_KEY, flow_type), capture_current_date())
         st.session_state.setdefault(cash_flow_widget_key(CASH_FLOW_NOTES_KEY, flow_type), "")
     st.session_state.setdefault(TRADE_FORM_RESET_PENDING_KEY, False)
     st.session_state.setdefault(CASH_FLOW_FORM_RESET_PENDING_KEY, False)
@@ -4181,7 +4181,7 @@ def render_dashboard_top_overview_option2(
                 disabled=refresh_disabled,
             )
 
-        overview_cols = st.columns((0.4, 0.6), gap="small", vertical_alignment="top")
+        overview_cols = st.columns((0.42, 0.58), gap="medium", vertical_alignment="top")
         with overview_cols[0]:
             with st.container(key="capture_header"):
                 with st.container(key="dashboard-overview-hero-shell"):
@@ -7756,8 +7756,9 @@ def trade_entry_page(account: dict[str, Any], holdings: list[dict[str, Any]], ac
         reset_values=cash_flow_reset_values(),
     )
 
-    st.title("거래")
-    st.caption("매수/매도와 현금 흐름을 한 화면에서 이어서 기록합니다. 보유현금은 거래와 연동하지 않고 직접 수정한 값만 유지합니다.")
+    with st.container(key="capture_trades_header"):
+        st.title("거래")
+        st.caption("매수/매도와 현금 흐름을 한 화면에서 이어서 기록합니다. 보유현금은 거래와 연동하지 않고 직접 수정한 값만 유지합니다.")
     echarts_error = ""
     try:
         echarts_available = load_echarts_runtime()
@@ -8425,22 +8426,23 @@ def valuation_page(account: dict[str, Any], rollup_state: dict[str, Any] | None 
 
     del rollup_state
     account_id = int(account["id"])
-    st.title("평가액 기록")
-    st.caption(
-        "개인 입금과 회사 납입금에서 일반 출금을 차감한 순입금 원금을 기준으로, "
-        "보유상품 평가액과 거래 원장 기준 현금을 더해 일별 보유 평가액을 기록합니다."
-    )
+    with st.container(key="capture_valuation_header"):
+        st.title("평가액 기록")
+        st.caption(
+            "개인 입금과 회사 납입금에서 일반 출금을 차감한 순입금 원금을 기준으로, "
+            "보유상품 평가액과 거래 원장 기준 현금을 더해 일별 보유 평가액을 기록합니다."
+        )
 
-    action_cols = st.columns((1, 0.26), gap="medium", vertical_alignment="center")
-    with action_cols[1]:
-        if st.button("재계산", key=f"valuation-rebuild:{account_id}", width="stretch"):
-            with st.spinner("평가액 기록 재계산 중..."):
-                count, error = rebuild_valuation_snapshots_for_account(account_id, "manual_rebuild")
-            if error:
-                st.warning(f"평가액 기록 재계산을 완료하지 못했습니다: {error}")
-            else:
-                st.success(f"평가액 기록 {count:,}건을 재계산했습니다.")
-                st.rerun()
+        action_cols = st.columns((1, 0.26), gap="medium", vertical_alignment="center")
+        with action_cols[1]:
+            if st.button("재계산", key=f"valuation-rebuild:{account_id}", width="stretch"):
+                with st.spinner("평가액 기록 재계산 중..."):
+                    count, error = rebuild_valuation_snapshots_for_account(account_id, "manual_rebuild")
+                if error:
+                    st.warning(f"평가액 기록 재계산을 완료하지 못했습니다: {error}")
+                else:
+                    st.success(f"평가액 기록 {count:,}건을 재계산했습니다.")
+                    st.rerun()
 
     snapshots = list_valuation_snapshots(account_id)
     render_valuation_snapshot_csv_editor(account_id, snapshots)
@@ -8449,11 +8451,12 @@ def valuation_page(account: dict[str, Any], rollup_state: dict[str, Any] | None 
         return
 
     latest_row = latest_valuation_snapshot(snapshots) or snapshots[-1]
-    metric_cols = st.columns(4, gap="small")
-    metric_cols[0].metric("보유 평가액", format_won(latest_row.get("valuation_amount")))
-    metric_cols[1].metric("입금 원금", format_won(latest_row.get("company_principal")))
-    metric_cols[2].metric("입금 대비 손익", format_won(latest_row.get("profit_loss")))
-    metric_cols[3].metric("입금 대비 수익률", format_pct(latest_row.get("profit_rate")))
+    with st.container(key="capture_valuation_summary_cards"):
+        metric_cols = st.columns(4, gap="small")
+        metric_cols[0].metric("보유 평가액", format_won(latest_row.get("valuation_amount")))
+        metric_cols[1].metric("입금 원금", format_won(latest_row.get("company_principal")))
+        metric_cols[2].metric("입금 대비 손익", format_won(latest_row.get("profit_loss")))
+        metric_cols[3].metric("입금 대비 수익률", format_pct(latest_row.get("profit_rate")))
 
     trend_frame = valuation_snapshot_trend_frame(snapshots)
     if not trend_frame.empty:
@@ -8486,7 +8489,8 @@ def valuation_page(account: dict[str, Any], rollup_state: dict[str, Any] | None 
             )
             .properties(height=320)
         )
-        st.altair_chart(line_chart, width="stretch")
+        with st.container(key="capture_valuation_chart"):
+            st.altair_chart(line_chart, width="stretch")
 
     display_rows: list[dict[str, Any]] = []
     for row in snapshots:
@@ -8506,7 +8510,8 @@ def valuation_page(account: dict[str, Any], rollup_state: dict[str, Any] | None 
                 "가격 fallback": ", ".join(map(str, missing_symbols)) if missing_symbols else "-",
             }
         )
-    st.dataframe(pd.DataFrame(display_rows), width="stretch", hide_index=True, height=420)
+    with st.container(key="capture_valuation_table"):
+        st.dataframe(pd.DataFrame(display_rows), width="stretch", hide_index=True, height=420)
 
 
 @st.fragment(run_every=REALTIME_STATUS_FRAGMENT_INTERVAL)

@@ -217,6 +217,18 @@ class ThemeStylesheetTests(unittest.TestCase):
         self.assertIn('st.container(border=True, key="trade-product-entry")', source)
         self.assertIn('st.container(border=True, key="trade-cash-flow-entry")', source)
 
+    def test_capture_wrappers_cover_trade_and_valuation_pages(self) -> None:
+        """UI 캡처용 wrapper key는 거래와 평가액 기록 페이지에도 유지한다."""
+
+        trade_source = inspect.getsource(dashboard_app.trade_entry_page)
+        valuation_source = inspect.getsource(dashboard_app.valuation_page)
+
+        self.assertIn('st.container(key="capture_trades_header")', trade_source)
+        self.assertIn('st.container(key="capture_valuation_header")', valuation_source)
+        self.assertIn('st.container(key="capture_valuation_summary_cards")', valuation_source)
+        self.assertIn('st.container(key="capture_valuation_chart")', valuation_source)
+        self.assertIn('st.container(key="capture_valuation_table")', valuation_source)
+
     def test_dashboard_secondary_panel_chart_heights_match(self) -> None:
         """선택 종목 트렌드와 보유 종목 수익률 차트 높이는 같은 값을 사용한다."""
 
@@ -295,6 +307,18 @@ class DemoQueryParamTests(unittest.TestCase):
                 self.assertEqual(dashboard_app.capture_current_date(), date(2026, 5, 15))
         finally:
             dashboard_app.st.query_params = original_query_params
+
+    def test_init_state_uses_capture_current_date_for_trade_inputs(self) -> None:
+        """거래 입력 기본 날짜는 캡처 모드에서 고정 기준일을 따를 수 있어야 한다."""
+
+        source = inspect.getsource(dashboard_app.init_state)
+
+        self.assertIn("st.session_state.setdefault(TRADE_DATE_KEY, capture_current_date())", source)
+        self.assertIn("st.session_state.setdefault(CASH_FLOW_DATE_KEY, capture_current_date())", source)
+        self.assertIn(
+            "st.session_state.setdefault(cash_flow_widget_key(CASH_FLOW_DATE_KEY, flow_type), capture_current_date())",
+            source,
+        )
 
     def test_maybe_enter_demo_from_query_param_starts_demo_for_guest(self) -> None:
         """비로그인 상태에서 ?demo=1이면 기존 데모 진입 흐름을 실행한다."""
@@ -685,6 +709,12 @@ class TradeFormResetTests(unittest.TestCase):
         self.assertIn("dashboard-overview-card--no-sparkline", stylesheet)
         self.assertIn("dashboard-overview-card--profit .dashboard-overview-card__sparkline", stylesheet)
         self.assertIn("dashboard_previous_day_change", overview_source)
+        self.assertIn('st.columns((0.42, 0.58), gap="medium"', overview_source)
+        self.assertIn("max-width: 1480px;", stylesheet)
+        self.assertIn("height: 220px;", stylesheet)
+        self.assertIn(".dashboard-overview-card:hover", stylesheet)
+        self.assertIn("border-radius: 26px !important;", stylesheet)
+        self.assertIn("background: #F4F7F6;", stylesheet)
 
     def test_dashboard_previous_day_change_uses_last_two_total_values(self) -> None:
         """히어로 증감값은 입금 대비 손익이 아니라 전일 대비 총자산 변화로 계산한다."""

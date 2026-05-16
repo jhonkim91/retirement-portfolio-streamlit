@@ -36,7 +36,7 @@ jobs:
         run: python -m playwright install --with-deps chromium
 
       - name: UI 캡처 생성
-        run: python scripts/capture_app.py --viewport all --out-dir artifacts/ui_captures
+        run: python scripts/capture_app.py --page all --viewport all --out-dir artifacts/ui_captures
 
       - name: UI 캡처 artifact 업로드
         uses: actions/upload-artifact@v4
