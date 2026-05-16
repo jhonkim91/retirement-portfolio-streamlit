@@ -134,6 +134,7 @@ streamlit run app.py --server.port 8501 --server.address 0.0.0.0 --server.fileWa
 - 기본 UI 캡처 자동화 코드는 `codex/ui-capture-automation` 브랜치에 `89c5e16 Add Streamlit UI capture automation`으로 커밋했고 `origin/codex/ui-capture-automation`에 push했다.
 - 이번 최신 변경은 `e9c1b04 Expand UI captures and refine dashboard design` 커밋으로 대시보드 UI 개선과 거래/평가액 기록 캡처 확장을 함께 반영한다.
 - 최신 반응형 UI 보강은 `eec7ac1 Refine responsive dashboard UI`, `9828696 Record responsive UI publish` 커밋으로 `codex/ui-capture-automation` 브랜치에 반영했고 `origin/codex/ui-capture-automation`에 push했다.
+- UI Capture GitHub Actions 시작 실패 보정은 `fcab67a Fix UI capture workflow actions` 커밋으로 반영했다.
 - GitHub draft PR은 `https://github.com/jhonkim91/retirement-portfolio-streamlit/pull/1`이다.
 - 원격 UI Capture run `25968169216`은 job 로그 생성 전 실패했고, workflow action version 보정 후 재실행 대상이다.
 - `gh` CLI는 `/home/vscode/.local/bin/gh`에 설치되어 있고 GitHub 계정 `jhonkim91` 인증 상태를 확인했다.
