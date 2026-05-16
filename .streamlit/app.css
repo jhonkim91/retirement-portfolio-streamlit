@@ -7,6 +7,7 @@
     --panel-alt: ${panel_alt_color};
     --surface: ${surface_color};
     --surface-strong: ${surface_strong_color};
+    --color-fill-light: #F8FBF6;
     --line-soft: ${border_soft_color};
     --border-emphasis: ${border_emphasis_color};
     --text-muted: ${text_muted_color};
@@ -34,7 +35,7 @@
     --panel-padding: 1.15rem 1.15rem 1.2rem;
     --section-gap: 1rem;
     --chart-gap: 0.85rem;
-    --dashboard-summary-card-height: 128px;
+    --dashboard-summary-card-height: 120px;
     --dashboard-secondary-panel-min-height: 560px;
 
     --auth-bg-start: ${auth_background_start_color};
@@ -2742,6 +2743,77 @@ div[role="dialog"] [data-testid="stFormSubmitButton"] > button {
     }
 }
 
+/* Streamlit 1.55 key 기반 flex wrapper 보강 */
+.dashboard-overview-card-grid.dashboard-summary-strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.72rem;
+    align-items: stretch;
+}
+
+.dashboard-overview-card-grid.dashboard-summary-strip .dashboard-overview-card {
+    flex: 1 1 calc(25% - 0.72rem);
+    height: 120px;
+    min-height: 120px;
+}
+
+.dashboard-overview-card-grid.dashboard-summary-strip .dashboard-overview-card__header {
+    margin-bottom: 0.58rem;
+}
+
+.dashboard-overview-card-grid.dashboard-summary-strip .dashboard-overview-card__value {
+    font-size: clamp(1rem, 1.1vw, 1.3rem);
+}
+
+.dashboard-overview-card-grid.dashboard-summary-strip .dashboard-overview-card--no-sparkline .dashboard-overview-card__value {
+    margin-top: 0.78rem;
+    text-align: left;
+}
+
+.dashboard-overview-card-grid.dashboard-summary-strip .dashboard-overview-card--no-sparkline .dashboard-overview-card__caption {
+    text-align: left;
+}
+
+.dashboard-overview-card-grid.dashboard-summary-strip .dashboard-overview-card__sparkline,
+.dashboard-overview-card-grid.dashboard-summary-strip .dashboard-overview-card::after {
+    display: none;
+}
+
+.st-key-dashboard-trend-controls [data-testid="stElementContainer"],
+.st-key-trade-form-cols [data-testid="stElementContainer"] {
+    width: auto !important;
+    min-width: 0 !important;
+}
+
+.st-key-trade-form-cols [data-testid="stHorizontalBlock"] {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.9rem !important;
+    align-items: stretch;
+}
+
+.st-key-trade-form-cols [data-testid="stHorizontalBlock"] > div,
+.st-key-trade-form-cols [data-testid="column"] {
+    flex: 1 1 calc(50% - 0.9rem) !important;
+    min-width: min(100%, 340px) !important;
+}
+
+@media (max-width: 1280px) {
+    .dashboard-overview-card-grid.dashboard-summary-strip .dashboard-overview-card {
+        flex-basis: calc(50% - 0.72rem);
+    }
+}
+
+@media (max-width: 860px) {
+    .dashboard-overview-card-grid.dashboard-summary-strip .dashboard-overview-card,
+    .st-key-trade-form-cols [data-testid="stHorizontalBlock"] > div,
+    .st-key-trade-form-cols [data-testid="column"] {
+        flex-basis: 100% !important;
+        min-width: 100% !important;
+        width: 100% !important;
+    }
+}
+
 @media (max-width: 820px) {
     .dashboard-metric-strip {
         grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -4185,5 +4257,160 @@ div[role="dialog"] [data-testid="stFormSubmitButton"] > button {
     .st-key-trade-log-panel .trade-log-pagination {
         align-items: flex-start;
         flex-direction: column;
+    }
+}
+
+/* 상단 요약 카드 통일 */
+.dashboard-summary-strip .stVerticalBlockBorderWrapper,
+.dashboard-summary-strip [data-testid="stVerticalBlockBorderWrapper"],
+.st-key-dashboard-summary-strip [data-testid="stVerticalBlockBorderWrapper"] {
+    min-height: 120px;
+    display: flex;
+    flex-direction: column;
+}
+
+.dashboard-summary-strip .stVerticalBlockBorderWrapper > div,
+.dashboard-summary-strip [data-testid="stVerticalBlockBorderWrapper"] > div,
+.st-key-dashboard-summary-strip [data-testid="stVerticalBlockBorderWrapper"] > div {
+    flex: 1 1 auto;
+}
+
+.dashboard-summary-strip .ghost-action,
+.st-key-dashboard-summary-strip .ghost-action,
+.st-key-dashboard-summary-strip .dashboard-summary-card__action--ghost {
+    min-width: 48px;
+}
+
+/* 카드 라벨 줄바꿈 제거 */
+.dashboard-summary-strip .card-label,
+.st-key-dashboard-summary-strip .card-label,
+.st-key-dashboard-summary-strip .dashboard-summary-card__label {
+    white-space: nowrap;
+    font-size: 0.85rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* 트렌드 컨트롤 컴팩트 레이아웃 */
+.trend-controls,
+.st-key-dashboard-trend-controls [data-testid="stHorizontalBlock"] {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px !important;
+    align-items: center;
+}
+
+.st-key-dashboard-trend-controls [data-testid="stHorizontalBlock"] > div,
+.st-key-dashboard-trend-controls [data-testid="column"] {
+    flex: 0 0 auto !important;
+    min-width: 0 !important;
+    width: auto !important;
+}
+
+.trend-controls .stSelectbox,
+.trend-controls [data-testid="stSelectbox"],
+.st-key-dashboard-trend-controls [data-testid="stSelectbox"] {
+    width: 120px;
+    min-width: 120px;
+}
+
+.trend-controls .stSelectbox [data-baseweb="select"] > div,
+.trend-controls [data-testid="stSelectbox"] [data-baseweb="select"] > div,
+.st-key-dashboard-trend-controls [data-baseweb="select"] > div {
+    width: 120px;
+    min-height: 30px;
+    height: 30px;
+    padding: 2px 8px;
+    font-size: 0.85rem;
+    border-radius: 6px;
+}
+
+.trend-controls .stSelectbox [data-baseweb="select"] span,
+.trend-controls [data-testid="stSelectbox"] [data-baseweb="select"] span,
+.st-key-dashboard-trend-controls [data-baseweb="select"] span,
+.st-key-dashboard-trend-controls [data-baseweb="select"] div {
+    font-size: 0.85rem;
+}
+
+.st-key-dashboard-trend-controls [data-testid="stButton"] > button {
+    min-height: 30px;
+    height: 30px;
+    border-radius: 6px;
+    padding: 2px 8px;
+    font-size: 0.85rem;
+}
+
+/* 실현손익 컬럼 색상 */
+.dataframe .positive,
+.st-key-trade-log-panel .trade-log-profit-rate--positive {
+    color: #2e7d32;
+}
+
+.dataframe .negative,
+.st-key-trade-log-panel .trade-log-profit-rate--negative {
+    color: #c62828;
+}
+
+/* 행 구분선 및 교차 음영 처리 */
+.dataframe tbody tr + tr td {
+    border-top: 1px solid #E2E4EC;
+}
+
+.dataframe tbody tr:nth-child(even) {
+    background-color: var(--color-fill-light);
+}
+
+[class*="st-key-trade-log-row-"] [data-testid="stHorizontalBlock"] {
+    border-bottom: 1px solid #E2E4EC;
+}
+
+[class*="st-key-trade-log-row-"]:nth-of-type(even) [data-testid="stHorizontalBlock"] {
+    background-color: var(--color-fill-light);
+}
+
+/* 차트 높이 조정 */
+.dashboard-charts .chart-container,
+.st-key-dashboard-secondary-grid .chart-container,
+.st-key-dashboard-panel-allocation [data-testid="stVerticalBlockBorderWrapper"],
+.st-key-dashboard-panel-selected-trend [data-testid="stVerticalBlockBorderWrapper"],
+.st-key-dashboard-panel-holdings [data-testid="stVerticalBlockBorderWrapper"] {
+    height: 560px;
+    min-height: 560px;
+}
+
+@media (max-width: 860px) {
+    .dashboard-summary-strip {
+        grid-template-columns: 1fr;
+    }
+
+    .st-key-dashboard-summary-strip [data-testid="stHorizontalBlock"],
+    .st-key-dashboard-secondary-grid [data-testid="stHorizontalBlock"] {
+        flex-direction: column;
+        flex-wrap: nowrap;
+        overflow-x: visible;
+    }
+
+    .st-key-dashboard-summary-strip [data-testid="column"],
+    .st-key-dashboard-secondary-grid [data-testid="column"] {
+        width: 100% !important;
+        min-width: 100% !important;
+        flex: 1 1 auto !important;
+    }
+
+    .trend-controls,
+    .st-key-dashboard-trend-controls [data-testid="stHorizontalBlock"],
+    .dashboard-charts {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .trend-controls .stSelectbox,
+    .trend-controls [data-testid="stSelectbox"],
+    .st-key-dashboard-trend-controls [data-testid="stSelectbox"],
+    .trend-controls .stSelectbox [data-baseweb="select"] > div,
+    .trend-controls [data-testid="stSelectbox"] [data-baseweb="select"] > div,
+    .st-key-dashboard-trend-controls [data-baseweb="select"] > div {
+        width: 100%;
+        min-width: 100%;
     }
 }

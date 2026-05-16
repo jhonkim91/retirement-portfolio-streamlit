@@ -8,6 +8,13 @@
 ## 최근 완료 변경 요약
 
 ### 2026-05-16
+- 대시보드/거래 UI 반응형 보강.
+  - Streamlit 1.55의 `class_name` 미지원에 맞춰 `key`와 `horizontal=True`로 상단 요약 카드, 선택 종목 트렌드 컨트롤, 거래 입력 패널의 flex wrapper를 구성.
+  - 요약 카드 높이를 120px로 고정하고 desktop flex wrap, mobile 1열 적층, 라벨 ellipsis를 보강.
+  - 선택 종목 트렌드 컨트롤은 desktop 한 줄 compact 배치, 860px 이하 세로 적층으로 정리.
+  - 상품 등록/현금 흐름 패널은 desktop 2열, mobile 1열로 유지되도록 CSS를 보강.
+  - 대시보드/거래 차트 높이를 560px 기준으로 통일하고, 실현손익 막대 차트 색상과 label 위치를 고정.
+  - CSS 중괄호 균형, compileall, `tests.test_app_dashboard`, 전체 unittest discover 검증 완료.
 - 대시보드 UI 개선 로컬 반영.
   - GitHub 원격 PR/커밋에는 해당 패치가 없어 보고서의 변경 의도를 로컬에 직접 적용.
   - 대시보드 block container 폭을 줄이고 overview hero/card 높이와 컬럼 비율을 조정해 첫 화면 균형을 개선.

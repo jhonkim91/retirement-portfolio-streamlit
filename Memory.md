@@ -38,7 +38,7 @@
 - [x] 데모 데이터 `데모 IRP`/`데모 주식` 2계좌 구성, 현재 보유 17개 종목, 5년치 입출금/매매일지 규칙 보강
 - [x] 자산 배분 트리맵 예수금 중립색 처리와 타일 수익률 라벨 표시 개선
 - [x] Streamlit UI 캡처 자동화와 거래/평가액 기록 페이지 캡처 확장
-- [x] 대시보드 UI 개선 로컬 반영
+- [x] 대시보드 UI 개선 로컬 반영 및 요약 카드/트렌드/거래 패널/차트 반응형 보강
 - [ ] temporal normalize migration 실제 적용 전 운영 `realtime_price_bars` 테이블 생성/노출 여부 결정
 
 ## 프로젝트 개요
@@ -53,8 +53,8 @@
 - 배포 앱: `https://retirement-portfolio-app-nh2vq9ferqnpehsslbykbe.streamlit.app/`
 
 ## 최근 변경 파일
-- `src/ui/app_core.py`: 대시보드/거래/평가액 기록 주요 UI 영역에 캡처용 `capture_*` wrapper 추가, `capture=1` 기준일과 거래 입력 기본 날짜 고정, overview 컬럼 비율 조정
-- `.streamlit/app.css`: dashboard max-width, overview hero/card, 기간 버튼, 패널 radius/shadow, treemap legend, 보유종목 테이블 스타일 보강
+- `src/ui/app_core.py`: 대시보드/거래/평가액 기록 주요 UI 영역에 캡처용 `capture_*` wrapper 추가, `capture=1` 기준일과 거래 입력 기본 날짜 고정, overview 컬럼 비율 조정, 요약 카드/트렌드 컨트롤/거래 입력 flex wrapper, 차트 높이 metadata, 실현손익 차트 색상 보강
+- `.streamlit/app.css`: dashboard max-width, overview hero/card, 기간 버튼, 패널 radius/shadow, treemap legend, 보유종목 테이블 스타일, 요약 카드 120px 높이/라벨, 트렌드 컨트롤, 거래 행 구분선, 거래 입력 2열/1열 responsive, 모바일 적층 레이아웃 보강
 - `config/capture_blocks.yaml`: 페이지별 블록 name, selector, PNG 파일명, required, hidden tab 활성화 설정 정의
 - `scripts/capture_app.py`: Playwright 기반 전체/블록 캡처, 로컬 Streamlit 자동 실행, page/viewport all, strict, manifest 생성, sidebar 상태 고정, loading 대기, selector 누락 로그 구현
 - `requirements-dev.txt`: UI 캡처용 `playwright`, `pyyaml` dev dependency 추가
@@ -63,7 +63,7 @@
 - `src/db.py`: 캡처 모드 데모 seed 기준일 고정용 `snapshot_base_date` 인자 추가
 - `src/auth.py`: 운영 Supabase URL 하드코딩 제거와 `https://*.supabase.co` URL 검증 복구
 - `src/market.py`: KRX 심볼 판별, Naver 가격/이력 fallback, `fetch_price_history_range()` 호환 함수 복구
-- `tests/test_app_dashboard.py`, `tests/test_db.py`: capture query, 고정 데모 기준일, 거래/평가액 캡처 wrapper 테스트 추가
+- `tests/test_app_dashboard.py`, `tests/test_db.py`: capture query, 고정 데모 기준일, 거래/평가액 캡처 wrapper, flex wrapper, 560px 차트 높이, 실현손익 차트 색상/라벨 테스트 추가
 - `docs/VALIDATION.md`, `docs/CHANGELOG.md`, `Memory.md`: 최신 검증 결과와 변경 요약 갱신
 
 ## 핵심 설계 결정
@@ -119,17 +119,13 @@ streamlit run app.py --server.port 8501 --server.address 0.0.0.0 --server.fileWa
 ```
 
 ## 최신 검증 결과
-- 작업 범위: 대시보드 UI 개선 로컬 반영 및 Streamlit UI 캡처 자동화 거래/평가액 기록 확장
-- 변경 파일: `.streamlit/app.css`, `src/ui/app_core.py`, `config/capture_blocks.yaml`, `scripts/capture_app.py`, `docs/ui_capture.md`, `docs/VALIDATION.md`, `docs/CHANGELOG.md`, `.github/workflows/ui-capture.yml`, `README.md`, `tests/test_app_dashboard.py`
-- GitHub 원격에는 별도 디자인 패치 PR/커밋이 없어 참고안을 로컬에 직접 반영했다.
+- 작업 범위: 대시보드 요약 카드/선택 종목 트렌드 컨트롤/거래 입력 패널/실현손익 차트 반응형 보강
+- 변경 파일: `.streamlit/app.css`, `src/ui/app_core.py`, `tests/test_app_dashboard.py`, `docs/VALIDATION.md`, `docs/CHANGELOG.md`, `Memory.md`
+- CSS 중괄호 균형 확인 성공 (`{` 679개, `}` 679개)
 - `python -m compileall app.py src scripts tests` 성공
-- CSS 중괄호 균형 확인 성공
-- `python -m unittest tests.test_app_dashboard` 성공, 121 tests
-- `python -m unittest discover -s tests -p "test_*.py"` 성공, 287 tests
-- 로컬 Streamlit `http://127.0.0.1:8525`를 캡처 전용 SQLite DB로 실행하고 `python scripts/capture_app.py --url "http://127.0.0.1:8525/?demo=1&capture=1" --page all --viewport all --strict --out-dir artifacts/ui_captures --wait-ms 30000` 성공
-- 대표 산출물: `artifacts/ui_captures/2026-05-16_161602/` (`dashboard/trades/valuation` × `desktop/tablet/mobile` 9개 manifest 모두 `success`, 누락 selector 없음)
-- 대시보드 UI 개선 확인 산출물: `artifacts/ui_captures/2026-05-16_162900/desktop/` (`manifest.status=success`, 누락 selector 없음)
-- 운영 DB 데이터 직접 수정, migration 추가, 배포, 원격 GitHub Actions 실행은 수행하지 않았다.
+- `python -m unittest tests.test_app_dashboard` 성공, 122 tests
+- `python -m unittest discover -s tests -p "test_*.py"` 성공, 288 tests
+- 이번 작업에서는 운영 DB 데이터 직접 수정, migration 추가, 배포, 원격 GitHub Actions 실행은 수행하지 않았다.
 
 ## Git/GitHub 상태
 - 기본 브랜치: `main`

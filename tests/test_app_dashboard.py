@@ -123,7 +123,7 @@ class ThemeStylesheetTests(unittest.TestCase):
         self.assertIn("--radius-lg: 18px;", stylesheet)
         self.assertIn("--shadow-card: 0 18px 42px rgba(23, 32, 51, 0.07);", stylesheet)
         self.assertIn("--panel-radius: var(--radius-lg);", stylesheet)
-        self.assertIn("--dashboard-summary-card-height: 128px;", stylesheet)
+        self.assertIn("--dashboard-summary-card-height: 120px;", stylesheet)
         self.assertIn("--dashboard-secondary-panel-min-height: 560px;", stylesheet)
         self.assertNotIn("--card-shadow:", stylesheet)
         self.assertIn('[data-testid="stSidebar"] {\n    background: rgba(255, 255, 255, 0.94);', stylesheet)
@@ -164,6 +164,12 @@ class ThemeStylesheetTests(unittest.TestCase):
         self.assertIn('.st-key-dashboard-panel-selected-trend [data-testid="stVerticalBlockBorderWrapper"]', stylesheet)
         self.assertIn('.st-key-dashboard-trend-controls [data-testid="column"] {\n    min-width: 0 !important;', stylesheet)
         self.assertIn('.st-key-dashboard-trend-controls [data-baseweb="select"] > div {\n    min-width: 0;', stylesheet)
+        self.assertIn(".dashboard-overview-card-grid.dashboard-summary-strip", stylesheet)
+        self.assertIn("height: 120px;\n    min-height: 120px;", stylesheet)
+        self.assertIn(".st-key-dashboard-panel-allocation [data-testid=\"stVerticalBlockBorderWrapper\"],\n.st-key-dashboard-panel-selected-trend [data-testid=\"stVerticalBlockBorderWrapper\"],\n.st-key-dashboard-panel-holdings [data-testid=\"stVerticalBlockBorderWrapper\"] {\n    height: 560px;", stylesheet)
+        self.assertIn(".st-key-trade-form-cols [data-testid=\"stHorizontalBlock\"] {\n    display: flex;\n    flex-wrap: wrap;", stylesheet)
+        self.assertIn("flex: 1 1 calc(50% - 0.9rem) !important;", stylesheet)
+        self.assertIn("@media (max-width: 860px) {\n    .dashboard-overview-card-grid.dashboard-summary-strip .dashboard-overview-card", stylesheet)
         self.assertIn('@media (max-width: 768px) {\n    .st-key-trade-form-cols [data-testid="stHorizontalBlock"]', stylesheet)
         self.assertIn('.st-key-trade-form-cols [data-testid="stHorizontalBlock"] > div,\n    .st-key-trade-form-cols [data-testid="column"] {\n        width: 100% !important;', stylesheet)
         self.assertIn('.st-key-trade-product-entry [data-testid="stHorizontalBlock"],\n    .st-key-trade-cash-flow-entry [data-testid="stHorizontalBlock"]', stylesheet)
@@ -213,9 +219,19 @@ class ThemeStylesheetTests(unittest.TestCase):
 
         source = inspect.getsource(dashboard_app.trade_entry_page)
 
-        self.assertIn('st.container(key="trade-form-cols")', source)
+        self.assertIn('st.container(key="trade-form-cols", horizontal=True, gap="small")', source)
         self.assertIn('st.container(border=True, key="trade-product-entry")', source)
         self.assertIn('st.container(border=True, key="trade-cash-flow-entry")', source)
+
+    def test_dashboard_summary_and_trend_controls_use_flex_wrappers(self) -> None:
+        """상단 요약 카드와 선택 종목 컨트롤은 key 기반 flex wrapper를 사용한다."""
+
+        overview_source = inspect.getsource(dashboard_app.render_dashboard_top_overview_option2)
+        dashboard_source = inspect.getsource(dashboard_app.dashboard_page)
+
+        self.assertIn('st.container(key="dashboard-summary-strip", horizontal=True, gap="small")', overview_source)
+        self.assertIn("dashboard-overview-card-grid dashboard-summary-strip", overview_source)
+        self.assertIn('st.container(key="dashboard-trend-controls", horizontal=True', dashboard_source)
 
     def test_capture_wrappers_cover_trade_and_valuation_pages(self) -> None:
         """UI 캡처용 wrapper key는 거래와 평가액 기록 페이지에도 유지한다."""
@@ -236,6 +252,9 @@ class ThemeStylesheetTests(unittest.TestCase):
             dashboard_app.DASHBOARD_DETAIL_CHART_HEIGHT,
             dashboard_app.DASHBOARD_HOLDINGS_COMPARE_CHART_HEIGHT,
         )
+        self.assertEqual(dashboard_app.DASHBOARD_CHART_HEIGHT, 560)
+        self.assertEqual(dashboard_app.DASHBOARD_DETAIL_CHART_HEIGHT, 560)
+        self.assertEqual(dashboard_app.DASHBOARD_HOLDINGS_CHART_HEIGHT, 560)
 
     def test_dashboard_card_renderers_add_tone_and_delta_classes(self) -> None:
         """KPI 카드 렌더러는 카드/tone/delta 클래스를 HTML에 포함한다."""
@@ -1940,9 +1959,14 @@ class RealizedProfitBarTests(unittest.TestCase):
         series_data = options["series"][0]["data"]
         self.assertEqual(series_data[0]["label"]["formatter"], "₩325,000")
         self.assertEqual(series_data[1]["label"]["formatter"], "₩-85,000")
+        self.assertEqual(series_data[0]["label"]["position"], "top")
+        self.assertEqual(series_data[1]["label"]["position"], "top")
+        self.assertEqual(series_data[0]["itemStyle"]["color"], "#2e7d32")
+        self.assertEqual(series_data[1]["itemStyle"]["color"], "#c62828")
         self.assertEqual(series_data[0]["itemStyle"]["borderRadius"], [10, 10, 0, 0])
         self.assertEqual(series_data[1]["itemStyle"]["borderRadius"], [0, 0, 10, 10])
         self.assertEqual(options["yAxis"]["name"], "실현손익")
+        self.assertEqual(options["_meta"]["height"], 560)
 
     def test_realized_monthly_profit_frame_and_options_group_by_sell_month(self) -> None:
         """월별 실현손익 차트는 매도월 기준으로 손익과 포지션 수를 집계한다."""
@@ -1963,6 +1987,9 @@ class RealizedProfitBarTests(unittest.TestCase):
         assert options is not None
         self.assertEqual(options["yAxis"]["name"], "월별 실현손익")
         self.assertEqual(options["series"][0]["data"][1]["value"], 70000.0)
+        self.assertEqual(options["_meta"]["height"], 560)
+        self.assertEqual(options["series"][0]["data"][1]["itemStyle"]["color"], "#2e7d32")
+        self.assertEqual(options["series"][0]["data"][1]["label"]["position"], "top")
 
     def test_realized_contribution_html_marks_positive_and_negative_rows(self) -> None:
         """상품별 기여 HTML은 수익/손실 tone과 폭 스타일을 포함한다."""
@@ -2642,6 +2669,7 @@ class SelectedHoldingTrendOptionTests(unittest.TestCase):
         self.assertEqual(options["series"][0]["type"], "line")
         self.assertTrue(options["series"][0]["smooth"])
         self.assertIn("areaStyle", options["series"][0])
+        self.assertEqual(options["_meta"]["height"], 560)
 
     def test_selected_holding_trend_options_adds_zero_reference_for_profit_rate(self) -> None:
         """수익률 차트는 0% 기준선을 함께 표시한다."""
