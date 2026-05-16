@@ -59,7 +59,7 @@
 - `scripts/capture_app.py`: Playwright 기반 전체/블록 캡처, 로컬 Streamlit 자동 실행, page/viewport all, strict, manifest 생성, sidebar 상태 고정, loading 대기, selector 누락 로그 구현
 - `requirements-dev.txt`: UI 캡처용 `playwright`, `pyyaml` dev dependency 추가
 - `docs/ui_capture.md`, `README.md`: 로컬 설치/실행, 산출물 구조, 보안 주의 문서화
-- `.github/workflows/ui-capture.yml`: GitHub Actions에서 캡처 후 artifact 업로드 workflow 추가
+- `.github/workflows/ui-capture.yml`: GitHub Actions에서 캡처 후 artifact 업로드 workflow 추가, checkout/setup-python 안정 버전 고정
 - `src/db.py`: 캡처 모드 데모 seed 기준일 고정용 `snapshot_base_date` 인자 추가
 - `src/auth.py`: 운영 Supabase URL 하드코딩 제거와 `https://*.supabase.co` URL 검증 복구
 - `src/market.py`: KRX 심볼 판별, Naver 가격/이력 fallback, `fetch_price_history_range()` 호환 함수 복구
@@ -119,22 +119,25 @@ streamlit run app.py --server.port 8501 --server.address 0.0.0.0 --server.fileWa
 ```
 
 ## 최신 검증 결과
-- 작업 범위: 대시보드 요약 카드/선택 종목 트렌드 컨트롤/거래 입력 패널/실현손익 차트 반응형 보강
-- 변경 파일: `.streamlit/app.css`, `src/ui/app_core.py`, `tests/test_app_dashboard.py`, `docs/VALIDATION.md`, `docs/CHANGELOG.md`, `Memory.md`
+- 작업 범위: 대시보드 요약 카드/선택 종목 트렌드 컨트롤/거래 입력 패널/실현손익 차트 반응형 보강, UI Capture GitHub Actions 시작 실패 보정
+- 변경 파일: `.streamlit/app.css`, `src/ui/app_core.py`, `tests/test_app_dashboard.py`, `.github/workflows/ui-capture.yml`, `docs/VALIDATION.md`, `docs/CHANGELOG.md`, `Memory.md`
 - CSS 중괄호 균형 확인 성공 (`{` 679개, `}` 679개)
 - `python -m compileall app.py src scripts tests` 성공
 - `python -m unittest tests.test_app_dashboard` 성공, 122 tests
 - `python -m unittest discover -s tests -p "test_*.py"` 성공, 288 tests
-- 이번 작업에서는 운영 DB 데이터 직접 수정, migration 추가, 배포, 원격 GitHub Actions 실행은 수행하지 않았다.
+- `.github/workflows/ui-capture.yml` YAML 파싱 및 action version 확인 성공
+- 운영 DB 데이터 직접 수정과 migration 추가는 수행하지 않았다.
 
 ## Git/GitHub 상태
 - 기본 브랜치: `main`
 - 최근 배포 코드 커밋: `0f19336 Add demo query auto entry`
 - 기본 UI 캡처 자동화 코드는 `codex/ui-capture-automation` 브랜치에 `89c5e16 Add Streamlit UI capture automation`으로 커밋했고 `origin/codex/ui-capture-automation`에 push했다.
 - 이번 최신 변경은 `e9c1b04 Expand UI captures and refine dashboard design` 커밋으로 대시보드 UI 개선과 거래/평가액 기록 캡처 확장을 함께 반영한다.
-- 최신 반응형 UI 보강은 `eec7ac1 Refine responsive dashboard UI` 커밋으로 `codex/ui-capture-automation` 브랜치에 반영했다.
+- 최신 반응형 UI 보강은 `eec7ac1 Refine responsive dashboard UI`, `9828696 Record responsive UI publish` 커밋으로 `codex/ui-capture-automation` 브랜치에 반영했고 `origin/codex/ui-capture-automation`에 push했다.
+- GitHub draft PR은 `https://github.com/jhonkim91/retirement-portfolio-streamlit/pull/1`이다.
+- 원격 UI Capture run `25968169216`은 job 로그 생성 전 실패했고, workflow action version 보정 후 재실행 대상이다.
 - `gh` CLI는 `/home/vscode/.local/bin/gh`에 설치되어 있고 GitHub 계정 `jhonkim91` 인증 상태를 확인했다.
-- 워크트리에는 이번 요청 전부터 `data/portfolio.db`, `src/analytics.py`, `src/db.py`, 테스트 파일, 로컬 도구 디렉터리, 산출물 등 여러 변경/미추적 파일이 함께 있었다.
+- 워크트리에는 이번 요청 전부터 `data/portfolio.db`, 로컬 도구 디렉터리, 캡처 산출물 등 여러 변경/미추적 파일이 함께 있었다.
 - 커밋 시 요청 관련 파일만 선별하고 `data/portfolio.db`, `.local/`, `.playtools*/`, `.playwright-browsers/`, `.vscode/`, `artifacts/`, `data/kis_cache/` 등 로컬 산출물은 제외한다.
 
 ## 운영 시크릿 메모
