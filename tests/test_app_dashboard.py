@@ -277,6 +277,25 @@ class DemoQueryParamTests(unittest.TestCase):
         for value in ("", "0", "false", "user", []):
             self.assertFalse(dashboard_app.is_demo_query_requested(value))
 
+    def test_is_capture_query_requested_accepts_supported_values(self) -> None:
+        """capture query parameter는 데모와 같은 명시 허용값만 활성화한다."""
+
+        for value in ("1", "true", "yes", "demo", ["1"]):
+            self.assertTrue(dashboard_app.is_capture_query_requested(value))
+        for value in ("", "0", "false", "user", []):
+            self.assertFalse(dashboard_app.is_capture_query_requested(value))
+
+    def test_capture_current_date_uses_fixed_reference_date_for_capture(self) -> None:
+        """캡처 모드는 현재 날짜 대신 고정 기준일을 사용한다."""
+
+        original_query_params = dashboard_app.st.query_params
+        dashboard_app.st.query_params = {"capture": "1"}
+        try:
+            with patch.dict("os.environ", {"PORTFOLIO_CAPTURE_REFERENCE_DATE": "2026-05-15"}):
+                self.assertEqual(dashboard_app.capture_current_date(), date(2026, 5, 15))
+        finally:
+            dashboard_app.st.query_params = original_query_params
+
     def test_maybe_enter_demo_from_query_param_starts_demo_for_guest(self) -> None:
         """비로그인 상태에서 ?demo=1이면 기존 데모 진입 흐름을 실행한다."""
 
@@ -2014,6 +2033,58 @@ class AllocationTreemapVisualMapTests(unittest.TestCase):
         self.assertIsNotNone(options)
         assert options is not None
         self.assertEqual(options["visualMap"]["outOfRange"]["colorAlpha"], 0.0)
+
+    def test_allocation_treemap_renders_cash_as_neutral_without_profit_rate_mapping(self) -> None:
+        """예수금은 수익률 visualMap에서 제외하고 중립 회색으로 표시한다."""
+
+        holdings = [
+            {
+                "product_name": "고수익 ETF",
+                "symbol": "HIGH",
+                "asset_type": "risk",
+                "quantity": 1,
+                "avg_cost": 100,
+                "current_price": 250,
+            },
+            {
+                "product_name": "손실 ETF",
+                "symbol": "LOW",
+                "asset_type": "safe",
+                "quantity": 1,
+                "avg_cost": 100,
+                "current_price": 90,
+            },
+        ]
+        summary = {
+            "allocation": {
+                "risk": 250,
+                "safe": 90,
+                "cash": 50,
+            },
+            "cash": 50,
+        }
+
+        options = dashboard_app.allocation_treemap_options(summary, holdings, include_market_details=False)
+
+        self.assertIsNotNone(options)
+        assert options is not None
+        self.assertEqual(options["visualMap"]["min"], -10.0)
+        self.assertEqual(options["visualMap"]["max"], 150.0)
+
+        root_nodes = options["series"][0]["data"]
+        cash_node = next(node for node in root_nodes if node["name"] == "현금")
+        cash_leaf = cash_node["children"][0]
+        self.assertEqual(cash_node["itemStyle"]["color"], dashboard_app.FEARGREED_FLAT_COLOR)
+        self.assertEqual(cash_node["profit_rate"], None)
+        self.assertEqual(cash_node["value"], [50, None])
+        self.assertEqual(cash_leaf["node_kind"], "cash")
+        self.assertEqual(cash_leaf["value"], [50, None])
+        self.assertEqual(cash_leaf["itemStyle"]["color"], dashboard_app.FEARGREED_FLAT_COLOR)
+
+        label_formatter = str(options["series"][0]["label"]["formatter"])
+        self.assertIn("data.node_kind === 'cash'", label_formatter)
+        self.assertIn("\\n현금", label_formatter)
+        self.assertIn("holding_profit_text", label_formatter)
 
     def test_allocation_treemap_can_skip_intraday_market_details(self) -> None:
         """ECharts 미사용 경로에서는 자산배분 옵션 생성 중 외부 시세 조회를 건너뛴다."""

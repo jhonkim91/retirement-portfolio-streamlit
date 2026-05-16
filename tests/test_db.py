@@ -13,6 +13,7 @@ from src import sqlite_db
 from src.db import (
     BACKEND_SQLITE,
     BACKEND_SUPABASE,
+    _demo_cash_balance_from_spec,
     _demo_workspace_blueprint,
     _select_initial_backend,
     _sqlite_delete_trade_log,
@@ -503,7 +504,7 @@ class DemoWorkspaceSeedTests(unittest.TestCase):
                     "snapshot_date": "2026-05-08",
                 },
                 {
-                    "name": "데모 일반계좌",
+                    "name": "데모 주식",
                     "account_type": "brokerage",
                     "opening_cash": 0.0,
                     "cash_flows": (),
@@ -523,6 +524,7 @@ class DemoWorkspaceSeedTests(unittest.TestCase):
     @patch("src.db.record_cash_flow")
     @patch("src.db.record_trade")
     @patch("src.db.set_holding_price")
+    @patch("src.db.update_cash_balance")
     @patch("src.db.record_account_snapshot")
     @patch("src.db._demo_account_totals", return_value=(0.0, 0.0, 0.0))
     @patch("src.db.list_holdings", return_value=[])
@@ -531,6 +533,7 @@ class DemoWorkspaceSeedTests(unittest.TestCase):
         _list_holdings_mock,
         _demo_totals_mock,
         record_snapshot_mock,
+        update_cash_balance_mock,
         _set_holding_price_mock,
         _record_trade_mock,
         _record_cash_flow_mock,
@@ -545,6 +548,7 @@ class DemoWorkspaceSeedTests(unittest.TestCase):
         list_accounts_mock.return_value = [
             {"id": 18, "name": "데모 IRP"},
             {"id": 19, "name": "데모 일반계좌"},
+            {"id": 20, "name": "데모 주식"},
         ]
         create_account_mock.side_effect = [21, 22]
 
@@ -553,6 +557,7 @@ class DemoWorkspaceSeedTests(unittest.TestCase):
         self.assertEqual(
             delete_account_mock.call_args_list,
             [
+                unittest.mock.call(20),
                 unittest.mock.call(19),
                 unittest.mock.call(18),
             ],
@@ -560,8 +565,26 @@ class DemoWorkspaceSeedTests(unittest.TestCase):
         self.assertTrue(result["created"])
         self.assertEqual(result["selected_account_id"], 21)
         self.assertEqual(create_account_mock.call_count, 2)
+        self.assertEqual(update_cash_balance_mock.call_count, 2)
         self.assertEqual(record_snapshot_mock.call_count, 2)
         self.assertIn("초기화", str(result["message"]))
+
+    def test_demo_cash_balance_from_spec_reflects_flows_and_trades(self) -> None:
+        """데모 계좌 현금은 입출금과 매수/매도 원장을 모두 반영한다."""
+
+        account_spec = {
+            "opening_cash": 1_000.0,
+            "cash_flows": (
+                {"flow_type": "personal_deposit", "amount": 500},
+                {"flow_type": "withdraw", "amount": 100},
+            ),
+            "trades": (
+                {"symbol": "005930", "trade_type": "buy", "quantity": 2, "price": 100},
+                {"symbol": "005930", "trade_type": "sell", "quantity": 1, "price": 50},
+            ),
+        }
+
+        self.assertEqual(_demo_cash_balance_from_spec(account_spec), 1_250.0)
 
     def test_demo_workspace_blueprint_spans_five_years_with_diverse_activity(self) -> None:
         """기본 데모 블루프린트가 장기 투자 히스토리와 다양한 이벤트를 포함하는지 확인한다."""
@@ -576,6 +599,31 @@ class DemoWorkspaceSeedTests(unittest.TestCase):
         asset_types: set[str] = set()
         flow_types: set[str] = set()
         traded_symbols: set[str] = set()
+        current_symbol_quantities: dict[str, float] = {}
+        account_names = {str(item["name"]) for item in accounts}
+        account_types = {str(item["account_type"]) for item in accounts}
+        profit_trade_count = 0
+        loss_trade_count = 0
+        stock_like_product_names = {
+            "삼성전자",
+            "SK하이닉스",
+            "두산에너빌리티",
+            "카카오",
+            "NAVER",
+            "한화에어로스페이스",
+            "에코프로비엠",
+            "Apple",
+            "포스코퓨처엠",
+        }
+        retirement_allowed_symbols = {
+            "148070",
+            "329200",
+            "360750",
+            "381170",
+            "411060",
+            "434730",
+            "475080",
+        }
 
         for account_spec in accounts:
             trade_dates.extend(str(item["trade_date"]) for item in account_spec["cash_flows"])
@@ -585,14 +633,51 @@ class DemoWorkspaceSeedTests(unittest.TestCase):
             flow_types.update(str(item["flow_type"]) for item in account_spec["cash_flows"])
             traded_symbols.update(str(item["symbol"]) for item in account_spec["trades"])
 
+            per_account_flow_types = {str(item["flow_type"]) for item in account_spec["cash_flows"]}
+            per_account_symbols = {str(item["symbol"]) for item in account_spec["trades"]}
+            self.assertIn("personal_deposit", per_account_flow_types)
+            self.assertIn("withdraw", per_account_flow_types)
+            self.assertGreaterEqual(len(per_account_symbols), 5)
+            self.assertGreaterEqual(_demo_cash_balance_from_spec(account_spec), 0)
+            self.assertTrue(all(str(item.get("notes") or "").strip() for item in account_spec["cash_flows"]))
+            self.assertTrue(all(str(item.get("notes") or "").strip() for item in account_spec["trades"]))
+
+            price_updates = account_spec["price_updates"]
+            for trade in account_spec["trades"]:
+                symbol = str(trade["symbol"])
+                quantity = float(trade["quantity"])
+                if str(trade["trade_type"]) == "buy":
+                    current_symbol_quantities[symbol] = current_symbol_quantities.get(symbol, 0.0) + quantity
+                elif str(trade["trade_type"]) == "sell":
+                    current_symbol_quantities[symbol] = current_symbol_quantities.get(symbol, 0.0) - quantity
+                if str(trade["trade_type"]) != "buy":
+                    continue
+                current_price = price_updates.get(str(trade["symbol"]))
+                if current_price is None:
+                    continue
+                price_delta = float(current_price) - float(trade["price"])
+                if price_delta > 0:
+                    profit_trade_count += 1
+                elif price_delta < 0:
+                    loss_trade_count += 1
+
         earliest_date = min(date.fromisoformat(item) for item in trade_dates)
         latest_date = max(date.fromisoformat(item) for item in trade_dates)
+        current_symbols = {
+            symbol
+            for symbol, quantity in current_symbol_quantities.items()
+            if quantity > 0
+        }
 
+        self.assertEqual(account_names, {"데모 IRP", "데모 주식"})
+        self.assertEqual(account_types, {"retirement", "brokerage"})
         self.assertGreaterEqual((latest_date - earliest_date).days, 365 * 4 + 180)
         self.assertIn("sell", trade_types)
         self.assertIn("withdraw", flow_types)
         self.assertEqual(asset_types, {"risk", "safe"})
         self.assertGreaterEqual(len(traded_symbols), 10)
+        self.assertGreaterEqual(len(current_symbols), 10)
+        self.assertLessEqual(len(current_symbols), 20)
         all_product_names = {
             str(item["product_name"])
             for account_spec in accounts
@@ -602,7 +687,34 @@ class DemoWorkspaceSeedTests(unittest.TestCase):
         self.assertIn("SK하이닉스", all_product_names)
         self.assertIn("두산에너빌리티", all_product_names)
         self.assertTrue(any("원자력" in name for name in all_product_names))
+        self.assertGreater(profit_trade_count, 0)
+        self.assertGreater(loss_trade_count, 0)
+
+        retirement_account = next(item for item in accounts if item["account_type"] == "retirement")
+        brokerage_account = next(item for item in accounts if item["account_type"] == "brokerage")
+        retirement_symbols = {str(item["symbol"]) for item in retirement_account["trades"]}
+        retirement_product_names = {str(item["product_name"]) for item in retirement_account["trades"]}
+        brokerage_product_names = {str(item["product_name"]) for item in brokerage_account["trades"]}
+        self.assertEqual(retirement_symbols, retirement_allowed_symbols)
+        self.assertTrue(retirement_product_names.isdisjoint(stock_like_product_names))
+        self.assertTrue(stock_like_product_names.intersection(brokerage_product_names))
         self.assertEqual(tuple(blueprint["transfers"]), ())
+
+    def test_demo_workspace_blueprint_accepts_fixed_snapshot_base_date(self) -> None:
+        """캡처 모드에서 데모 블루프린트 날짜를 고정할 수 있다."""
+
+        blueprint = _demo_workspace_blueprint(snapshot_base_date=date(2026, 5, 15))
+        accounts = list(blueprint["accounts"])
+
+        self.assertTrue(accounts)
+        self.assertTrue(all(account["snapshot_date"] == "2026-05-15" for account in accounts))
+        trade_dates = [
+            str(trade["trade_date"])
+            for account in accounts
+            for trade in account.get("trades", ())
+        ]
+        self.assertTrue(trade_dates)
+        self.assertLessEqual(max(trade_dates), "2026-05-15")
 
 
 class ExportTradeLogFilterTests(unittest.TestCase):

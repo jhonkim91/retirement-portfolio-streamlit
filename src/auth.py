@@ -2,13 +2,11 @@ from __future__ import annotations
 
 import os
 import time
-from typing import TYPE_CHECKING, Any
+from typing import Any
 from urllib.parse import urlparse
 
 import streamlit as st
-
-if TYPE_CHECKING:
-    from supabase import Client
+from supabase import Client, create_client
 
 
 DEFAULT_SUPABASE_URL = ""
@@ -46,13 +44,6 @@ def _supabase_url() -> str:
     return _get_config_value("SUPABASE_URL", DEFAULT_SUPABASE_URL)
 
 
-def _is_valid_supabase_url(url: str) -> bool:
-    """Supabase hosted 프로젝트 URL 형식인지 확인한다."""
-
-    parsed = urlparse(str(url or "").strip())
-    return parsed.scheme == "https" and parsed.netloc.endswith(".supabase.co")
-
-
 def _supabase_key() -> str:
     """현재 세션에서 사용할 Supabase 키를 반환한다."""
 
@@ -83,7 +74,9 @@ def has_demo_credentials() -> bool:
 def is_enabled() -> bool:
     """현재 실행 환경에 Supabase 인증 설정이 있는지 확인한다."""
 
-    return _is_valid_supabase_url(_supabase_url()) and bool(_supabase_key())
+    parsed_url = urlparse(_supabase_url())
+    has_valid_url = parsed_url.scheme == "https" and parsed_url.netloc.endswith(".supabase.co")
+    return bool(has_valid_url and _supabase_key())
 
 
 def _serialize_session(session: Any) -> dict[str, Any]:
@@ -174,14 +167,6 @@ def _raw_session() -> dict[str, Any] | None:
     return session if isinstance(session, dict) else None
 
 
-def _create_client() -> Client:
-    """Supabase 클라이언트를 실제 네트워크 인증 작업 직전에 로드해 생성한다."""
-
-    from supabase import create_client
-
-    return create_client(_supabase_url(), _supabase_key())
-
-
 def get_client(*, refresh_if_needed: bool = False) -> Client:
     """현재 세션 기준 Supabase 클라이언트를 반환한다.
     
@@ -193,7 +178,7 @@ def get_client(*, refresh_if_needed: bool = False) -> Client:
     state = _client_state()
     client = state.get("client")
     if client is None:
-        client = _create_client()
+        client = create_client(_supabase_url(), _supabase_key())
         state["client"] = client
         state["session_signature"] = ""
 
@@ -218,7 +203,7 @@ def get_client(*, refresh_if_needed: bool = False) -> Client:
         response = client.auth.set_session(access_token, refresh_token)
     except Exception:
         clear_session()
-        return _create_client()
+        return create_client(_supabase_url(), _supabase_key())
 
     if response.session:
         _save_session(response.session)

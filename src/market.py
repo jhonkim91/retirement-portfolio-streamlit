@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import ast
 from datetime import date, timedelta
 import html
 import re
@@ -102,9 +101,12 @@ def is_krx_code(code: str) -> bool:
 
 
 def is_krx_symbol(symbol: str) -> bool:
-    """거래소 suffix 포함 여부와 무관하게 KRX 상장 코드인지 확인한다."""
+    """국내 상장 코드 또는 `.KS/.KQ` 접미사가 붙은 심볼인지 판별한다."""
 
-    return is_krx_code(clean_code(symbol))
+    raw = str(symbol or "").strip().upper()
+    if re.fullmatch(rf"{KRX_LISTED_CODE_PATTERN}\.(KS|KQ)", raw):
+        return True
+    return is_krx_code(raw)
 
 
 def is_fund_code(code: str) -> bool:
@@ -119,13 +121,20 @@ def is_global_symbol_query(query: str) -> bool:
 def prefers_kis_quote(symbol: str) -> bool:
     """현재 심볼이 KIS REST 우선 조회 대상인지 판별한다."""
 
-    return is_kis_enabled() and is_kis_domestic_symbol(symbol)
+    return is_kis_enabled() and is_kis_domestic_symbol(symbol) and not is_alphanumeric_krx_symbol(symbol)
 
 
 def supports_kis_history(symbol: str, period: str) -> bool:
     """기간 제한을 고려해 KIS 일봉을 우선 적용할지 판별한다."""
 
     return prefers_kis_quote(symbol) and period in {"1mo", "3mo"}
+
+
+def is_alphanumeric_krx_symbol(symbol: str) -> bool:
+    """숫자만 있는 종목이 아닌 국내 6자리 혼합 코드를 판별한다."""
+
+    cleaned = clean_code(symbol)
+    return is_krx_code(cleaned) and not cleaned.isdigit()
 
 
 def resolve_kis_sector_label(symbol: Any) -> str | None:
@@ -567,117 +576,60 @@ def _empty_intraday_snapshot(normalized: str) -> dict[str, Any]:
     }
 
 
-def _to_float_or_none(value: Any) -> float | None:
-    """외부 시세 응답 값을 float로 변환하고 실패하면 None을 반환한다."""
+def _naver_chart_history(symbol: str, *, count: int) -> pd.DataFrame:
+    """Naver 일봉 차트 API에서 최근 종가 이력을 조회한다."""
 
-    try:
-        if value in (None, ""):
-            return None
-        return float(str(value).replace(",", "").strip())
-    except (TypeError, ValueError):
-        return None
-
-
-def _parse_naver_sise_json(text: str) -> list[list[Any]]:
-    """Naver siseJson 응답의 JS 배열 문자열을 행 목록으로 변환한다."""
-
-    raw_text = str(text or "").strip()
-    if not raw_text:
-        return []
-
-    try:
-        payload = ast.literal_eval(re.sub(r"\bnull\b", "None", raw_text))
-    except (SyntaxError, ValueError):
-        return []
-
-    if not isinstance(payload, list):
-        return []
-
-    rows: list[list[Any]] = []
-    for row in payload[1:]:
-        if isinstance(row, list) and len(row) >= 5:
-            rows.append(row)
-    return rows
-
-
-def _fetch_naver_sise_frame(symbol: str, *, timeframe: str, start_date: date, end_date: date) -> pd.DataFrame:
-    """Naver 차트 JSON에서 국내 종목의 일봉/분봉 프레임을 가져온다."""
-
-    code = clean_code(symbol)
-    if not is_krx_code(code):
-        return pd.DataFrame(columns=["datetime", "close", "symbol"])
-
-    try:
-        response = requests.get(
-            "https://api.finance.naver.com/siseJson.naver",
-            params={
-                "symbol": code,
-                "requestType": "1",
-                "startTime": start_date.strftime("%Y%m%d"),
-                "endTime": end_date.strftime("%Y%m%d"),
-                "timeframe": timeframe,
-            },
-            headers=NAVER_HEADERS,
-            timeout=8,
-        )
-    except Exception:
-        return pd.DataFrame(columns=["datetime", "close", "symbol"])
-
+    cleaned = clean_code(symbol)
+    if not is_krx_code(cleaned):
+        return pd.DataFrame(columns=["date", "close", "symbol"])
+    response = requests.get(
+        "https://fchart.stock.naver.com/sise.nhn",
+        params={
+            "symbol": cleaned,
+            "timeframe": "day",
+            "count": max(int(count or 1), 1),
+            "requestType": 0,
+        },
+        headers=NAVER_HEADERS,
+        timeout=8,
+    )
     if response.status_code != 200:
-        return pd.DataFrame(columns=["datetime", "close", "symbol"])
+        return pd.DataFrame(columns=["date", "close", "symbol"])
 
-    parsed_rows = _parse_naver_sise_json(response.text)
-    normalized_symbol = normalize_symbol(symbol)
     rows: list[dict[str, Any]] = []
-    for row in parsed_rows:
-        raw_datetime = str(row[0] or "").strip()
-        close_value = _to_float_or_none(row[4])
-        if close_value is None:
+    for raw_data in re.findall(r'data="([^"]+)"', response.text):
+        parts = raw_data.split("|")
+        if len(parts) < 5:
             continue
-
-        is_minute_row = len(raw_datetime) >= 12
-        date_format = "%Y%m%d%H%M" if is_minute_row else "%Y%m%d"
-        parsed_datetime = pd.to_datetime(
-            raw_datetime[:12 if is_minute_row else 8],
-            format=date_format,
-            errors="coerce",
-        )
-        if pd.isna(parsed_datetime):
+        trade_date = pd.to_datetime(parts[0], format="%Y%m%d", errors="coerce")
+        if pd.isna(trade_date):
+            continue
+        try:
+            close_value = float(str(parts[4]).replace(",", ""))
+        except ValueError:
             continue
         rows.append(
             {
-                "datetime": parsed_datetime,
-                "close": float(close_value),
-                "symbol": normalized_symbol,
+                "date": pd.Timestamp(trade_date).date(),
+                "close": close_value,
+                "symbol": normalize_symbol(cleaned),
             }
         )
-
-    if not rows:
-        return pd.DataFrame(columns=["datetime", "close", "symbol"])
-
-    frame = pd.DataFrame(rows)
-    return frame.sort_values("datetime").drop_duplicates(subset=["datetime"], keep="last").reset_index(drop=True)
+    return pd.DataFrame(rows, columns=["date", "close", "symbol"])
 
 
 def _fetch_latest_price_from_naver(symbol: str) -> dict[str, Any]:
-    """Naver 일봉 JSON으로 국내 종목의 최신 종가를 조회한다."""
+    """Naver 일봉 차트에서 가장 최근 종가를 조회한다."""
 
     normalized = normalize_symbol(symbol)
-    today = date.today()
-    frame = _fetch_naver_sise_frame(
-        normalized,
-        timeframe="day",
-        start_date=today - timedelta(days=10),
-        end_date=today,
-    )
-    if frame.empty:
+    history = _naver_chart_history(normalized, count=5)
+    if history.empty:
         raise ValueError(f"{normalized} Naver 가격 데이터가 비어 있습니다.")
-
-    last_row = frame.iloc[-1]
+    latest = history.sort_values("date").iloc[-1]
     return {
         "symbol": normalized,
-        "price": float(last_row["close"]),
-        "as_of": pd.Timestamp(last_row["datetime"]).date().isoformat(),
+        "price": float(latest["close"]),
+        "as_of": pd.Timestamp(latest["date"]).date().isoformat(),
         "source": "Naver",
     }
 
@@ -777,63 +729,28 @@ def _fetch_intraday_price_snapshot_from_yfinance(symbol: str, interval: str = "5
     }
 
 
-def _fetch_intraday_price_snapshot_from_naver(symbol: str) -> dict[str, Any]:
-    """Naver 차트 JSON으로 국내 종목의 당일 분봉 스냅샷을 조회한다."""
+def _fetch_intraday_price_snapshot_from_naver(symbol: str, interval: str = "5m") -> dict[str, Any]:
+    """Naver 일봉 종가 기반의 보수적 intraday fallback 스냅샷을 반환한다."""
 
     normalized = normalize_symbol(symbol)
-    today = date.today()
-    minute_frame = _fetch_naver_sise_frame(
-        normalized,
-        timeframe="minute",
-        start_date=today - timedelta(days=7),
-        end_date=today,
-    )
-    if minute_frame.empty:
+    history = _naver_chart_history(normalized, count=2)
+    if history.empty:
         return _empty_intraday_snapshot(normalized)
 
-    minute_frame["session_date"] = pd.to_datetime(minute_frame["datetime"]).dt.date
-    latest_session_date = minute_frame["session_date"].max()
-    latest_session = minute_frame.loc[minute_frame["session_date"] == latest_session_date].copy()
-    if latest_session.empty:
-        return _empty_intraday_snapshot(normalized)
-
-    latest_prices = latest_session["close"].astype(float)
-    current_price = float(latest_prices.iloc[-1])
-
-    daily_frame = _fetch_naver_sise_frame(
-        normalized,
-        timeframe="day",
-        start_date=today - timedelta(days=14),
-        end_date=today,
-    )
-    previous_close: float | None = None
-    if not daily_frame.empty:
-        daily_frame["session_date"] = pd.to_datetime(daily_frame["datetime"]).dt.date
-        previous_rows = daily_frame.loc[daily_frame["session_date"] < latest_session_date]
-        if not previous_rows.empty:
-            previous_close = float(previous_rows.iloc[-1]["close"])
-
-    if previous_close and previous_close != 0:
-        day_change_rate = ((current_price - previous_close) / previous_close) * 100
-    else:
-        first_price = float(latest_prices.iloc[0]) if not latest_prices.empty else 0.0
-        day_change_rate = ((current_price - first_price) / first_price * 100) if first_price else 0.0
-
-    timeline = [
-        {
-            "datetime": pd.Timestamp(row.datetime).isoformat(),
-            "close": round(float(row.close), 4),
-        }
-        for row in latest_session.itertuples(index=False)
-    ]
+    sorted_history = history.sort_values("date").reset_index(drop=True)
+    latest = sorted_history.iloc[-1]
+    previous_close = float(sorted_history.iloc[-2]["close"]) if len(sorted_history) > 1 else None
+    current_price = float(latest["close"])
+    day_change_rate = ((current_price - previous_close) / previous_close * 100) if previous_close not in (None, 0) else 0.0
+    latest_date = pd.Timestamp(latest["date"]).date().isoformat()
     return {
         "symbol": normalized,
-        "series": [round(float(value), 4) for value in latest_prices.tolist()],
-        "timeline": timeline,
+        "series": [round(current_price, 4)],
+        "timeline": [{"datetime": latest_date, "close": round(current_price, 4)}],
         "current_price": round(current_price, 4),
         "previous_close": round(previous_close, 4) if previous_close is not None else None,
         "day_change_rate": round(float(day_change_rate), 4),
-        "as_of": pd.Timestamp(latest_session["datetime"].iloc[-1]).isoformat(),
+        "as_of": latest_date,
         "currency": "KRW",
         "source": "Naver",
     }
@@ -858,66 +775,16 @@ def _fetch_price_history_from_yfinance(symbol: str, period: str = "6mo") -> pd.D
     return frame
 
 
-def _fetch_price_history_range_from_yfinance(symbol: str, *, start_date: date, end_date: date) -> pd.DataFrame:
-    """yfinance에서 지정 날짜 범위의 종가 이력을 조회한다."""
-
-    normalized = normalize_symbol(symbol)
-    if not normalized or yf is None:
-        return pd.DataFrame(columns=["date", "close", "symbol"])
-
-    history = yf.Ticker(normalized).history(
-        start=start_date.isoformat(),
-        end=(end_date + timedelta(days=1)).isoformat(),
-        auto_adjust=False,
-    )
-    closes = history.get("Close")
-    if closes is None or closes.dropna().empty:
-        return pd.DataFrame(columns=["date", "close", "symbol"])
-
-    frame = closes.dropna().reset_index()
-    frame.columns = ["date", "close"]
-    frame["date"] = pd.to_datetime(frame["date"]).dt.date
-    frame["symbol"] = normalized
-    return frame
-
-
 def _fetch_price_history_from_naver(symbol: str, period: str = "6mo") -> pd.DataFrame:
-    """Naver 차트 JSON으로 국내 종목의 일봉 종가 이력을 조회한다."""
+    """Naver 일봉 차트에서 기간별 종가 이력을 조회한다."""
 
-    normalized = normalize_symbol(symbol)
     start_date, end_date = _history_period_range(period)
-    frame = _fetch_naver_sise_frame(
-        normalized,
-        timeframe="day",
-        start_date=start_date,
-        end_date=end_date,
-    )
+    frame = _naver_chart_history(symbol, count=max((end_date - start_date).days + 10, 30))
     if frame.empty:
-        return pd.DataFrame(columns=["date", "close", "symbol"])
-
-    result = frame.copy()
-    result["date"] = pd.to_datetime(result["datetime"]).dt.date
-    result["symbol"] = normalized
-    return result[["date", "close", "symbol"]].sort_values("date").reset_index(drop=True)
-
-
-def _fetch_price_history_range_from_naver(symbol: str, *, start_date: date, end_date: date) -> pd.DataFrame:
-    """Naver 차트 JSON으로 지정 날짜 범위의 국내 종가 이력을 조회한다."""
-
-    normalized = normalize_symbol(symbol)
-    frame = _fetch_naver_sise_frame(
-        normalized,
-        timeframe="day",
-        start_date=start_date,
-        end_date=end_date,
-    )
-    if frame.empty:
-        return pd.DataFrame(columns=["date", "close", "symbol"])
-
-    result = frame.copy()
-    result["date"] = pd.to_datetime(result["datetime"]).dt.date
-    result["symbol"] = normalized
-    return result[["date", "close", "symbol"]].sort_values("date").reset_index(drop=True)
+        return frame
+    frame_dates = pd.to_datetime(frame["date"]).dt.date
+    mask = (frame_dates >= start_date) & (frame_dates <= end_date)
+    return frame.loc[mask].reset_index(drop=True)
 
 
 def _fetch_latest_price_from_kis(symbol: str) -> dict[str, Any]:
@@ -983,21 +850,6 @@ def _fetch_price_history_from_kis(symbol: str, period: str = "6mo") -> pd.DataFr
     return frame
 
 
-def _fetch_price_history_range_from_kis(symbol: str, *, start_date: date, end_date: date) -> pd.DataFrame:
-    """KIS REST로 지정 날짜 범위의 국내 일봉 종가를 조회한다."""
-
-    client = KisApiClient()
-    frame = client.get_domestic_daily_history(
-        symbol,
-        start_date=start_date.isoformat(),
-        end_date=end_date.isoformat(),
-    )
-    if frame.empty:
-        return pd.DataFrame(columns=["date", "close", "symbol"])
-    frame["symbol"] = normalize_symbol(symbol)
-    return frame
-
-
 @st.cache_data(ttl=900, show_spinner=False)
 def fetch_latest_price(symbol: str) -> dict[str, Any]:
     """최신 가격을 KIS 우선 provider 구조로 조회한다."""
@@ -1029,12 +881,11 @@ def fetch_intraday_price_snapshot(symbol: str, interval: str = "5m") -> dict[str
 
     if is_krx_symbol(normalized):
         try:
-            naver_snapshot = _fetch_intraday_price_snapshot_from_naver(normalized)
+            naver_snapshot = _fetch_intraday_price_snapshot_from_naver(normalized, interval=interval)
         except Exception:
             naver_snapshot = _empty_intraday_snapshot(normalized)
-        if naver_snapshot.get("timeline") or naver_snapshot.get("series"):
+        if naver_snapshot.get("series") or naver_snapshot.get("timeline") or naver_snapshot.get("current_price") is not None:
             return naver_snapshot
-
     if prefers_kis_quote(normalized):
         try:
             return _fetch_intraday_price_snapshot_from_kis(normalized)
@@ -1059,7 +910,10 @@ def fetch_price_history(symbol: str, period: str = "6mo") -> pd.DataFrame:
         if not frame.empty:
             return frame
     if is_krx_symbol(normalized):
-        frame = _fetch_price_history_from_naver(normalized, period=period)
+        try:
+            frame = _fetch_price_history_from_naver(normalized, period=period)
+        except Exception:
+            frame = pd.DataFrame(columns=["date", "close", "symbol"])
         if not frame.empty:
             return frame
     return _fetch_price_history_from_yfinance(normalized, period=period)
@@ -1067,26 +921,30 @@ def fetch_price_history(symbol: str, period: str = "6mo") -> pd.DataFrame:
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def fetch_price_history_range(symbol: str, *, start_date: date, end_date: date) -> pd.DataFrame:
-    """지정 날짜 범위의 종가 이력을 KIS/Naver/yfinance 순서로 조회한다."""
+    """시작일과 종료일 기준으로 종가 이력을 조회한다."""
 
     normalized = normalize_symbol(symbol)
-    if not normalized or end_date < start_date:
+    if not normalized:
         return pd.DataFrame(columns=["date", "close", "symbol"])
 
-    if prefers_kis_quote(normalized):
-        try:
-            frame = _fetch_price_history_range_from_kis(normalized, start_date=start_date, end_date=end_date)
-        except Exception:
-            frame = pd.DataFrame(columns=["date", "close", "symbol"])
-        if not frame.empty:
-            return frame
+    safe_start = start_date
+    safe_end = end_date
+    if safe_start > safe_end:
+        safe_start, safe_end = safe_end, safe_start
+    days = max((safe_end - safe_start).days, 1)
+    if days <= 31:
+        period = "1mo"
+    elif days <= 93:
+        period = "3mo"
+    elif days <= 186:
+        period = "6mo"
+    elif days <= 366:
+        period = "1y"
+    else:
+        period = "2y"
 
-    if is_krx_symbol(normalized):
-        try:
-            frame = _fetch_price_history_range_from_naver(normalized, start_date=start_date, end_date=end_date)
-        except Exception:
-            frame = pd.DataFrame(columns=["date", "close", "symbol"])
-        if not frame.empty:
-            return frame
-
-    return _fetch_price_history_range_from_yfinance(normalized, start_date=start_date, end_date=end_date)
+    frame = fetch_price_history(normalized, period=period)
+    if frame.empty:
+        return frame
+    frame_dates = pd.to_datetime(frame["date"]).dt.date
+    return frame.loc[(frame_dates >= safe_start) & (frame_dates <= safe_end)].reset_index(drop=True)

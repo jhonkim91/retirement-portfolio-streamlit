@@ -2091,7 +2091,7 @@ div[role="dialog"] [data-testid="stFormSubmitButton"] > button {
     position: relative;
 }
 
-.st-key-dashboard-overview-hero-shell > [data-testid="stLayoutWrapper"]:has(.st-key-dashboard-overview-period-controls) {
+.st-key-dashboard-overview-hero-shell > [data-testid="stLayoutWrapper"]:has(.st-key-capture_input_panel) {
     position: absolute !important;
     top: 0 !important;
     right: 0 !important;
@@ -2101,11 +2101,11 @@ div[role="dialog"] [data-testid="stFormSubmitButton"] > button {
     z-index: 6 !important;
 }
 
-.st-key-dashboard-overview-hero-shell > [data-testid="stLayoutWrapper"]:has(.st-key-dashboard-overview-period-controls) [data-testid="stVerticalBlock"] {
+.st-key-dashboard-overview-hero-shell > [data-testid="stLayoutWrapper"]:has(.st-key-capture_input_panel) [data-testid="stVerticalBlock"] {
     overflow: visible !important;
 }
 
-.st-key-dashboard-overview-period-controls {
+.st-key-capture_input_panel {
     position: absolute;
     top: 1.18rem;
     right: 1.35rem;
@@ -2113,7 +2113,13 @@ div[role="dialog"] [data-testid="stFormSubmitButton"] > button {
     width: auto;
 }
 
-.st-key-dashboard-overview-period-controls [data-testid="stHorizontalBlock"] {
+.st-key-capture_input_panel {
+    display: block !important;
+    min-width: 12.2rem !important;
+    min-height: 1.45rem !important;
+}
+
+.st-key-capture_input_panel [data-testid="stHorizontalBlock"] {
     display: flex !important;
     align-items: center !important;
     justify-content: flex-end !important;
@@ -2121,8 +2127,8 @@ div[role="dialog"] [data-testid="stFormSubmitButton"] > button {
     gap: 0.24rem !important;
 }
 
-.st-key-dashboard-overview-period-controls [data-testid="stColumn"],
-.st-key-dashboard-overview-period-controls [data-testid="column"] {
+.st-key-capture_input_panel [data-testid="stColumn"],
+.st-key-capture_input_panel [data-testid="column"] {
     display: flex !important;
     width: 2rem !important;
     min-width: 0 !important;
@@ -2131,24 +2137,24 @@ div[role="dialog"] [data-testid="stFormSubmitButton"] > button {
     padding: 0 !important;
 }
 
-.st-key-dashboard-overview-period-controls [data-testid="stColumn"]:last-child,
-.st-key-dashboard-overview-period-controls [data-testid="column"]:last-child {
+.st-key-capture_input_panel [data-testid="stColumn"]:last-child,
+.st-key-capture_input_panel [data-testid="column"]:last-child {
     width: 2.35rem !important;
     max-width: 2.35rem !important;
     flex-basis: 2.35rem !important;
 }
 
-.st-key-dashboard-overview-period-controls [data-testid="stButton"] {
+.st-key-capture_input_panel [data-testid="stButton"] {
     width: 2rem !important;
     margin: 0 !important;
 }
 
-.st-key-dashboard-overview-period-controls [data-testid="stColumn"]:last-child [data-testid="stButton"],
-.st-key-dashboard-overview-period-controls [data-testid="column"]:last-child [data-testid="stButton"] {
+.st-key-capture_input_panel [data-testid="stColumn"]:last-child [data-testid="stButton"],
+.st-key-capture_input_panel [data-testid="column"]:last-child [data-testid="stButton"] {
     width: 2.35rem !important;
 }
 
-.st-key-dashboard-overview-period-controls [data-testid="stButton"] button {
+.st-key-capture_input_panel [data-testid="stButton"] button {
     display: inline-flex !important;
     align-items: center !important;
     justify-content: center !important;
@@ -2172,15 +2178,15 @@ div[role="dialog"] [data-testid="stFormSubmitButton"] > button {
     text-transform: none !important;
 }
 
-.st-key-dashboard-overview-period-controls [data-testid="stColumn"]:last-child [data-testid="stButton"] button,
-.st-key-dashboard-overview-period-controls [data-testid="column"]:last-child [data-testid="stButton"] button {
+.st-key-capture_input_panel [data-testid="stColumn"]:last-child [data-testid="stButton"] button,
+.st-key-capture_input_panel [data-testid="column"]:last-child [data-testid="stButton"] button {
     min-width: 2.35rem !important;
     width: 2.35rem !important;
     max-width: 2.35rem !important;
 }
 
-.st-key-dashboard-overview-period-controls [data-testid="stButton"] button *,
-.st-key-dashboard-overview-period-controls [data-testid="stButton"] button p {
+.st-key-capture_input_panel [data-testid="stButton"] button *,
+.st-key-capture_input_panel [data-testid="stButton"] button p {
     margin: 0 !important;
     padding: 0 !important;
     line-height: 1 !important;
@@ -2189,12 +2195,12 @@ div[role="dialog"] [data-testid="stFormSubmitButton"] > button {
     overflow-wrap: normal !important;
 }
 
-.st-key-dashboard-overview-period-controls [data-testid="stButton"] button:hover {
+.st-key-capture_input_panel [data-testid="stButton"] button:hover {
     background: rgba(255, 255, 255, 0.16) !important;
     color: #ffffff !important;
 }
 
-.st-key-dashboard-overview-period-controls [data-testid="stButton"] button[kind="primary"] {
+.st-key-capture_input_panel [data-testid="stButton"] button[kind="primary"] {
     background: #ffffff !important;
     border-color: #ffffff !important;
     color: #1f2b69 !important;

@@ -3,11 +3,33 @@
 ## 기준
 - 이 문서는 `Memory.md`에서 분리한 완료 변경 이력 요약이다.
 - 날짜별 상세 로그 원문은 `docs/archive/memory-YYYY-MM-DD.md`에 보존했다.
-- 정리 기준일은 `2026-05-15`이다.
+- 정리 기준일은 `2026-05-16`이다.
 
 ## 최근 완료 변경 요약
 
+### 2026-05-16
+- Streamlit UI 캡처 자동화 추가.
+  - 대시보드 주요 영역에 `capture_header`, `capture_input_panel`, `capture_summary_cards`, `capture_asset_allocation_chart`, `capture_retirement_projection_chart`, `capture_holdings_table`, `capture_recommendation_panel` wrapper를 추가.
+  - `config/capture_blocks.yaml`과 `scripts/capture_app.py`를 추가해 full page 및 블록별 PNG와 `manifest.json`을 `artifacts/ui_captures/{timestamp}/{viewport}/`에 생성.
+  - `requirements-dev.txt`, `docs/ui_capture.md`, `.github/workflows/ui-capture.yml`을 추가해 로컬/GitHub Actions 캡처 실행 절차를 문서화.
+  - 캡처 전 sidebar 기본 상태 고정, spinner/loading 대기, animation/transition 비활성화, `capture=1` 기준일 고정, selector 누락 로그를 보강.
+  - 캡처 검증 중 기존 테스트 실패 원인이던 인증 기본 Supabase URL 하드코딩과 `src.market` 누락 호환 함수를 보정.
+  - 전체 compileall/unittest discover와 desktop/tablet/mobile strict 캡처 검증 완료.
+- Dashboard 자산 배분 트리맵 예수금 색상/라벨 개선.
+  - 예수금을 수익률 `visualMap` 대상에서 제외하고 회색 중립 타일로 표시하도록 변경.
+  - 보유 종목 타일은 종목명과 보유 수익률을 2줄 라벨로 표시하고, 예수금은 `예수금 / 현금` 라벨로 표시.
+  - 트리맵 leaf 라벨 정렬과 겹침 방지 설정을 보강해 작은 타일에서도 정보가 잘리거나 오해되지 않도록 조정.
+  - 로컬 Streamlit 데모 대시보드 스크린샷 검증, `tests.test_analytics`, `AllocationTreemapVisualMapTests`, 전체 compileall/unittest discover 검증 완료.
+
 ### 2026-05-15
+- 데모 워크스페이스 데이터 규칙 보강.
+  - 데모 계좌를 `데모 IRP`(`retirement`)와 `데모 주식`(`brokerage`) 두 종류로 유지하고, 퇴직연금 계좌에는 일반 주식 없이 ETF/채권/금/리츠 ETF만 남도록 테스트로 고정.
+  - 기존 이름인 `데모 일반계좌`가 남아 있으면 새 `데모 주식` 계좌와 중복되지 않도록 재시드 때 함께 초기화.
+  - 일반계좌에는 삼성전자, SK하이닉스, 두산에너빌리티, NAVER, Apple 등 일반 주식과 ETF를 섞어 테스트 가능하게 구성.
+  - 데모 IRP에 출금 이벤트를 추가해 두 계좌 모두 5년치 입금/출금 이력을 포함.
+  - 거래와 현금흐름마다 매매일지 메모를 포함하고, 현재 보유 종목이 17개로 10~20개 범위에 들어오는지 테스트로 고정.
+  - 데모 seed 후 입출금과 매수/매도 원장을 반영한 최종 현금을 계좌 현금으로 갱신해 KPI/스냅샷 계산 정합성을 보강.
+  - `tests/test_db.py`, `tests/test_verify_streamlit_deployment.py`, 전체 compileall/unittest discover 검증 완료.
 - AI/자동 접근용 데모 링크 진입 추가.
   - `?demo=1` URL query parameter가 있으면 비로그인 사용자에 한해 기존 데모 진입 흐름을 자동 실행.
   - 데모 버튼과 동일하게 데모 로그인, 데이터 seed, 선택 계좌 설정을 `start_demo_workspace_session()`으로 처리.

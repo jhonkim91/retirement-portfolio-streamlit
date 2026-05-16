@@ -1,0 +1,35 @@
+blocks:
+  - name: header
+    selector: ".st-key-capture_header"
+    output: "01_header.png"
+    required: true
+
+  - name: input_panel
+    selector: ".st-key-capture_input_panel"
+    output: "02_input_panel.png"
+    required: true
+
+  - name: summary_cards
+    selector: ".st-key-capture_summary_cards"
+    output: "03_summary_cards.png"
+    required: true
+
+  - name: asset_allocation_chart
+    selector: ".st-key-capture_asset_allocation_chart"
+    output: "04_asset_allocation_chart.png"
+    required: false
+
+  - name: retirement_projection_chart
+    selector: ".st-key-capture_retirement_projection_chart"
+    output: "05_retirement_projection_chart.png"
+    required: false
+
+  - name: holdings_table
+    selector: ".st-key-capture_holdings_table"
+    output: "06_holdings_table.png"
+    required: true
+
+  - name: recommendation_panel
+    selector: ".st-key-capture_recommendation_panel"
+    output: "07_recommendation_panel.png"
+    required: false

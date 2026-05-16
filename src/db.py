@@ -58,6 +58,7 @@ HOLDINGS_CACHE_TTL_SECONDS = 5
 TRADE_LOGS_CACHE_TTL_SECONDS = 30
 SNAPSHOTS_CACHE_TTL_SECONDS = 30
 VALUATION_SNAPSHOTS_CACHE_TTL_SECONDS = 30
+LEGACY_DEMO_ACCOUNT_NAMES = {"데모 일반계좌"}
 
 
 def _state_store() -> dict[str, Any]:
@@ -279,11 +280,49 @@ def _demo_account_totals(account_id: int) -> tuple[float, float, float]:
     """데모 계좌의 현재 현금, 평가금액, 총원가를 계산한다."""
 
     holdings = list_holdings(account_id)
-    total_cost = sum(float(item.get("avg_cost") or 0) * float(item.get("quantity") or 0) for item in holdings)
-    market_value = sum(float(item.get("current_price") or 0) * float(item.get("quantity") or 0) for item in holdings)
+    total_cost = sum(
+        _normalized_trade_notional(item.get("symbol"), item.get("quantity"), item.get("avg_cost"))
+        for item in holdings
+    )
+    market_value = sum(
+        _normalized_trade_notional(item.get("symbol"), item.get("quantity"), item.get("current_price"))
+        for item in holdings
+    )
     account = get_account(account_id) or {}
     cash_balance = float(account.get("cash_balance") or 0)
     return cash_balance, market_value, total_cost
+
+
+def _demo_cash_flow_delta(flow_type: Any, amount: Any) -> float:
+    """데모 현금흐름 정의에서 계좌 현금 증감을 계산한다."""
+
+    normalized_type = _normalize_cash_flow_type(str(flow_type or ""))
+    flow_amount = float(amount or 0)
+    return flow_amount if normalized_type in {"personal_deposit", "employer_deposit"} else -flow_amount
+
+
+def _demo_trade_cash_delta(trade: dict[str, Any]) -> float:
+    """데모 매수/매도 정의에서 계좌 현금 증감을 계산한다."""
+
+    trade_type = str(trade.get("trade_type") or "").strip().lower()
+    amount = _normalized_trade_notional(trade.get("symbol"), trade.get("quantity"), trade.get("price"))
+    if trade_type == "buy":
+        return -amount
+    if trade_type == "sell":
+        return amount
+    return 0.0
+
+
+def _demo_cash_balance_from_spec(account_spec: dict[str, Any]) -> float:
+    """데모 계좌 정의의 현금흐름과 거래를 반영한 현재 현금을 계산한다."""
+
+    cash_balance = float(account_spec.get("opening_cash") or 0)
+    cash_balance += sum(
+        _demo_cash_flow_delta(flow.get("flow_type"), flow.get("amount"))
+        for flow in account_spec.get("cash_flows", ())
+    )
+    cash_balance += sum(_demo_trade_cash_delta(trade) for trade in account_spec.get("trades", ()))
+    return round(cash_balance, 4)
 
 
 def _rollup_today(timezone_name: str = DEFAULT_ROLLUP_TIMEZONE) -> date:
@@ -838,14 +877,18 @@ def _delete_account(account_id: int) -> None:
     )
 
 
-def seed_demo_workspace() -> dict[str, Any]:
+def seed_demo_workspace(snapshot_base_date: date | str | None = None) -> dict[str, Any]:
     """현재 로그인 사용자 계정에 데모용 샘플 계좌와 거래 데이터를 생성한다."""
 
-    blueprint = _demo_workspace_blueprint()
+    blueprint = _demo_workspace_blueprint(snapshot_base_date=snapshot_base_date)
     existing_accounts = list_accounts()
-    existing_by_name = {str(account.get("name") or ""): account for account in existing_accounts}
     demo_names = [str(item["name"]) for item in blueprint["accounts"]]
-    existing_demo_accounts = [existing_by_name[name] for name in demo_names if name in existing_by_name]
+    demo_reset_names = set(demo_names) | LEGACY_DEMO_ACCOUNT_NAMES
+    existing_demo_accounts = [
+        account
+        for account in existing_accounts
+        if str(account.get("name") or "") in demo_reset_names
+    ]
     reset_existing_workspace = bool(existing_demo_accounts)
     for account in sorted(existing_demo_accounts, key=lambda row: int(row["id"]), reverse=True):
         _delete_account(int(account["id"]))
@@ -880,6 +923,8 @@ def seed_demo_workspace() -> dict[str, Any]:
                 trade_date=str(trade["trade_date"]),
                 notes=str(trade.get("notes") or ""),
             )
+
+        update_cash_balance(account_id, _demo_cash_balance_from_spec(account_spec))
 
     for account_spec in blueprint["accounts"]:
         account_id = created_account_ids[str(account_spec["name"])]
@@ -970,10 +1015,26 @@ def _demo_history_date(
     return (snapshot_base_date - relativedelta(years=years, months=months, days=days)).isoformat()
 
 
-def _demo_workspace_blueprint() -> dict[str, Any]:
+def _coerce_demo_snapshot_base_date(value: date | str | None) -> date:
+    """데모 seed 기준일 값을 date로 정규화한다."""
+
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    raw_value = str(value or "").strip()
+    if raw_value:
+        try:
+            return date.fromisoformat(raw_value[:10])
+        except ValueError:
+            pass
+    return datetime.utcnow().date()
+
+
+def _demo_workspace_blueprint(snapshot_base_date: date | str | None = None) -> dict[str, Any]:
     """데모 모드에서 생성할 샘플 계좌와 거래 구성을 반환한다."""
 
-    snapshot_base_date = datetime.utcnow().date()
+    snapshot_base_date = _coerce_demo_snapshot_base_date(snapshot_base_date)
     snapshot_date = snapshot_base_date.isoformat()
     demo_date = lambda **kwargs: _demo_history_date(snapshot_base_date, **kwargs)
     return {
@@ -990,6 +1051,7 @@ def _demo_workspace_blueprint() -> dict[str, Any]:
                     {"flow_type": "employer_deposit", "amount": 1_800_000, "trade_date": demo_date(years=3, months=7), "notes": "성과급 반영 회사 납입"},
                     {"flow_type": "personal_deposit", "amount": 1_000_000, "trade_date": demo_date(years=3, months=2), "notes": "연말 세액공제 맞춤 납입"},
                     {"flow_type": "employer_deposit", "amount": 1_900_000, "trade_date": demo_date(years=2, months=8), "notes": "정기 회사 납입"},
+                    {"flow_type": "withdraw", "amount": 350_000, "trade_date": demo_date(years=2, months=6), "notes": "긴급 생활비 일부 출금"},
                     {"flow_type": "personal_deposit", "amount": 1_100_000, "trade_date": demo_date(years=2, months=3), "notes": "추가 납입"},
                     {"flow_type": "employer_deposit", "amount": 2_000_000, "trade_date": demo_date(years=1, months=9), "notes": "연봉 인상 후 회사 납입"},
                     {"flow_type": "personal_deposit", "amount": 1_300_000, "trade_date": demo_date(years=1, months=4), "notes": "연말정산 전 추가 납입"},
@@ -1130,7 +1192,7 @@ def _demo_workspace_blueprint() -> dict[str, Any]:
                 "snapshot_date": snapshot_date,
             },
             {
-                "name": "데모 일반계좌",
+                "name": "데모 주식",
                 "account_type": "brokerage",
                 "opening_cash": 0.0,
                 "cash_flows": (

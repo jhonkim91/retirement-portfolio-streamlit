@@ -1,0 +1,46 @@
+name: UI Capture
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  capture-ui:
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PORTFOLIO_BACKEND: sqlite
+      RETIREMENT_DB_PATH: ${{ runner.temp }}/portfolio-capture.db
+      STREAMLIT_BROWSER_GATHER_USAGE_STATS: "false"
+
+    steps:
+      - name: 코드 체크아웃
+        uses: actions/checkout@v6
+
+      - name: Python 설정
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+
+      - name: 의존성 설치
+        run: python -m pip install -r requirements-dev.txt
+
+      - name: Playwright Chromium 설치
+        run: python -m playwright install --with-deps chromium
+
+      - name: UI 캡처 생성
+        run: python scripts/capture_app.py --viewport all --out-dir artifacts/ui_captures
+
+      - name: UI 캡처 artifact 업로드
+        uses: actions/upload-artifact@v4
+        with:
+          name: streamlit-ui-captures
+          path: artifacts/ui_captures
+          if-no-files-found: error
