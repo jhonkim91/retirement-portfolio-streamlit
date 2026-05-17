@@ -309,8 +309,10 @@ class AccountSummaryTests(unittest.TestCase):
         self.assertEqual(nodes[0]["children"][0]["children"][0]["symbol"], "069500")
         self.assertEqual(nodes[1]["children"][0]["name"], "채권")
         self.assertEqual(nodes[1]["children"][0]["children"][0]["name"], "국고채 ETF")
+        self.assertEqual(nodes[2]["itemStyle"]["color"], "#9AA3B4")
         self.assertEqual(nodes[2]["children"][0]["name"], "예수금")
         self.assertEqual(nodes[2]["children"][0]["value"], 300_000.0)
+        self.assertEqual(nodes[2]["children"][0]["node_kind"], "cash")
 
     def test_allocation_treemap_nodes_marks_selected_symbol(self) -> None:
         account = {"cash_balance": 300_000}

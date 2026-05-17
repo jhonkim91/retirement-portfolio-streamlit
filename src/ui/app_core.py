@@ -4898,7 +4898,7 @@ def _attach_leaf_market_details(
     symbol = normalize_holding_symbol(leaf.get("symbol") or leaf.get("selection_symbol"))
     if symbol == "CASH":
         revenue_value = float(leaf.get("revenue_value") or leaf.get("value") or 0)
-        leaf["node_kind"] = "holding"
+        leaf["node_kind"] = "cash"
         leaf["quote_currency"] = "KRW"
         leaf["current_price_value"] = round(revenue_value, 4)
         leaf["current_price_text"] = format_won(revenue_value)
@@ -4944,13 +4944,19 @@ def _rollup_treemap_node_values(
         revenue_value = float(node.get("value") or 0)
         profit_rate = node.get("profit_rate")
         node["revenue_value"] = round(revenue_value, 4)
-        child_rate = round(float(profit_rate or 0), 4)
+        child_rate = None if profit_rate is None else round(float(profit_rate or 0), 4)
         node["value"] = [round(revenue_value, 4), child_rate]
-        node["itemStyle"] = {
-            "borderColor": "#F8FAFC",
-            "borderWidth": TREEMAP_NODE_BORDER_WIDTH,
-            "gapWidth": TREEMAP_NODE_GAP_WIDTH,
-        }
+        item_style = dict(node.get("itemStyle") or {})
+        item_style.update(
+            {
+                "borderColor": "#F8FAFC",
+                "borderWidth": TREEMAP_NODE_BORDER_WIDTH,
+                "gapWidth": TREEMAP_NODE_GAP_WIDTH,
+            }
+        )
+        if profit_rate is None:
+            item_style.setdefault("color", FEARGREED_FLAT_COLOR)
+        node["itemStyle"] = item_style
         _attach_leaf_market_details(node, snapshot_lookup)
         if profit_rate is None:
             return revenue_value, 0.0, 0.0
@@ -4969,12 +4975,12 @@ def _rollup_treemap_node_values(
         weighted_rate_total += child_weighted_total
         weighted_rate_weight += child_weight
 
-    parent_rate = (weighted_rate_total / weighted_rate_weight) if weighted_rate_weight else 0.0
+    parent_rate = (weighted_rate_total / weighted_rate_weight) if weighted_rate_weight else None
     node["revenue_value"] = round(total_value, 4)
-    node["profit_rate"] = round(parent_rate, 4)
+    node["profit_rate"] = round(parent_rate, 4) if parent_rate is not None else None
     node["value"] = [
         round(total_value, 4),
-        round(parent_rate, 4),
+        round(parent_rate, 4) if parent_rate is not None else None,
     ]
     return total_value, weighted_rate_total, weighted_rate_weight
 
@@ -5164,7 +5170,23 @@ def allocation_treemap_options(
             """
             function(info) {
                 var name = String(info.name || '');
-                return name.length > 14 ? name.slice(0, 13) + '…' : name;
+                var data = info.data || {};
+                function truncate(value, limit) {
+                    var text = String(value || '');
+                    return text.length > limit ? text.slice(0, limit - 1) + '…' : text;
+                }
+                if (data.node_kind === 'cash' || data.selection_symbol === 'CASH') {
+                    return truncate(name, 12) + '\\n현금';
+                }
+                if (data.node_kind === 'holding') {
+                    var rateText = data.holding_profit_text;
+                    if (!rateText && data.profit_rate !== null && data.profit_rate !== undefined) {
+                        var rate = Number(data.profit_rate || 0);
+                        rateText = (rate >= 0 ? '+' : '') + rate.toFixed(2) + '%';
+                    }
+                    return truncate(name, 13) + (rateText ? '\\n' + rateText : '');
+                }
+                return truncate(name, 14);
             }
             """
         )

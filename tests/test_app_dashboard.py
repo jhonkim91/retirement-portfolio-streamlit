@@ -2026,6 +2026,58 @@ class AllocationTreemapVisualMapTests(unittest.TestCase):
         assert options is not None
         self.assertEqual(options["visualMap"]["outOfRange"]["colorAlpha"], 0.0)
 
+    def test_allocation_treemap_renders_cash_as_neutral_without_profit_rate_mapping(self) -> None:
+        """예수금은 수익률 visualMap에서 제외하고 중립 회색으로 표시한다."""
+
+        holdings = [
+            {
+                "product_name": "고수익 ETF",
+                "symbol": "HIGH",
+                "asset_type": "risk",
+                "quantity": 1,
+                "avg_cost": 100,
+                "current_price": 250,
+            },
+            {
+                "product_name": "손실 ETF",
+                "symbol": "LOW",
+                "asset_type": "safe",
+                "quantity": 1,
+                "avg_cost": 100,
+                "current_price": 90,
+            },
+        ]
+        summary = {
+            "allocation": {
+                "risk": 250,
+                "safe": 90,
+                "cash": 50,
+            },
+            "cash": 50,
+        }
+
+        options = dashboard_app.allocation_treemap_options(summary, holdings, include_market_details=False)
+
+        self.assertIsNotNone(options)
+        assert options is not None
+        self.assertEqual(options["visualMap"]["min"], -10.0)
+        self.assertEqual(options["visualMap"]["max"], 150.0)
+
+        root_nodes = options["series"][0]["data"]
+        cash_node = next(node for node in root_nodes if node["name"] == "현금")
+        cash_leaf = cash_node["children"][0]
+        self.assertEqual(cash_node["itemStyle"]["color"], dashboard_app.FEARGREED_FLAT_COLOR)
+        self.assertEqual(cash_node["profit_rate"], None)
+        self.assertEqual(cash_node["value"], [50, None])
+        self.assertEqual(cash_leaf["node_kind"], "cash")
+        self.assertEqual(cash_leaf["value"], [50, None])
+        self.assertEqual(cash_leaf["itemStyle"]["color"], dashboard_app.FEARGREED_FLAT_COLOR)
+
+        label_formatter = str(options["series"][0]["label"]["formatter"])
+        self.assertIn("data.node_kind === 'cash'", label_formatter)
+        self.assertIn("\\n현금", label_formatter)
+        self.assertIn("holding_profit_text", label_formatter)
+
     def test_allocation_treemap_can_skip_intraday_market_details(self) -> None:
         """ECharts 미사용 경로에서는 자산배분 옵션 생성 중 외부 시세 조회를 건너뛴다."""
 

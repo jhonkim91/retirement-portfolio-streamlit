@@ -267,7 +267,7 @@ def allocation_treemap_nodes(
     bucket_specs = (
         ("risk", "위험자산", "#E7D36F"),
         ("safe", "안전자산", "#BFD26A"),
-        ("cash", "현금", "#8FD17B"),
+        ("cash", "현금", "#9AA3B4"),
     )
     nodes: list[dict[str, Any]] = []
 
@@ -290,6 +290,8 @@ def allocation_treemap_nodes(
                             "selection_symbol": "CASH",
                             "is_selected": selected_key == "CASH",
                             "profit_rate": None,
+                            "node_kind": "cash",
+                            "itemStyle": {"color": bucket_color},
                         }
                     ],
                 }
