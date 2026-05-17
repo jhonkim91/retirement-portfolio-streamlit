@@ -13,6 +13,7 @@
 - [x] 대시보드 UI 개선 및 요약 카드/트렌드/거래 패널/차트 반응형 보강
 - [x] 로그인/온보딩 화면의 Streamlit 기본 사이드바 컨테이너 숨김
 - [x] 거래 상품 검색 결과 compact dropdown 및 자산 구분/거래일자 항상 표시 반영
+- [x] Dashboard Overview 기간 버튼/KPI 카드 정렬 보정 및 운영 배포
 - [ ] temporal normalize migration 실제 적용 전 운영 `realtime_price_bars` 테이블 생성/노출 여부 결정
 
 ## 프로젝트 개요
@@ -27,10 +28,9 @@
 - 배포 앱: `https://retirement-portfolio-app-nh2vq9ferqnpehsslbykbe.streamlit.app/`
 
 ## 최근 변경 파일
-- `src/ui/app_core.py`: 상품 검색 결과 컨테이너의 border/height 박스를 제거하고 compact dropdown wrapper 및 자산 구분/거래일자/메모 3열 meta 영역을 적용.
-- `.streamlit/app.css`: 상품 검색 결과 dropdown absolute 배치, 모바일 relative fallback, 자산 구분/거래일자/메모 compact 반응형 스타일 추가.
-- `tests/test_app_dashboard.py`: 검색 dropdown 구조와 필수 입력 노출, CSS selector/속성 회귀 테스트 추가.
-- `docs/VALIDATION.md`, `docs/CHANGELOG.md`, `Memory.md`: 이번 UI 변경 검증 결과와 `origin/main` 병합 상태를 반영.
+- `.streamlit/app.css`: Dashboard Overview 기간 버튼 래퍼를 히어로 내부 absolute overlay로 고정하고, KPI 카드 grid 높이/sparkline 표시를 후순위 override로 보정.
+- `tests/test_app_dashboard.py`: Dashboard Overview 기간 버튼 overlay와 KPI 카드 높이/반응형 CSS selector 회귀 테스트 추가.
+- `docs/VALIDATION.md`, `docs/CHANGELOG.md`, `Memory.md`: Dashboard Overview 정렬 핫픽스 배포와 검증 결과 반영.
 
 ## 핵심 설계 결정
 - 기존 `account_summary`와 `daily_account_snapshot` 계산은 유지하고, 입금 기준 이력은 별도 `daily_valuation_snapshot`에 저장한다.
@@ -63,27 +63,25 @@ streamlit run app.py --server.port 8501 --server.address 0.0.0.0 --server.fileWa
 ```
 
 ## 최신 검증 결과
-- 작업 범위: 거래 입력 > 상품 등록 검색 결과를 compact dropdown으로 변경하고 자산 구분/거래일자/메모를 항상 노출.
+- 작업 범위: Dashboard Overview 상단에서 기간 버튼이 히어로 밖으로 밀리고 KPI 카드 높이가 어긋나는 레이아웃 회귀 보정.
 - 코드 검증: `python -m compileall app.py src scripts tests` 성공.
 - 단위 검증: `python -m pytest tests/test_app_dashboard.py` 성공, 125 passed.
 - 전체 검증: `python -m unittest discover -s tests -p "test_*.py"` 성공, 291 tests.
-- UI 캡처 검증: `python scripts/capture_app.py --page trades --viewport desktop --strict`, `tablet --strict`, `mobile --strict` 모두 성공.
-- 원격 PR 체크: GitHub Actions run `25991712602`, `25991878887`, `25991879672`의 `capture-ui` 성공.
-- main 배포 체크: PR #1 merge commit `82038a3` push 후 GitHub Actions run `25991986493`의 `UI Capture` 성공.
-- 운영 검증: `python scripts/verify_streamlit_deployment.py --page trades --expect-backend supabase --click-demo --wait-ms 60000` 성공, `ok=true`, backend `Supabase`, 거래 페이지 본문에서 `상품명 또는 코드 검색`, `자산 구분`, `거래일자`, `메모` 노출 확인.
-- 운영 공개 데모 캡처 참고: `capture_app.py --url ...?demo=1&capture=1 --page trades --viewport desktop --strict`는 Streamlit Cloud shell 링크만 감지하고 앱 내 `거래` 링크를 찾지 못해 실패했다. 로그인 기반 운영 검증은 성공 상태다.
-- 확인 산출물: `artifacts/ui_captures/2026-05-17_125933/trades/desktop/blocks/03_trade_product_entry.png`, `artifacts/ui_captures/2026-05-17_130031/trades/tablet/blocks/03_trade_product_entry.png`, `artifacts/ui_captures/2026-05-17_130127/trades/mobile/blocks/03_trade_product_entry.png`.
-- 운영 검증 산출물: `/tmp/prod-trades-after-deploy.png`, `/tmp/prod-trades-after-deploy.txt`, `/tmp/prod-verify-trades/`.
+- UI 캡처 검증: `python scripts/capture_app.py --url "http://localhost:8510/?demo=1&capture=1" --page dashboard --viewport desktop --strict` 성공.
+- UI 캡처 검증: `python scripts/capture_app.py --url "http://localhost:8510/?demo=1&capture=1" --page dashboard --viewport tablet --strict` 성공.
+- main 배포 체크: commit `83c3463` push 후 GitHub Actions run `25992989168`의 `UI Capture` 성공.
+- 운영 검증: `python scripts/verify_streamlit_deployment.py --page dashboard --expect-backend supabase --click-demo --wait-ms 90000` 성공, `ok=true`, backend `Supabase`.
+- 운영 UI 확인: 사용자 제공 운영 스크린샷에서 기간 버튼이 히어로 내부 우상단에 있고 KPI 카드가 같은 줄/높이로 정렬된 것을 확인.
+- 확인 산출물: `/tmp/dashboard-overview-final-desktop/2026-05-17_140054/desktop/full_page.png`, `/tmp/dashboard-overview-final-check/2026-05-17_135933/tablet/full_page.png`, `/tmp/prod-dashboard-overview-after-fix.png`.
 - 운영 DB 데이터 수정은 수행하지 않았다.
 
 ## Git/GitHub 상태
 - 기본 브랜치: `main`
-- 작업 브랜치: `codex/ui-capture-automation`
-- 이번 작업 커밋: `7c88a55 Refine trade product entry layout`
-- main 병합 커밋: `82038a3 Merge UI capture and trade product layout`
+- 최근 배포 커밋: `83c3463 Fix dashboard overview alignment`
+- 이전 거래 UI 커밋: `7c88a55 Refine trade product entry layout`, main 병합 커밋 `82038a3`, 배포 기록 커밋 `424467c`
 - PR: `https://github.com/jhonkim91/retirement-portfolio-streamlit/pull/1` merged.
-- 배포 방법: PR merge로 `origin/main`에 push되어 Streamlit Cloud 자동 재배포 트리거.
-- 배포 검증: GitHub Actions `UI Capture` 성공, 운영 Streamlit Cloud 거래 페이지 로그인 기반 검증 성공.
+- 배포 방법: `origin/main` push로 Streamlit Cloud 자동 재배포 트리거.
+- 배포 검증: GitHub Actions run `25992989168`의 `UI Capture` 성공, 운영 Streamlit Cloud 대시보드 로그인 기반 검증 및 사용자 스크린샷 확인 완료.
 - 워크트리에는 이번 요청 전부터 `data/portfolio.db`, 로컬 도구 디렉터리, 캡처 산출물 등 여러 변경/미추적 파일이 함께 있었다.
 - 커밋 시 요청 관련 파일만 선별하고 `data/portfolio.db`, `.local/`, `.playtools*/`, `.playwright-browsers/`, `.vscode/`, `artifacts/`, `data/kis_cache/` 등 로컬 산출물은 제외한다.
 

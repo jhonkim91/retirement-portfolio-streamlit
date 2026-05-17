@@ -8,6 +8,12 @@
 ## 최근 완료 변경 요약
 
 ### 2026-05-17
+- Dashboard Overview 상단 정렬 핫픽스.
+  - 운영 화면에서 기간 버튼이 히어로 카드 위쪽 흰 영역에 남고 KPI 카드 높이가 어긋나는 회귀를 확인.
+  - Streamlit Cloud DOM 차이를 고려해 기간 버튼 wrapper를 히어로 내부 absolute overlay로 고정하고, KPI 카드 grid 높이와 sparkline 표시를 `.st-key-dashboard-overview-option2` scope의 후순위 CSS로 보정.
+  - 920px 이하에서는 기간 버튼 폭/간격을 줄여 태블릿 히어로 안에서 계좌 배지와 겹치지 않도록 조정.
+  - `tests/test_app_dashboard.py`, 전체 compileall/unittest discover, 로컬 dashboard desktop/tablet strict 캡처, GitHub Actions UI Capture, 운영 Streamlit Cloud 로그인 기반 대시보드 검증 및 사용자 스크린샷 확인 완료.
+  - commit `83c3463`을 `main`에 push해 Streamlit Cloud 자동 재배포를 트리거했다.
 - 거래 상품 검색 dropdown 및 필수 입력 노출 개선.
   - 상품 등록 검색 결과를 카드 내부 고정 높이 박스에서 compact dropdown으로 변경.
   - 자산 구분, 거래일자, 메모 입력을 한 줄 meta 영역으로 묶어 항상 보이도록 정리하고 모바일에서는 세로 배치되도록 CSS를 보강.
