@@ -3,9 +3,16 @@
 ## 기준
 - 이 문서는 `Memory.md`에서 분리한 완료 변경 이력 요약이다.
 - 날짜별 상세 로그 원문은 `docs/archive/memory-YYYY-MM-DD.md`에 보존했다.
-- 정리 기준일은 `2026-05-15`이다.
+- 정리 기준일은 `2026-05-17`이다.
 
 ## 최근 완료 변경 요약
+
+### 2026-05-17
+- 로그인 화면 사이드바 노출 핫픽스.
+  - 인증/온보딩 화면에서도 Streamlit 기본 사이드바 컨테이너가 생성되고, 기존 CSS가 `stSidebarNav`만 숨겨 빈 사이드바가 남을 수 있는 원인을 확인.
+  - `.auth-page-shell`/`.empty-state-shell` 화면에 한해 `stSidebar`, `stSidebarCollapsedControl`, `stSidebarNav`를 숨기도록 CSS selector를 보강.
+  - 인증 화면 전용 사이드바 숨김 selector 회귀 테스트를 추가.
+  - CSS 중괄호 균형, `ThemeStylesheetTests`, 전체 compileall/unittest discover, 로컬 Streamlit 로그인 화면 브라우저 검증 완료.
 
 ### 2026-05-15
 - AI/자동 접근용 데모 링크 진입 추가.

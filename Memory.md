@@ -3,7 +3,7 @@
 ## 문서 목적
 - 현재 프로젝트 상태와 다음 작업에 필요한 최소 정보만 유지한다.
 - 상세 검증 이력은 `docs/VALIDATION.md`, 완료 변경 이력은 `docs/CHANGELOG.md`, 설계 결정은 `docs/DECISIONS.md`를 기준으로 확인한다.
-- 기준일: `2026-05-15`
+- 기준일: `2026-05-17`
 
 ## 작업 상태
 - [x] 입금액 기준 일별 평가액 기록 기능 추가
@@ -35,6 +35,7 @@
 - [x] Dashboard KPI 카드의 입금 대비 손익/수익률 전일 대비 델타 표시
 - [x] Dashboard KPI 값 급등 방지를 위해 오늘 평가 스냅샷 현금 산정 fallback 추가
 - [x] `?demo=1` URL query parameter 기반 데모 자동 진입 추가
+- [x] 로그인/온보딩 화면의 Streamlit 기본 사이드바 컨테이너 숨김
 - [ ] temporal normalize migration 실제 적용 전 운영 `realtime_price_bars` 테이블 생성/노출 여부 결정
 
 ## 프로젝트 개요
@@ -49,10 +50,8 @@
 - 배포 앱: `https://retirement-portfolio-app-nh2vq9ferqnpehsslbykbe.streamlit.app/`
 
 ## 최근 변경 파일
-- `src/ui/app_core.py`: `?demo=1` 자동 데모 진입 처리와 Dashboard KPI 카드 손익/수익률 전일 대비 델타 표시 추가
-- `src/valuation.py`: 오늘 `account.cash_balance`가 거래 원장 현금과 크게 다르면 `implied_cash`로 fallback하도록 보정
-- `.streamlit/app.css`: KPI 델타 caption의 positive/negative/neutral 색상 class 추가
-- `tests/test_valuation.py`, `tests/test_app_dashboard.py`: 자동 데모 query parameter, 오늘 현금 fallback, KPI 델타 계산/렌더링 회귀 테스트 추가
+- `.streamlit/app.css`: 인증/온보딩 화면에서 `stSidebar`, `stSidebarCollapsedControl`, `stSidebarNav`를 조건부 숨김 처리.
+- `tests/test_app_dashboard.py`: 인증/온보딩 화면용 사이드바 숨김 CSS selector 회귀 테스트 추가.
 - `docs/VALIDATION.md`, `docs/CHANGELOG.md`, `Memory.md`: 최신 검증 결과와 변경 요약 갱신
 
 ## 핵심 설계 결정
@@ -99,19 +98,20 @@ streamlit run app.py --server.port 8501 --server.address 0.0.0.0 --server.fileWa
 ```
 
 ## 최신 검증 결과
-- 작업 범위: `?demo=1` URL query parameter 기반 자동 데모 진입, Dashboard KPI 카드 값 보정/전일 대비 델타 표시
-- 변경 파일: `src/ui/app_core.py`, `tests/test_app_dashboard.py`, `docs/VALIDATION.md`, `docs/CHANGELOG.md`, `Memory.md`
-- `python -m unittest tests.test_app_dashboard` 성공, 116 tests
+- 작업 범위: 초기 로그인/온보딩 화면의 Streamlit 기본 사이드바 노출 방지
+- 변경 파일: `.streamlit/app.css`, `tests/test_app_dashboard.py`, `docs/VALIDATION.md`, `docs/CHANGELOG.md`, `Memory.md`
+- 원인: Streamlit 기본 sidebar가 인증 화면에서도 생성되는데 기존 CSS가 `stSidebarNav`만 숨겨 빈 사이드바 컨테이너가 남을 수 있었다.
+- CSS 중괄호 균형 확인 성공 (`{` 638개, `}` 638개)
+- `python -m unittest tests.test_app_dashboard.ThemeStylesheetTests` 성공, 12 tests
 - `python -m compileall app.py src scripts tests` 성공
-- `python -m unittest discover -s tests -p "test_*.py"` 성공, 280 tests
-- 테스트 중 Streamlit bare mode 경고가 출력됐으나 모든 테스트는 성공했다.
-- Supabase changelog를 확인했고 이번 작업과 직접 충돌하는 Auth breaking change는 확인되지 않았다.
-- 운영 DB 데이터 직접 수정, migration 추가, 배포는 수행하지 않았다.
+- `python -m unittest discover -s tests -p "test_*.py"` 성공, 281 tests
+- 로컬 Streamlit `http://localhost:8508` 로그인 화면 브라우저 확인 성공: 본문 표시, error overlay 없음, `stSidebar` computed display `none`
+- 운영 DB 데이터 직접 수정과 migration 추가는 수행하지 않았다.
 
 ## Git/GitHub 상태
 - 기본 브랜치: `main`
-- 최근 배포 코드 커밋: `ea6d125 Fix dashboard KPI valuation deltas`
-- 이번 자동 데모 링크 패치는 아직 커밋/배포하지 않았다.
+- 최근 배포 코드 커밋: `0f19336 Add demo query auto entry`
+- 이번 로그인 사이드바 핫픽스는 `origin/main` 배포 전 로컬 검증까지 완료했다.
 - 워크트리에는 이번 요청 전부터 `data/portfolio.db`, 로컬 도구 디렉터리, 산출물 등 여러 변경/미추적 파일이 함께 있었다.
 - 커밋 시 요청 관련 파일만 선별하고 `data/portfolio.db`, `.local/`, `.playtools*/`, `.playwright-browsers/`, `.vscode/`, `artifacts/`, `data/kis_cache/` 등 로컬 산출물은 제외한다.
 

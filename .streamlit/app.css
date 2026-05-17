@@ -263,9 +263,20 @@ h6 {
     background: transparent;
 }
 
+.stApp:has(.auth-page-shell) [data-testid="stSidebar"],
+.stApp:has(.empty-state-shell) [data-testid="stSidebar"],
+body:has(.auth-page-shell) [data-testid="stSidebar"],
+body:has(.empty-state-shell) [data-testid="stSidebar"],
+.stApp:has(.auth-page-shell) [data-testid="stSidebarCollapsedControl"],
+.stApp:has(.empty-state-shell) [data-testid="stSidebarCollapsedControl"],
+body:has(.auth-page-shell) [data-testid="stSidebarCollapsedControl"],
+body:has(.empty-state-shell) [data-testid="stSidebarCollapsedControl"] {
+    display: none !important;
+}
+
 .stApp:has(.auth-page-shell) [data-testid="stSidebarNav"],
 .stApp:has(.empty-state-shell) [data-testid="stSidebarNav"] {
-    display: none;
+    display: none !important;
 }
 
 .block-container:has(.auth-page-shell) {

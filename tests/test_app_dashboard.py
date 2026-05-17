@@ -138,6 +138,17 @@ class ThemeStylesheetTests(unittest.TestCase):
         self.assertIn("box-shadow: var(--shadow-hover);", stylesheet)
         self.assertIn(".dashboard-summary-card--positive .dashboard-summary-card__delta", stylesheet)
         self.assertIn(".dashboard-summary-card--negative .dashboard-summary-card__delta", stylesheet)
+
+    def test_auth_stylesheet_hides_sidebar_container(self) -> None:
+        """인증/온보딩 화면은 Streamlit 기본 사이드바 컨테이너까지 숨긴다."""
+
+        stylesheet = dashboard_app.render_app_stylesheet()
+
+        self.assertIn('.stApp:has(.auth-page-shell) [data-testid="stSidebar"]', stylesheet)
+        self.assertIn('body:has(.auth-page-shell) [data-testid="stSidebar"]', stylesheet)
+        self.assertIn('.stApp:has(.empty-state-shell) [data-testid="stSidebar"]', stylesheet)
+        self.assertIn('[data-testid="stSidebarCollapsedControl"]', stylesheet)
+        self.assertIn("display: none !important;", stylesheet)
         self.assertIn(".dashboard-summary-card--accent .dashboard-summary-card__delta", stylesheet)
         self.assertIn('@media (max-width: 1180px) {\n    .dashboard-metric-strip {\n        grid-template-columns: repeat(3, minmax(0, 1fr));', stylesheet)
         self.assertIn('@media (max-width: 820px) {\n    .dashboard-metric-strip {\n        grid-template-columns: repeat(2, minmax(0, 1fr));', stylesheet)
