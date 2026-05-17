@@ -12,7 +12,8 @@
   - 상품 등록 검색 결과를 카드 내부 고정 높이 박스에서 compact dropdown으로 변경.
   - 자산 구분, 거래일자, 메모 입력을 한 줄 meta 영역으로 묶어 항상 보이도록 정리하고 모바일에서는 세로 배치되도록 CSS를 보강.
   - 검색 dropdown 구조와 CSS selector 회귀 테스트를 추가.
-  - `tests/test_app_dashboard.py`, 전체 compileall/unittest discover, 거래 페이지 desktop/tablet/mobile strict 캡처 검증 완료.
+  - `tests/test_app_dashboard.py`, 전체 compileall/unittest discover, 거래 페이지 desktop/tablet/mobile strict 캡처, GitHub Actions UI Capture, 운영 Streamlit Cloud 로그인 기반 거래 페이지 검증 완료.
+  - PR #1을 `main`에 merge해 Streamlit Cloud 자동 재배포를 트리거했다.
 - Dashboard 자산 배분 예수금 중립색 배포.
   - 예수금은 투자 수익률이 없는 현금 자산이므로 트리맵 visualMap 수익률 색상 매핑에서 제외.
   - `CASH` leaf를 `node_kind="cash"`, `profit_rate=None`, `FEARGREED_FLAT_COLOR`로 처리해 회색 중립색으로 표시.

@@ -19,17 +19,25 @@
 - `python scripts/capture_app.py --page trades --viewport desktop --strict` 성공
 - `python scripts/capture_app.py --page trades --viewport tablet --strict` 성공
 - `python scripts/capture_app.py --page trades --viewport mobile --strict` 성공
-- GitHub Actions run `25991712602`의 `capture-ui` 성공
+- GitHub Actions run `25991712602`, `25991878887`, `25991879672`의 PR/branch `capture-ui` 성공
+- PR #1 merge 후 `main` GitHub Actions run `25991986493`의 `UI Capture` 성공
+- `python scripts/verify_streamlit_deployment.py --page trades --expect-backend supabase --screenshot /tmp/prod-trades-after-deploy.png --text-output /tmp/prod-trades-after-deploy.txt --debug-dir /tmp/prod-verify-trades --click-demo --wait-ms 60000` 성공, `ok=true`, backend `Supabase`
 
 ## 산출물 확인
 - desktop 상품 등록 캡처: `artifacts/ui_captures/2026-05-17_125933/trades/desktop/blocks/03_trade_product_entry.png`
 - tablet 상품 등록 캡처: `artifacts/ui_captures/2026-05-17_130031/trades/tablet/blocks/03_trade_product_entry.png`
 - mobile 상품 등록 캡처: `artifacts/ui_captures/2026-05-17_130127/trades/mobile/blocks/03_trade_product_entry.png`
+- 운영 거래 페이지 검증 스크린샷: `/tmp/prod-trades-after-deploy.png`
+- 운영 거래 페이지 본문 텍스트: `/tmp/prod-trades-after-deploy.txt`
 
 ## 이전 운영 검증 유지 사항
 - Dashboard 자산 배분 트리맵 예수금 중립색은 `main`에서 운영 배포 검증 완료 상태다.
 - 운영 Streamlit Cloud `?demo=1&capture=1` 대시보드에서 예수금 회색 표시를 확인했다.
 
+## 참고 실패
+- 운영 공개 데모 URL 대상 `python scripts/capture_app.py --url "https://retirement-portfolio-app-nh2vq9ferqnpehsslbykbe.streamlit.app/?demo=1&capture=1" --page trades --viewport desktop --strict`는 Streamlit Cloud shell 링크만 감지하고 앱 내부 `거래` 링크를 찾지 못해 실패했다.
+- 같은 운영 앱은 로그인 기반 배포 검증에서 거래 페이지 본문과 Supabase backend가 정상 확인됐다.
+
 ## 미수행 항목
 - 운영 DB 데이터 직접 수정은 수행하지 않았다.
-- production 배포는 PR 충돌 해소와 `main` 병합 후 진행 대상이다.
+- 운영 DB migration은 수행하지 않았다.

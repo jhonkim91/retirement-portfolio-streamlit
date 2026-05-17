@@ -68,17 +68,22 @@ streamlit run app.py --server.port 8501 --server.address 0.0.0.0 --server.fileWa
 - 단위 검증: `python -m pytest tests/test_app_dashboard.py` 성공, 125 passed.
 - 전체 검증: `python -m unittest discover -s tests -p "test_*.py"` 성공, 291 tests.
 - UI 캡처 검증: `python scripts/capture_app.py --page trades --viewport desktop --strict`, `tablet --strict`, `mobile --strict` 모두 성공.
-- 원격 PR 체크: GitHub Actions run `25991712602`의 `capture-ui` 성공.
+- 원격 PR 체크: GitHub Actions run `25991712602`, `25991878887`, `25991879672`의 `capture-ui` 성공.
+- main 배포 체크: PR #1 merge commit `82038a3` push 후 GitHub Actions run `25991986493`의 `UI Capture` 성공.
+- 운영 검증: `python scripts/verify_streamlit_deployment.py --page trades --expect-backend supabase --click-demo --wait-ms 60000` 성공, `ok=true`, backend `Supabase`, 거래 페이지 본문에서 `상품명 또는 코드 검색`, `자산 구분`, `거래일자`, `메모` 노출 확인.
+- 운영 공개 데모 캡처 참고: `capture_app.py --url ...?demo=1&capture=1 --page trades --viewport desktop --strict`는 Streamlit Cloud shell 링크만 감지하고 앱 내 `거래` 링크를 찾지 못해 실패했다. 로그인 기반 운영 검증은 성공 상태다.
 - 확인 산출물: `artifacts/ui_captures/2026-05-17_125933/trades/desktop/blocks/03_trade_product_entry.png`, `artifacts/ui_captures/2026-05-17_130031/trades/tablet/blocks/03_trade_product_entry.png`, `artifacts/ui_captures/2026-05-17_130127/trades/mobile/blocks/03_trade_product_entry.png`.
+- 운영 검증 산출물: `/tmp/prod-trades-after-deploy.png`, `/tmp/prod-trades-after-deploy.txt`, `/tmp/prod-verify-trades/`.
 - 운영 DB 데이터 수정은 수행하지 않았다.
 
 ## Git/GitHub 상태
 - 기본 브랜치: `main`
 - 작업 브랜치: `codex/ui-capture-automation`
 - 이번 작업 커밋: `7c88a55 Refine trade product entry layout`
-- PR: `https://github.com/jhonkim91/retirement-portfolio-streamlit/pull/1`
-- 배포 방법: `main` 병합 후 `git push origin main` 또는 PR merge로 Streamlit Cloud 자동 재배포 트리거.
-- `origin/main` 병합 충돌은 문서(`Memory.md`, `docs/CHANGELOG.md`, `docs/VALIDATION.md`) 중심으로 해결 중이며, 병합 완료 후 재검증과 push가 필요하다.
+- main 병합 커밋: `82038a3 Merge UI capture and trade product layout`
+- PR: `https://github.com/jhonkim91/retirement-portfolio-streamlit/pull/1` merged.
+- 배포 방법: PR merge로 `origin/main`에 push되어 Streamlit Cloud 자동 재배포 트리거.
+- 배포 검증: GitHub Actions `UI Capture` 성공, 운영 Streamlit Cloud 거래 페이지 로그인 기반 검증 성공.
 - 워크트리에는 이번 요청 전부터 `data/portfolio.db`, 로컬 도구 디렉터리, 캡처 산출물 등 여러 변경/미추적 파일이 함께 있었다.
 - 커밋 시 요청 관련 파일만 선별하고 `data/portfolio.db`, `.local/`, `.playtools*/`, `.playwright-browsers/`, `.vscode/`, `artifacts/`, `data/kis_cache/` 등 로컬 산출물은 제외한다.
 
