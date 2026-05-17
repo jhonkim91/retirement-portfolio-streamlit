@@ -755,6 +755,8 @@ TRADE_PRICE_AUTO_FILLED_KEY = "trade_price_auto_filled"
 TRADE_DATE_KEY = "trade_date"
 TRADE_NOTES_KEY = "trade_notes"
 TRADE_PREFILL_MARKER_KEY = "trade_prefill_marker"
+TRADE_PRODUCT_DETAILS_OPEN_KEY = "trade_product_details_open"
+TRADE_PRODUCT_META_KEY = "trade_product_meta"
 CASH_FLOW_TYPE_KEY = "cash_flow_type"
 CASH_FLOW_AMOUNT_KEY = "cash_flow_amount"
 CASH_FLOW_DATE_KEY = "cash_flow_date"
@@ -1591,13 +1593,30 @@ def build_trade_total_preview_html(total_amount: Any) -> str:
 def build_product_code_status_html(symbol: Any) -> str:
     """상품 코드 입력 상태 라벨 HTML을 만든다."""
 
-    has_symbol = bool(str(symbol or "").strip())
+    normalized_symbol = str(symbol or "").strip()
+    has_symbol = bool(normalized_symbol)
     status_class = "product-code-status product-code-status--ok" if has_symbol else "product-code-status"
-    status_text = "✓ 확인됨" if has_symbol else "자동 입력 대기"
+    status_text = normalized_symbol if has_symbol else "자동 입력 대기"
     return (
-        '<div class="product-code-status-row">'
-        '<span class="product-code-status-row__label">상품 코드 (자동 입력)</span>'
-        f'<span class="{status_class}">{html.escape(status_text)}</span>'
+        '<div class="product-code-status-row product-code-status-row--preview">'
+        '<span class="product-code-status-row__label">상품 코드</span>'
+        f'<strong class="{status_class}">{html.escape(status_text)}</strong>'
+        "</div>"
+    )
+
+
+def build_trade_selected_product_html(product_name: Any, symbol: Any, meta: Any = "") -> str:
+    """상품 검색 선택 결과를 preview 목업과 같은 compact 카드로 반환한다."""
+
+    normalized_name = str(product_name or "").strip()
+    normalized_symbol = str(symbol or "").strip()
+    if not normalized_name or not normalized_symbol:
+        return ""
+    normalized_meta = str(meta or "").strip() or f"{normalized_symbol} · 선택됨"
+    return (
+        '<div class="trade-selected-product-card">'
+        f'<div class="trade-selected-product-card__name">{html.escape(normalized_name)}</div>'
+        f'<div class="trade-selected-product-card__meta">{html.escape(normalized_meta)}</div>'
         "</div>"
     )
 
@@ -3267,6 +3286,11 @@ def apply_search_product(product: dict[str, Any]) -> None:
     st.session_state[TRADE_SEARCH_QUERY_KEY] = str(product.get("name") or "").strip()
     st.session_state[TRADE_PRODUCT_NAME_KEY] = str(product.get("name") or "").strip()
     st.session_state[TRADE_SYMBOL_KEY] = str(product.get("symbol") or product.get("code") or "").strip()
+    selected_code = str(st.session_state.get(TRADE_SYMBOL_KEY) or "").strip()
+    selected_exchange = label_exchange(product.get("exchange"))
+    selected_source = str(product.get("source") or "").strip()
+    meta_parts = [part for part in (selected_code, selected_exchange, selected_source) if part]
+    st.session_state[TRADE_PRODUCT_META_KEY] = " · ".join(dict.fromkeys(meta_parts))
     prefill_latest_trade_price(str(st.session_state.get(TRADE_SYMBOL_KEY) or ""))
     selected_type = str(product.get("type") or "").strip().lower()
     selected_exchange = str(product.get("exchange") or "").strip()
@@ -3281,6 +3305,7 @@ def prefill_trade_from_holding(holding: dict[str, Any], marker: str) -> None:
     st.session_state[TRADE_SEARCH_QUERY_KEY] = str(holding.get("product_name") or "").strip()
     st.session_state[TRADE_PRODUCT_NAME_KEY] = str(holding.get("product_name") or "").strip()
     st.session_state[TRADE_SYMBOL_KEY] = str(holding.get("symbol") or "").strip()
+    st.session_state[TRADE_PRODUCT_META_KEY] = str(holding.get("symbol") or "").strip()
     st.session_state[TRADE_ASSET_TYPE_KEY] = str(holding.get("asset_type") or "risk")
     st.session_state[TRADE_PREFILL_MARKER_KEY] = marker
 
@@ -7791,6 +7816,7 @@ def trade_entry_page(account: dict[str, Any], holdings: list[dict[str, Any]], ac
         reset_values={
             TRADE_SYMBOL_KEY: "",
             TRADE_PRODUCT_NAME_KEY: "",
+            TRADE_PRODUCT_META_KEY: "",
             TRADE_SEARCH_QUERY_KEY: "",
             TRADE_QUANTITY_KEY: 1.0,
             TRADE_PRICE_KEY: 0.0,
@@ -7824,25 +7850,50 @@ def trade_entry_page(account: dict[str, Any], holdings: list[dict[str, Any]], ac
 
     with trade_input_tab:
         with st.container(key="trade-form-cols", horizontal=True, gap="small"):
-            trade_col, cash_flow_col = st.columns((1.45, 1.0), gap="large", vertical_alignment="top")
+            trade_col, cash_flow_col = st.columns((2.0, 1.0), gap="medium", vertical_alignment="top")
 
         with trade_col:
             with st.container(border=True, key="trade-product-entry"):
-                st.subheader("상품 등록")
-                st.caption("상품을 검색해 등록하고 예상 매입금액을 확인한 뒤 저장합니다.")
-                holding_options = {holding["product_name"]: holding for holding in holdings}
+                details_open = bool(st.session_state.get(TRADE_PRODUCT_DETAILS_OPEN_KEY, False))
                 current_trade_type = str(st.session_state.get(TRADE_TYPE_KEY) or "buy")
                 if current_trade_type not in TRADE_TYPE_LABELS:
                     current_trade_type = "buy"
                     st.session_state[TRADE_TYPE_KEY] = current_trade_type
-
-                trade_type = st.radio(
-                    "거래 유형",
-                    ["buy", "sell"],
-                    format_func=label_trade_type,
-                    key=TRADE_TYPE_KEY,
-                    horizontal=True,
-                )
+                with st.container(key="trade-product-compact-head"):
+                    head_cols = st.columns((1, 0.38), gap="small", vertical_alignment="top")
+                    with head_cols[0]:
+                        st.markdown(
+                            (
+                                '<div class="trade-product-compact-title">'
+                                "<h2>상품 등록</h2>"
+                                "<p>검색 → 선택 → 수량/금액 입력 순서로 빠르게 저장합니다.</p>"
+                                "</div>"
+                            ),
+                            unsafe_allow_html=True,
+                        )
+                    with head_cols[1]:
+                        with st.container(key=f"trade-product-head-actions-{current_trade_type}"):
+                            trade_type_selection = st.segmented_control(
+                                "거래 유형",
+                                ["buy", "sell"],
+                                default=current_trade_type,
+                                format_func=label_trade_type,
+                                key=TRADE_TYPE_KEY,
+                                label_visibility="collapsed",
+                                width="content",
+                            )
+                            if st.button(
+                                "상세 접기" if details_open else "상세 펼치기",
+                                key=f"trade-product-details-toggle:{account['id']}",
+                                help="자산 구분, 거래일자, 메모 입력 영역을 접거나 펼칩니다.",
+                            ):
+                                st.session_state[TRADE_PRODUCT_DETAILS_OPEN_KEY] = not details_open
+                                st.rerun()
+                trade_type = str(trade_type_selection or current_trade_type)
+                if trade_type not in TRADE_TYPE_LABELS:
+                    trade_type = "buy"
+                    st.session_state[TRADE_TYPE_KEY] = trade_type
+                holding_options = {holding["product_name"]: holding for holding in holdings}
                 current_trade_type = str(trade_type or "buy")
 
                 if holding_options and current_trade_type == "sell":
@@ -7870,6 +7921,7 @@ def trade_entry_page(account: dict[str, Any], holdings: list[dict[str, Any]], ac
                         value=str(st.session_state.get(TRADE_SEARCH_QUERY_KEY) or ""),
                         key=TRADE_SEARCH_QUERY_KEY,
                         debounce=150,
+                        label_visibility="collapsed",
                         placeholder="예: 삼성전자, 005930, K55207BU0715",
                     )
 
@@ -7899,30 +7951,47 @@ def trade_entry_page(account: dict[str, Any], holdings: list[dict[str, Any]], ac
                                     unsafe_allow_html=True,
                                 )
 
-                st.markdown(build_product_code_status_html(st.session_state.get(TRADE_SYMBOL_KEY)), unsafe_allow_html=True)
-                symbol = st.text_input(
-                    "상품 코드",
-                    key=TRADE_SYMBOL_KEY,
-                    help="예: 0177N0, 005930, AAPL, K55207BU0715",
-                    label_visibility="collapsed",
+                selected_product_html = build_trade_selected_product_html(
+                    st.session_state.get(TRADE_PRODUCT_NAME_KEY),
+                    st.session_state.get(TRADE_SYMBOL_KEY),
+                    st.session_state.get(TRADE_PRODUCT_META_KEY),
                 )
-                st.caption("ETF는 공개 코드, 펀드는 표준코드로 등록하면 자동 가격 조회를 시도합니다.")
+                if selected_product_html:
+                    with st.container(key="trade-selected-product-shell"):
+                        st.markdown(selected_product_html, unsafe_allow_html=True)
+                        if st.button("다시 선택", key=f"trade-product-clear-selection:{account['id']}"):
+                            st.session_state[TRADE_SEARCH_QUERY_KEY] = ""
+                            st.session_state[TRADE_PRODUCT_NAME_KEY] = ""
+                            st.session_state[TRADE_SYMBOL_KEY] = ""
+                            st.session_state[TRADE_PRODUCT_META_KEY] = ""
+                            st.session_state[TRADE_PRICE_KEY] = 0.0
+                            st.session_state[TRADE_PRICE_AUTO_FILLED_KEY] = False
+                            st.rerun()
 
-                trade_value_col, quantity_unit_col = st.columns(2, gap="medium")
-                with trade_value_col:
-                    price = st.number_input(
-                        trade_price_label(current_trade_type),
-                        min_value=0.0,
-                        step=100.0,
-                        key=TRADE_PRICE_KEY,
-                        on_change=mark_trade_price_manually_edited,
+                st.markdown(build_product_code_status_html(st.session_state.get(TRADE_SYMBOL_KEY)), unsafe_allow_html=True)
+                with st.container(key="trade-product-code-input"):
+                    symbol = st.text_input(
+                        "상품 코드",
+                        key=TRADE_SYMBOL_KEY,
+                        help="예: 0177N0, 005930, AAPL, K55207BU0715",
+                        label_visibility="collapsed",
                     )
-                with quantity_unit_col:
-                    quantity_col, unit_col = st.columns((2.2, 0.8), gap="small", vertical_alignment="bottom")
+                st.caption("검색 결과를 선택하면 상품명과 코드가 자동 입력됩니다.")
+
+                with st.container(key="trade-price-quantity-row"):
+                    trade_value_col, quantity_col = st.columns(2, gap="medium")
+                    with trade_value_col:
+                        price = st.number_input(
+                            trade_price_label(current_trade_type),
+                            min_value=0.0,
+                            step=100.0,
+                            key=TRADE_PRICE_KEY,
+                            on_change=mark_trade_price_manually_edited,
+                        )
                     with quantity_col:
-                        quantity = st.number_input("수량/좌수", min_value=0.0, step=1.0, key=TRADE_QUANTITY_KEY)
-                    with unit_col:
-                        st.selectbox("단위", ["주"], index=0, key=f"trade-unit:{account['id']}", label_visibility="collapsed")
+                        with st.container(key="trade-quantity-input-with-unit"):
+                            quantity = st.number_input("수량/좌수", min_value=0.0, step=1.0, key=TRADE_QUANTITY_KEY)
+                            st.markdown('<span class="trade-quantity-inline-unit">주</span>', unsafe_allow_html=True)
 
                 trade_total = calculate_trade_total(price, quantity, symbol)
                 st.markdown(build_trade_total_preview_html(trade_total), unsafe_allow_html=True)
@@ -7930,29 +7999,34 @@ def trade_entry_page(account: dict[str, Any], holdings: list[dict[str, Any]], ac
                 if trade_disabled:
                     st.caption("가격과 수량을 0보다 크게 입력하면 저장할 수 있습니다.")
 
-                with st.container(key="trade-product-meta"):
-                    meta_cols = st.columns((0.85, 0.95, 1.25), gap="medium", vertical_alignment="bottom")
+                asset_type = str(st.session_state.get(TRADE_ASSET_TYPE_KEY) or "risk")
+                trade_date = st.session_state.get(TRADE_DATE_KEY) or capture_current_date()
+                notes = str(st.session_state.get(TRADE_NOTES_KEY) or "")
+                if details_open:
+                    with st.container(key="trade-product-advanced"):
+                        with st.container(key="trade-product-meta"):
+                            meta_cols = st.columns((0.85, 0.95, 1.25), gap="medium", vertical_alignment="bottom")
 
-                    with meta_cols[0]:
-                        asset_type = st.selectbox(
-                            "자산 구분",
-                            ["risk", "safe"],
-                            format_func=label_asset_type,
-                            key=TRADE_ASSET_TYPE_KEY,
-                        )
+                            with meta_cols[0]:
+                                asset_type = st.selectbox(
+                                    "자산 구분",
+                                    ["risk", "safe"],
+                                    format_func=label_asset_type,
+                                    key=TRADE_ASSET_TYPE_KEY,
+                                )
 
-                    with meta_cols[1]:
-                        trade_date = st.date_input(
-                            trade_date_label(trade_type),
-                            key=TRADE_DATE_KEY,
-                        )
+                            with meta_cols[1]:
+                                trade_date = st.date_input(
+                                    trade_date_label(trade_type),
+                                    key=TRADE_DATE_KEY,
+                                )
 
-                    with meta_cols[2]:
-                        notes = st.text_input(
-                            "메모",
-                            key=TRADE_NOTES_KEY,
-                            placeholder="선택 입력",
-                        )
+                            with meta_cols[2]:
+                                notes = st.text_input(
+                                    "메모",
+                                    key=TRADE_NOTES_KEY,
+                                    placeholder="선택 입력",
+                                )
 
                 submitted = st.button(
                     trade_submit_button_label(trade_type),

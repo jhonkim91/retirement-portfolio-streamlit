@@ -8,6 +8,12 @@
 ## 최근 완료 변경 요약
 
 ### 2026-05-17
+- 상품 등록 카드 preview 스타일 동기화.
+  - `preview.html` 기준으로 상품 등록 카드 폭/여백을 680px compact 카드로 재정리하고 검색 결과를 compact dropdown으로 유지.
+  - 매수/매도 선택을 카드 우상단 segmented control로 이동했으며, 매수 활성은 파랑, 매도 활성은 빨강으로 표시.
+  - 수량 단위 `주`는 별도 select 박스 대신 수량 입력 박스 내부 우측에 inline으로 표시.
+  - 상세 입력은 `상세 펼치기`로 접어 기본 카드 높이를 낮추고, 자산 구분/거래일자/메모는 펼쳤을 때만 노출.
+  - `tests/test_app_dashboard.py`, 전체 compileall/unittest discover, 거래 페이지 desktop/tablet/mobile strict 캡처, 매도 segment 클릭 검증 완료.
 - Dashboard Overview 상단 정렬 핫픽스.
   - 운영 화면에서 기간 버튼이 히어로 카드 위쪽 흰 영역에 남고 KPI 카드 높이가 어긋나는 회귀를 확인.
   - Streamlit Cloud DOM 차이를 고려해 기간 버튼 wrapper를 히어로 내부 absolute overlay로 고정하고, KPI 카드 grid 높이와 sparkline 표시를 `.st-key-dashboard-overview-option2` scope의 후순위 CSS로 보정.

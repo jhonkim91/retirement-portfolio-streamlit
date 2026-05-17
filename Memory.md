@@ -12,7 +12,7 @@
 - [x] Streamlit UI 캡처 자동화와 거래/평가액 기록 페이지 캡처 확장
 - [x] 대시보드 UI 개선 및 요약 카드/트렌드/거래 패널/차트 반응형 보강
 - [x] 로그인/온보딩 화면의 Streamlit 기본 사이드바 컨테이너 숨김
-- [x] 거래 상품 검색 결과 compact dropdown 및 자산 구분/거래일자 항상 표시 반영
+- [x] 상품 등록 카드 preview 스타일, 우상단 매수/매도 segmented control, 수량 단위 inline 표시 반영
 - [x] Dashboard Overview 기간 버튼/KPI 카드 정렬 보정 및 운영 배포
 - [ ] temporal normalize migration 실제 적용 전 운영 `realtime_price_bars` 테이블 생성/노출 여부 결정
 
@@ -28,9 +28,10 @@
 - 배포 앱: `https://retirement-portfolio-app-nh2vq9ferqnpehsslbykbe.streamlit.app/`
 
 ## 최근 변경 파일
-- `.streamlit/app.css`: Dashboard Overview 기간 버튼 래퍼를 히어로 내부 absolute overlay로 고정하고, KPI 카드 grid 높이/sparkline 표시를 후순위 override로 보정.
-- `tests/test_app_dashboard.py`: Dashboard Overview 기간 버튼 overlay와 KPI 카드 높이/반응형 CSS selector 회귀 테스트 추가.
-- `docs/VALIDATION.md`, `docs/CHANGELOG.md`, `Memory.md`: Dashboard Overview 정렬 핫픽스 배포와 검증 결과 반영.
+- `src/ui/app_core.py`: 상품 등록 카드 헤더를 compact 구조로 정리하고 매수/매도 segmented control을 우상단으로 이동, 수량 단위 `주`를 입력 박스 inline 표기로 변경.
+- `.streamlit/app.css`: preview 목업 기준 상품 등록 카드 폭/여백/search dropdown/선택 상품/segmented control/inline unit/반응형 스타일 보강.
+- `tests/test_app_dashboard.py`: 상품 등록 compact card, segmented control, inline unit, search dropdown 구조와 CSS selector 회귀 테스트 추가.
+- `docs/VALIDATION.md`, `docs/CHANGELOG.md`, `Memory.md`: 상품 등록 카드 preview 스타일 동기화 검증 결과 반영.
 
 ## 핵심 설계 결정
 - 기존 `account_summary`와 `daily_account_snapshot` 계산은 유지하고, 입금 기준 이력은 별도 `daily_valuation_snapshot`에 저장한다.
@@ -63,21 +64,19 @@ streamlit run app.py --server.port 8501 --server.address 0.0.0.0 --server.fileWa
 ```
 
 ## 최신 검증 결과
-- 작업 범위: Dashboard Overview 상단에서 기간 버튼이 히어로 밖으로 밀리고 KPI 카드 높이가 어긋나는 레이아웃 회귀 보정.
+- 작업 범위: `preview.html` 기준 상품 등록 카드 스타일 동기화, 우상단 매수/매도 segmented control, 수량 단위 inline 표시.
 - 코드 검증: `python -m compileall app.py src scripts tests` 성공.
 - 단위 검증: `python -m pytest tests/test_app_dashboard.py` 성공, 125 passed.
 - 전체 검증: `python -m unittest discover -s tests -p "test_*.py"` 성공, 291 tests.
-- UI 캡처 검증: `python scripts/capture_app.py --url "http://localhost:8510/?demo=1&capture=1" --page dashboard --viewport desktop --strict` 성공.
-- UI 캡처 검증: `python scripts/capture_app.py --url "http://localhost:8510/?demo=1&capture=1" --page dashboard --viewport tablet --strict` 성공.
-- main 배포 체크: commit `83c3463` push 후 GitHub Actions run `25992989168`의 `UI Capture` 성공.
-- 운영 검증: `python scripts/verify_streamlit_deployment.py --page dashboard --expect-backend supabase --click-demo --wait-ms 90000` 성공, `ok=true`, backend `Supabase`.
-- 운영 UI 확인: 사용자 제공 운영 스크린샷에서 기간 버튼이 히어로 내부 우상단에 있고 KPI 카드가 같은 줄/높이로 정렬된 것을 확인.
-- 확인 산출물: `/tmp/dashboard-overview-final-desktop/2026-05-17_140054/desktop/full_page.png`, `/tmp/dashboard-overview-final-check/2026-05-17_135933/tablet/full_page.png`, `/tmp/prod-dashboard-overview-after-fix.png`.
+- UI 캡처 검증: 거래 페이지 `desktop/tablet/mobile` strict 캡처 성공.
+- 상호작용 검증: Playwright로 매도 segmented control 클릭 후 매도 활성 버튼이 흰 배경/빨간 글자로 렌더링되는 것을 확인.
+- 확인 산출물: `/tmp/trade-preview-final-8/2026-05-17_153948/trades/desktop/blocks/03_trade_product_entry.png`, `/tmp/trade-preview-final-8/2026-05-17_153734/trades/tablet/blocks/03_trade_product_entry.png`, `/tmp/trade-preview-final-8/2026-05-17_153948/trades/mobile/blocks/03_trade_product_entry.png`, `/tmp/trade-preview-sell-segment.png`.
 - 운영 DB 데이터 수정은 수행하지 않았다.
 
 ## Git/GitHub 상태
 - 기본 브랜치: `main`
 - 최근 배포 커밋: `83c3463 Fix dashboard overview alignment`
+- 현재 로컬 검증 완료 변경: 상품 등록 카드 preview 스타일 동기화. 커밋/푸시 후 이 항목을 최신 배포 커밋으로 갱신한다.
 - 이전 거래 UI 커밋: `7c88a55 Refine trade product entry layout`, main 병합 커밋 `82038a3`, 배포 기록 커밋 `424467c`
 - PR: `https://github.com/jhonkim91/retirement-portfolio-streamlit/pull/1` merged.
 - 배포 방법: `origin/main` push로 Streamlit Cloud 자동 재배포 트리거.

@@ -96,6 +96,20 @@ class ThemeStylesheetTests(unittest.TestCase):
         self.assertIn(".st-key-trade-product-search-box", stylesheet)
         self.assertIn(".trade-search-suggestions__status", stylesheet)
         self.assertIn(".st-key-trade-product-meta", stylesheet)
+        self.assertIn(".st-key-trade-product-compact-head", stylesheet)
+        self.assertIn(".trade-product-compact-title h2", stylesheet)
+        self.assertIn(".trade-selected-product-card", stylesheet)
+        self.assertIn(".st-key-trade-selected-product-shell", stylesheet)
+        self.assertIn(".product-code-status-row--preview", stylesheet)
+        self.assertIn(".st-key-trade-product-code-input", stylesheet)
+        self.assertIn('[data-testid="stButtonGroup"]', stylesheet)
+        self.assertIn('[data-testid^="stBaseButton-segmented_control"]', stylesheet)
+        self.assertIn(".trade-quantity-inline-unit", stylesheet)
+        self.assertIn(".st-key-trade-quantity-input-with-unit", stylesheet)
+        self.assertIn("max-height: 312px !important;", stylesheet)
+        self.assertIn("background: #EDF5F1 !important;", stylesheet)
+        self.assertIn("color: #316CFF !important;", stylesheet)
+        self.assertIn("color: #E85D75 !important;", stylesheet)
         self.assertIn("position: absolute !important;", stylesheet)
         self.assertIn("max-height: 18rem;", stylesheet)
         self.assertIn(".trade-total-preview", stylesheet)
@@ -246,22 +260,32 @@ class ThemeStylesheetTests(unittest.TestCase):
         self.assertIn('st.container(border=True, key="trade-product-entry")', source)
         self.assertIn('st.container(border=True, key="trade-cash-flow-entry")', source)
 
-    def test_trade_product_search_uses_compact_dropdown_and_keeps_required_fields_visible(self) -> None:
-        """상품 등록 검색 결과는 compact dropdown이고 자산 구분/거래일자는 항상 노출한다."""
+    def test_trade_product_search_uses_preview_compact_dropdown_layout(self) -> None:
+        """상품 등록 검색 결과는 preview 목업의 compact dropdown 레이아웃을 사용한다."""
 
         source = inspect.getsource(dashboard_app.trade_entry_page)
 
+        self.assertIn('st.container(key="trade-product-compact-head")', source)
+        self.assertIn("검색 → 선택 → 수량/금액 입력 순서로 빠르게 저장합니다.", source)
+        self.assertIn('st.segmented_control(', source)
+        self.assertIn('st.container(key=f"trade-product-head-actions-{current_trade_type}")', source)
+        self.assertIn('key=f"trade-product-details-toggle:{account[\'id\']}"', source)
         self.assertIn('st.container(key="trade-product-search-box")', source)
         self.assertIn('st.container(key="trade-search-suggestions")', source)
+        self.assertIn('label_visibility="collapsed"', source)
         self.assertNotIn(
             'st.container(border=True, height=260, key="trade-search-suggestions")',
             source,
         )
 
+        self.assertIn("build_trade_selected_product_html(", source)
+        self.assertIn('st.container(key="trade-product-code-input")', source)
         self.assertIn('st.container(key="trade-product-meta")', source)
         self.assertIn('asset_type = st.selectbox(', source)
         self.assertIn('trade_date = st.date_input(', source)
         self.assertIn('trade_date_label(trade_type)', source)
+        self.assertIn('st.container(key="trade-quantity-input-with-unit")', source)
+        self.assertIn("trade-quantity-inline-unit", source)
 
     def test_dashboard_summary_and_trend_controls_use_flex_wrappers(self) -> None:
         """상단 요약 카드와 선택 종목 컨트롤은 key 기반 flex wrapper를 사용한다."""
@@ -967,8 +991,11 @@ class TradeFormResetTests(unittest.TestCase):
 
         source = inspect.getsource(dashboard_app.trade_entry_page)
 
-        self.assertLess(source.index("trade_type = st.radio("), source.index("상품명 또는 코드 검색"))
-        self.assertLess(source.index("trade_type = st.radio("), source.index("build_trade_total_preview_html(trade_total)"))
+        self.assertLess(source.index("trade_type_selection = st.segmented_control("), source.index("상품명 또는 코드 검색"))
+        self.assertLess(
+            source.index("trade_type_selection = st.segmented_control("),
+            source.index("build_trade_total_preview_html(trade_total)"),
+        )
 
     def test_dashboard_selected_trend_period_options_exclude_today(self) -> None:
         """대시보드 선택 종목 트렌드 기간에서는 당일 옵션을 숨긴다."""
