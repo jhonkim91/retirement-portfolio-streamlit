@@ -36,6 +36,7 @@
 - [x] Dashboard KPI 값 급등 방지를 위해 오늘 평가 스냅샷 현금 산정 fallback 추가
 - [x] `?demo=1` URL query parameter 기반 데모 자동 진입 추가
 - [x] 로그인/온보딩 화면의 Streamlit 기본 사이드바 컨테이너 숨김
+- [x] Dashboard 자산 배분 트리맵 예수금 중립색 배포
 - [ ] temporal normalize migration 실제 적용 전 운영 `realtime_price_bars` 테이블 생성/노출 여부 결정
 
 ## 프로젝트 개요
@@ -50,9 +51,10 @@
 - 배포 앱: `https://retirement-portfolio-app-nh2vq9ferqnpehsslbykbe.streamlit.app/`
 
 ## 최근 변경 파일
-- `.streamlit/app.css`: 인증/온보딩 화면에서 `stSidebar`, `stSidebarCollapsedControl`, `stSidebarNav`를 조건부 숨김 처리.
-- `tests/test_app_dashboard.py`: 인증/온보딩 화면용 사이드바 숨김 CSS selector 회귀 테스트 추가.
-- `docs/VALIDATION.md`, `docs/CHANGELOG.md`, `Memory.md`: 최신 검증 결과와 변경 요약 갱신
+- `src/analytics.py`: 트리맵 예수금 bucket/leaf 색상을 회색 중립색으로 변경하고 `node_kind="cash"` metadata를 추가.
+- `src/ui/app_core.py`: 예수금 leaf를 수익률 visualMap에서 제외하고 `FEARGREED_FLAT_COLOR`로 표시하도록 rollup/label formatter를 보정.
+- `tests/test_analytics.py`, `tests/test_app_dashboard.py`: 예수금 중립색, 수익률 매핑 제외, 라벨 회귀 테스트 추가.
+- `docs/VALIDATION.md`, `docs/CHANGELOG.md`, `Memory.md`: 최신 검증 결과와 배포 요약 갱신.
 
 ## 핵심 설계 결정
 - 기존 `account_summary`와 `daily_account_snapshot` 계산은 유지하고, 입금 기준 이력은 별도 `daily_valuation_snapshot`에 저장한다.
@@ -81,6 +83,7 @@
 - 선택 매수 삭제로 남은 매도 원장이 보유 수량을 음수로 만들 경우 해당 연관 매도 기록을 확인 dialog의 삭제 대상에 자동 포함한다.
 - 선택 삭제는 매도/매수 종속성으로 인한 중간 상태 오류를 줄이기 위해 거래일/id 역순으로 삭제한다.
 - Dashboard 히어로의 `전일 대비` 값은 입금 대비 손익이 아니라 추이 데이터의 마지막 두 `total_value` 차이로 계산한다.
+- Dashboard 자산 배분 트리맵에서 예수금은 투자 수익률이 없는 현금 자산으로 보고, `profit_rate=None`, `node_kind="cash"`, `FEARGREED_FLAT_COLOR` 회색 중립색으로 표시한다. 예수금은 수익률 색상표의 최저/최고 범위 계산에서도 제외한다.
 - 사이드바 계좌 카드에서는 계좌명만 표시하고 `연금(IRP/퇴직연금)` 유형 뱃지는 표시하지 않는다.
 - 스냅샷이 없으면 기존 summary와 `daily_account_snapshot` 기반 표시로 fallback한다.
 - `?demo=1`, `?demo=true`, `?demo=yes`, `?demo=demo`는 비로그인 사용자에게만 기존 데모 버튼과 같은 `start_demo_workspace_session()` 흐름을 자동 실행한다. 이미 인증된 사용자는 query parameter로 세션을 바꾸지 않는다.
@@ -98,22 +101,21 @@ streamlit run app.py --server.port 8501 --server.address 0.0.0.0 --server.fileWa
 ```
 
 ## 최신 검증 결과
-- 작업 범위: 초기 로그인/온보딩 화면의 Streamlit 기본 사이드바 노출 방지
-- 변경 파일: `.streamlit/app.css`, `tests/test_app_dashboard.py`, `docs/VALIDATION.md`, `docs/CHANGELOG.md`, `Memory.md`
-- 원인: Streamlit 기본 sidebar가 인증 화면에서도 생성되는데 기존 CSS가 `stSidebarNav`만 숨겨 빈 사이드바 컨테이너가 남을 수 있었다.
-- CSS 중괄호 균형 확인 성공 (`{` 638개, `}` 638개)
-- `python -m unittest tests.test_app_dashboard.ThemeStylesheetTests` 성공, 12 tests
+- 작업 범위: Dashboard 자산 배분 트리맵 예수금 중립색 처리 및 운영 배포.
+- 변경 파일: `src/analytics.py`, `src/ui/app_core.py`, `tests/test_analytics.py`, `tests/test_app_dashboard.py`, `docs/VALIDATION.md`, `docs/CHANGELOG.md`, `Memory.md`
+- 원인: 운영 `main`에서는 예수금 leaf가 수익률 0% 값으로 rollup되어 visualMap 색상표의 보라색 계열로 표시됐다.
+- 수정: 예수금을 `node_kind="cash"`, `profit_rate=None`, `FEARGREED_FLAT_COLOR`로 처리하고 수익률 색상표 계산에서 제외했다.
 - `python -m compileall app.py src scripts tests` 성공
-- `python -m unittest discover -s tests -p "test_*.py"` 성공, 281 tests
-- 로컬 Streamlit `http://localhost:8508` 로그인 화면 브라우저 확인 성공: 본문 표시, error overlay 없음, `stSidebar` computed display `none`
-- 운영 Streamlit Cloud 로그인 화면 검증 성공: 새 CSS marker 반영, `stSidebar` computed display `none`
+- `python -m unittest tests.test_app_dashboard.AllocationTreemapVisualMapTests.test_allocation_treemap_renders_cash_as_neutral_without_profit_rate_mapping tests.test_analytics.AccountSummaryTests.test_allocation_treemap_nodes_groups_holdings_and_cash` 성공, 2 tests
+- `python -m unittest discover -s tests -p "test_*.py"` 성공, 282 tests
+- 운영 Streamlit Cloud `?demo=1&capture=1` 대시보드에서 예수금 회색 표시 확인 완료.
 - 운영 DB 데이터 직접 수정과 migration 추가는 수행하지 않았다.
 
 ## Git/GitHub 상태
 - 기본 브랜치: `main`
-- 최근 배포 코드 커밋: `ce4b2d5 Hide auth sidebar on login screen`
+- 최근 배포 코드 커밋: `9b17a48 Render cash treemap as neutral`
 - 배포 방법: `git push origin main`으로 Streamlit Cloud 자동 재배포 트리거.
-- 운영 배포 검증: 공개 URL `https://retirement-portfolio-app-nh2vq9ferqnpehsslbykbe.streamlit.app/` 로그인 화면 iframe에서 새 CSS selector 반영과 사이드바 숨김 상태 확인.
+- 운영 배포 검증: 공개 URL `https://retirement-portfolio-app-nh2vq9ferqnpehsslbykbe.streamlit.app/?demo=1&capture=1` 대시보드에서 예수금 회색 표시 확인.
 - 워크트리에는 이번 요청 전부터 `data/portfolio.db`, 로컬 도구 디렉터리, 산출물 등 여러 변경/미추적 파일이 함께 있었다.
 - 커밋 시 요청 관련 파일만 선별하고 `data/portfolio.db`, `.local/`, `.playtools*/`, `.playwright-browsers/`, `.vscode/`, `artifacts/`, `data/kis_cache/` 등 로컬 산출물은 제외한다.
 

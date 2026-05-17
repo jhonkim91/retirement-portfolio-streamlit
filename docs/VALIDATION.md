@@ -6,25 +6,22 @@
 - 기준일: `2026-05-17`
 
 ## 최신 대표 검증 결과
-- 작업 범위: 초기 로그인/온보딩 화면의 Streamlit 기본 사이드바 노출 방지.
-- 원인: `pages/` 기반 Streamlit 기본 사이드바가 인증 화면에서도 생성되는데, 기존 CSS는 `[data-testid="stSidebarNav"]`만 숨겨 사이드바 컨테이너가 남을 수 있었다.
-- 수정: `.auth-page-shell` 또는 `.empty-state-shell`이 있는 화면에서 `[data-testid="stSidebar"]`, `[data-testid="stSidebarCollapsedControl"]`, `[data-testid="stSidebarNav"]`를 `display: none !important`로 숨긴다.
-- 회귀 테스트: 인증/온보딩 화면용 사이드바 숨김 selector가 CSS 결과물에 포함되는지 `tests/test_app_dashboard.py`에서 고정했다.
-- 환경: Python 3.11, Streamlit 로컬 서버 `http://localhost:8508`.
+- 작업 범위: Dashboard 자산 배분 트리맵 예수금 중립색 처리 및 운영 배포.
+- 원인: 운영 `main`에서는 예수금 leaf가 수익률 0% 값으로 rollup되어 visualMap 색상표의 보라색 계열로 표시됐다.
+- 수정: 예수금을 `node_kind="cash"`, `profit_rate=None`, `FEARGREED_FLAT_COLOR`로 처리하고 수익률 색상표 계산에서 제외했다.
+- 회귀 테스트: 예수금 node metadata, 중립색, visualMap 범위, 라벨 formatter를 `tests/test_analytics.py`와 `tests/test_app_dashboard.py`에 고정했다.
+- 환경: Python 3.11, Streamlit Cloud 운영 앱.
 
 ## 명령 검증
-- CSS 중괄호 균형 확인 성공 (`{` 638개, `}` 638개)
-- `python -m unittest tests.test_app_dashboard.ThemeStylesheetTests` 성공, 12 tests
 - `python -m compileall app.py src scripts tests` 성공
-- `python -m unittest discover -s tests -p "test_*.py"` 성공, 281 tests
-- 로컬 브라우저 확인 성공: 로그인 화면 본문 표시, error overlay 없음, `stSidebar` computed display `none`.
-- 로컬 로그인 화면 확인 스크린샷: `/tmp/retirement-login-sidebar-hidden-main.png`
-- 운영 Streamlit Cloud 검증 성공: `origin/main` 푸시 후 공개 URL iframe에서 새 CSS marker(`stSidebarCollapsedControl`)와 `body:has(.auth-page-shell) [data-testid="stSidebar"]` selector 반영 확인, `stSidebar` computed display `none`.
-- 운영 로그인 화면 확인 스크린샷: `/tmp/prod-auth-sidebar-hidden.png`
+- `python -m unittest tests.test_app_dashboard.AllocationTreemapVisualMapTests.test_allocation_treemap_renders_cash_as_neutral_without_profit_rate_mapping tests.test_analytics.AccountSummaryTests.test_allocation_treemap_nodes_groups_holdings_and_cash` 성공, 2 tests
+- `python -m unittest discover -s tests -p "test_*.py"` 성공, 282 tests
+- 운영 Streamlit Cloud `?demo=1&capture=1` 대시보드에서 예수금 회색 표시 확인 완료.
 
 ## 검증 범위
-- 인증/온보딩 marker가 있는 화면에서 기본 사이드바 컨테이너와 접힘 컨트롤을 숨기는 CSS selector 검증.
-- 로컬 Streamlit 로그인 화면에서 사이드바 DOM은 존재하더라도 computed display가 `none`인지 검증.
+- 예수금 node가 현금 자산으로 metadata를 유지하는지 검증.
+- 예수금이 수익률 visualMap min/max 계산에서 제외되고 회색 중립색으로 표시되는지 검증.
+- 운영 데모 대시보드에서 예수금 표시가 반영됐는지 확인.
 
 ## 미수행 항목
 - 운영 DB 데이터 직접 수정은 수행하지 않았다.

@@ -8,6 +8,11 @@
 ## 최근 완료 변경 요약
 
 ### 2026-05-17
+- Dashboard 자산 배분 예수금 중립색 배포.
+  - 예수금은 투자 수익률이 없는 현금 자산이므로 트리맵 visualMap 수익률 색상 매핑에서 제외.
+  - `CASH` leaf를 `node_kind="cash"`, `profit_rate=None`, `FEARGREED_FLAT_COLOR`로 처리해 회색 중립색으로 표시.
+  - 예수금 라벨은 종목 수익률 대신 `예수금`/`현금` 2줄 구성을 사용.
+  - 관련 단위 테스트, 전체 compileall/unittest discover, 운영 데모 대시보드 확인 완료.
 - 로그인 화면 사이드바 노출 핫픽스.
   - 인증/온보딩 화면에서도 Streamlit 기본 사이드바 컨테이너가 생성되고, 기존 CSS가 `stSidebarNav`만 숨겨 빈 사이드바가 남을 수 있는 원인을 확인.
   - `.auth-page-shell`/`.empty-state-shell` 화면에 한해 `stSidebar`, `stSidebarCollapsedControl`, `stSidebarNav`를 숨기도록 CSS selector를 보강.
