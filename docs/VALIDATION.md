@@ -19,6 +19,8 @@
 - `python -m unittest discover -s tests -p "test_*.py"` 성공, 281 tests
 - 로컬 브라우저 확인 성공: 로그인 화면 본문 표시, error overlay 없음, `stSidebar` computed display `none`.
 - 로컬 로그인 화면 확인 스크린샷: `/tmp/retirement-login-sidebar-hidden-main.png`
+- 운영 Streamlit Cloud 검증 성공: `origin/main` 푸시 후 공개 URL iframe에서 새 CSS marker(`stSidebarCollapsedControl`)와 `body:has(.auth-page-shell) [data-testid="stSidebar"]` selector 반영 확인, `stSidebar` computed display `none`.
+- 운영 로그인 화면 확인 스크린샷: `/tmp/prod-auth-sidebar-hidden.png`
 
 ## 검증 범위
 - 인증/온보딩 marker가 있는 화면에서 기본 사이드바 컨테이너와 접힘 컨트롤을 숨기는 CSS selector 검증.
@@ -26,4 +28,3 @@
 
 ## 미수행 항목
 - 운영 DB 데이터 직접 수정은 수행하지 않았다.
-- 원격 Streamlit 배포 검증은 커밋/푸시 후 최신 결과로 갱신한다.

@@ -106,12 +106,14 @@ streamlit run app.py --server.port 8501 --server.address 0.0.0.0 --server.fileWa
 - `python -m compileall app.py src scripts tests` 성공
 - `python -m unittest discover -s tests -p "test_*.py"` 성공, 281 tests
 - 로컬 Streamlit `http://localhost:8508` 로그인 화면 브라우저 확인 성공: 본문 표시, error overlay 없음, `stSidebar` computed display `none`
+- 운영 Streamlit Cloud 로그인 화면 검증 성공: 새 CSS marker 반영, `stSidebar` computed display `none`
 - 운영 DB 데이터 직접 수정과 migration 추가는 수행하지 않았다.
 
 ## Git/GitHub 상태
 - 기본 브랜치: `main`
-- 최근 배포 코드 커밋: `0f19336 Add demo query auto entry`
-- 이번 로그인 사이드바 핫픽스는 `origin/main` 배포 전 로컬 검증까지 완료했다.
+- 최근 배포 코드 커밋: `ce4b2d5 Hide auth sidebar on login screen`
+- 배포 방법: `git push origin main`으로 Streamlit Cloud 자동 재배포 트리거.
+- 운영 배포 검증: 공개 URL `https://retirement-portfolio-app-nh2vq9ferqnpehsslbykbe.streamlit.app/` 로그인 화면 iframe에서 새 CSS selector 반영과 사이드바 숨김 상태 확인.
 - 워크트리에는 이번 요청 전부터 `data/portfolio.db`, 로컬 도구 디렉터리, 산출물 등 여러 변경/미추적 파일이 함께 있었다.
 - 커밋 시 요청 관련 파일만 선별하고 `data/portfolio.db`, `.local/`, `.playtools*/`, `.playwright-browsers/`, `.vscode/`, `artifacts/`, `data/kis_cache/` 등 로컬 산출물은 제외한다.
 
