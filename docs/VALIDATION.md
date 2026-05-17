@@ -15,20 +15,25 @@
 - 수정: 실현손익 막대 차트 양수/음수 색상을 `#2e7d32`/`#c62828`로 고정하고 bar label을 상단에 표시.
 - 수정: UI Capture GitHub Actions가 job 로그 생성 전 실패한 상태를 확인하고 `actions/checkout@v4`, `actions/setup-python@v5` 안정 버전으로 고정.
 - 수정: workflow job-level `env`에서 `${{ runner.temp }}` expression을 제거하고 `/tmp/portfolio-capture.db` 고정 경로로 변경.
+- 수정: 캡처 스크립트가 non-dashboard 페이지 이동 전 데모 대시보드 wrapper를 기다리고, 숨은 탭 대신 visible tab/button만 클릭하도록 보강.
 - 환경: Python 3.11.
 
 ## 명령 검증
 - CSS 중괄호 균형 확인 성공 (`{` 679개, `}` 679개)
 - `python -m compileall app.py src scripts tests` 성공
 - `python -m unittest tests.test_app_dashboard` 성공, 122 tests
-- `python -m unittest discover -s tests -p "test_*.py"` 성공, 288 tests
+- `python -m unittest discover -s tests -p "test_*.py"` 성공, 289 tests
 - `.github/workflows/ui-capture.yml` YAML 파싱 및 action version 확인 성공
 - `.github/workflows/ui-capture.yml`에서 job-level `env`의 `runner.temp` expression 제거 확인 성공
+- `python -m unittest tests.test_app_dashboard` 재실행 성공, 123 tests
+- `python scripts/capture_app.py --url "http://localhost:8506/?demo=1&capture=1" --page trades --viewport desktop --out-dir /tmp/ui_captures_8506_fixed --strict` 성공
+- `python scripts/capture_app.py --url "http://localhost:8506/?demo=1&capture=1" --page all --viewport desktop --out-dir /tmp/ui_captures_8506_all_desktop --strict` 성공
 
 ## 산출물 확인
-- 이번 변경은 레이아웃/CSS/차트 option/test 보강으로 신규 PNG 캡처 산출물은 생성하지 않았다.
-- 직전 대표 캡처는 `artifacts/ui_captures/2026-05-16_162900/desktop/`이며, manifest status `success`, 누락 selector 없음.
+- 이번 변경은 레이아웃/CSS/차트 option/test 보강으로 저장소 내 신규 PNG 캡처 산출물은 생성하지 않았다.
+- 로컬 재검증 캡처는 `/tmp/ui_captures_8506_all_desktop/2026-05-16_175042/`이며 dashboard/trades/valuation desktop manifest status `success`, 누락 selector 없음.
+- 직전 저장소 대표 캡처는 `artifacts/ui_captures/2026-05-16_162900/desktop/`이며, manifest status `success`, 누락 selector 없음.
 
 ## 미수행 항목
 - 운영 Streamlit 배포와 운영 DB 데이터 직접 수정은 수행하지 않았다.
-- 원격 GitHub Actions run `25968169216`, `25968290999`는 job 생성 전 실패했고, workflow action version과 job env expression 보정 후 재실행 대상이다.
+- 원격 GitHub Actions run `25968169216`, `25968290999`는 job 생성 전 실패했고, run `25968358824`는 desktop 거래 탭 selector 누락으로 실패했다. 캡처 스크립트 대기/visible 탭 클릭 보정 후 재실행 대상이다.

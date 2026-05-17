@@ -245,6 +245,15 @@ class ThemeStylesheetTests(unittest.TestCase):
         self.assertIn('st.container(key="capture_valuation_chart")', valuation_source)
         self.assertIn('st.container(key="capture_valuation_table")', valuation_source)
 
+    def test_capture_script_waits_for_demo_page_and_visible_tabs(self) -> None:
+        """캡처 스크립트는 데모 대시보드 준비 후 이동하고 visible 탭만 클릭한다."""
+
+        script_source = (Path(__file__).resolve().parents[1] / "scripts" / "capture_app.py").read_text(encoding="utf-8")
+
+        self.assertIn("wait_for_visible_selector_in_page(active_page, \".st-key-capture_header\", wait_ms)", script_source)
+        self.assertIn("document.querySelectorAll('[role=\"tab\"], button')", script_source)
+        self.assertIn("isVisible(element) && (text === label || text.includes(label))", script_source)
+
     def test_dashboard_secondary_panel_chart_heights_match(self) -> None:
         """선택 종목 트렌드와 보유 종목 수익률 차트 높이는 같은 값을 사용한다."""
 

@@ -680,6 +680,94 @@ def first_visible_locator(frame: Frame, selector: str) -> Locator | None:
     return None
 
 
+def wait_for_visible_selector_in_page(page: Any, selector: str, timeout_ms: int) -> bool:
+    """페이지의 main frame 또는 iframe에서 visible selector가 나타날 때까지 기다린다."""
+
+    deadline = time.monotonic() + (timeout_ms / 1000)
+    while time.monotonic() < deadline:
+        for frame in list(getattr(page, "frames", []) or []):
+            if first_visible_locator(frame, selector) is not None:
+                return True
+        time.sleep(0.5)
+    return False
+
+
+def visible_tab_is_selected(page: Any, label: str) -> bool:
+    """visible 탭 중 지정 레이블 탭이 선택 상태인지 확인한다."""
+
+    try:
+        return bool(
+            page.evaluate(
+                """
+                (label) => {
+                  const isVisible = (element) => {
+                    if (!element) return false;
+                    const rect = element.getBoundingClientRect();
+                    const style = window.getComputedStyle(element);
+                    return rect.width > 0
+                      && rect.height > 0
+                      && style.display !== 'none'
+                      && style.visibility !== 'hidden'
+                      && Number(style.opacity || 1) !== 0;
+                  };
+                  const normalize = (value) => String(value || '').replace(/\\s+/g, ' ').trim();
+                  for (const element of Array.from(document.querySelectorAll('[role="tab"], button'))) {
+                    const text = normalize(element.textContent);
+                    if (isVisible(element)
+                      && (text === label || text.includes(label))
+                      && String(element.getAttribute('aria-selected') || '').toLowerCase() === 'true') {
+                      return true;
+                    }
+                  }
+                  return false;
+                }
+                """,
+                label,
+            )
+        )
+    except Exception:
+        return False
+
+
+def click_visible_tab_by_label(page: Any, label: str) -> bool:
+    """레이블이 일치하는 visible 탭을 DOM에서 찾아 클릭한다."""
+
+    try:
+        return bool(
+            page.evaluate(
+                """
+                (label) => {
+                  const isVisible = (element) => {
+                    if (!element) return false;
+                    const rect = element.getBoundingClientRect();
+                    const style = window.getComputedStyle(element);
+                    return rect.width > 0
+                      && rect.height > 0
+                      && style.display !== 'none'
+                      && style.visibility !== 'hidden'
+                      && Number(style.opacity || 1) !== 0;
+                  };
+                  const normalize = (value) => String(value || '').replace(/\\s+/g, ' ').trim();
+                  const candidates = Array.from(document.querySelectorAll('[role="tab"], button'))
+                    .filter((element) => {
+                      const text = normalize(element.textContent);
+                      return isVisible(element) && (text === label || text.includes(label));
+                    });
+                  const exact = candidates.find((element) => normalize(element.textContent) === label);
+                  const target = exact || candidates[0];
+                  if (!target) return false;
+                  target.scrollIntoView({ block: 'center', inline: 'center' });
+                  target.click();
+                  return true;
+                }
+                """,
+                label,
+            )
+        )
+    except Exception:
+        return False
+
+
 def wait_for_required_blocks(frame: Frame, blocks: list[CaptureBlock], *, strict: bool, timeout_ms: int) -> list[CaptureBlock]:
     """필수 캡처 블록이 화면에 나타날 때까지 대기하고 누락 목록을 반환한다."""
 
@@ -743,12 +831,11 @@ def activate_block_context(page: Any, block: CaptureBlock, wait_ms: int) -> None
     if not block.activate:
         return
     print(f"[capture] block 활성화: {block.name} -> {block.activate}")
+    verify_timeout_ms = min(wait_ms, 5_000)
+    if visible_tab_is_selected(page, block.activate) and wait_for_visible_selector_in_page(page, block.selector, verify_timeout_ms):
+        return
+
     tab_locator = page.get_by_role("tab", name=block.activate, exact=True)
-    try:
-        if str(tab_locator.get_attribute("aria-selected") or "").lower() == "true":
-            return
-    except Exception:
-        pass
     try:
         tab_locator.click(timeout=min(wait_ms, 5_000), force=True)
     except Exception:
@@ -784,6 +871,16 @@ def activate_block_context(page: Any, block: CaptureBlock, wait_ms: int) -> None
                     file=sys.stderr,
                 )
                 return
+    wait_for_page_settle(page, wait_ms)
+    if wait_for_visible_selector_in_page(page, block.selector, verify_timeout_ms):
+        return
+
+    if not click_visible_tab_by_label(page, block.activate):
+        print(
+            f"[capture] warning: block 활성화 실패 name={block.name} activate={block.activate}",
+            file=sys.stderr,
+        )
+        return
     wait_for_page_settle(page, wait_ms)
 
 
@@ -864,6 +961,8 @@ def capture_viewport(
         should_load_start_url = owns_context or not current_url or current_url == "about:blank" or page_name == "dashboard"
         if should_load_start_url:
             active_page.goto(start_url, wait_until="domcontentloaded", timeout=wait_ms)
+            if page_name != "dashboard":
+                wait_for_visible_selector_in_page(active_page, ".st-key-capture_header", wait_ms)
         else:
             active_page.wait_for_timeout(500)
         wait_for_page_settle(active_page, wait_ms)
