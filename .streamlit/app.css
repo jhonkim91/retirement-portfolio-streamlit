@@ -7,6 +7,7 @@
     --panel-alt: ${panel_alt_color};
     --surface: ${surface_color};
     --surface-strong: ${surface_strong_color};
+    --color-fill-light: #F8FBF6;
     --line-soft: ${border_soft_color};
     --border-emphasis: ${border_emphasis_color};
     --text-muted: ${text_muted_color};
@@ -34,7 +35,7 @@
     --panel-padding: 1.15rem 1.15rem 1.2rem;
     --section-gap: 1rem;
     --chart-gap: 0.85rem;
-    --dashboard-summary-card-height: 128px;
+    --dashboard-summary-card-height: 120px;
     --dashboard-secondary-panel-min-height: 560px;
 
     --auth-bg-start: ${auth_background_start_color};
@@ -87,9 +88,9 @@ h6 {
 }
 
 .block-container {
-    padding-top: 1rem;
-    padding-bottom: 3rem;
-    max-width: 1580px;
+    padding-top: 1.25rem;
+    padding-bottom: 3.5rem;
+    max-width: 1480px;
 }
 
 .dashboard-note {
@@ -845,6 +846,24 @@ body:has(.empty-state-shell) [data-testid="stSidebarCollapsedControl"] {
     gap: 0.68rem;
 }
 
+.st-key-dashboard-panel-allocation,
+.st-key-dashboard-panel-holdings-table {
+    border-radius: 26px !important;
+    box-shadow:
+        0 1px 2px rgba(23, 32, 51, 0.04),
+        0 16px 40px rgba(23, 32, 51, 0.065) !important;
+}
+
+.st-key-dashboard-panel-allocation [data-testid="stVerticalBlockBorderWrapper"],
+.st-key-dashboard-panel-holdings-table [data-testid="stVerticalBlockBorderWrapper"] {
+    border-radius: 26px !important;
+}
+
+.st-key-dashboard-panel-allocation .dashboard-section-header__title {
+    font-size: 1.18rem !important;
+    font-weight: 900 !important;
+}
+
 .st-key-dashboard-panel-allocation .dashboard-section-header,
 .st-key-dashboard-panel-selected-trend .dashboard-section-header,
 .st-key-dashboard-panel-holdings .dashboard-section-header,
@@ -910,8 +929,8 @@ body:has(.empty-state-shell) [data-testid="stSidebarCollapsedControl"] {
 .dashboard-treemap-legend__bar {
     position: relative;
     width: 100%;
-    height: 14px;
-    border-radius: 999px;
+    height: 12px;
+    border-radius: 8px;
     border: 1px solid var(--line-soft);
     background: color-mix(in srgb, var(--surface-strong) 22%, transparent);
     overflow: hidden;
@@ -1358,7 +1377,7 @@ body:has(.empty-state-shell) [data-testid="stSidebarCollapsedControl"] {
 
 .holdings-table__head,
 .holdings-table__cell {
-    padding: 0.8rem 0.9rem;
+    padding: 0.75rem 0.95rem;
     border-right: 1px solid #e5eaf0;
     border-bottom: 1px solid #e5eaf0;
     white-space: nowrap;
@@ -1370,10 +1389,12 @@ body:has(.empty-state-shell) [data-testid="stSidebarCollapsedControl"] {
     position: sticky;
     top: 0;
     z-index: 1;
-    background: #f8fafc;
+    background: #F4F7F6;
     color: var(--mid-text);
-    font-size: 0.84rem;
-    font-weight: 700;
+    font-size: 0.78rem;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+    border-bottom: 2px solid #E2E7EF;
     text-align: left;
 }
 
@@ -1385,7 +1406,7 @@ body:has(.empty-state-shell) [data-testid="stSidebarCollapsedControl"] {
 .holdings-table__cell {
     background: var(--surface-strong);
     color: var(--brand-deep);
-    font-size: 0.9rem;
+    font-size: 0.87rem;
     font-weight: 500;
 }
 
@@ -1394,12 +1415,12 @@ body:has(.empty-state-shell) [data-testid="stSidebarCollapsedControl"] {
 }
 
 .holdings-table__value--positive {
-    color: var(--chart-up);
+    color: #0E9E69;
     font-weight: 700;
 }
 
 .holdings-table__value--negative {
-    color: var(--chart-down);
+    color: #E85D75;
     font-weight: 700;
 }
 
@@ -1753,6 +1774,141 @@ body:has(.empty-state-shell) [data-testid="stSidebarCollapsedControl"] {
     line-height: 1.5;
 }
 
+/* 상품 등록: 검색 결과를 카드 내부 대형 박스가 아닌 compact dropdown으로 표시 */
+.st-key-trade-product-entry,
+.st-key-trade-product-entry [data-testid="stVerticalBlockBorderWrapper"],
+.st-key-trade-product-entry [data-testid="stVerticalBlock"] {
+    overflow: visible !important;
+}
+
+.st-key-trade-product-search-box {
+    position: relative;
+    z-index: 40;
+}
+
+.st-key-trade-product-search-box [data-testid="stElementContainer"] {
+    margin-bottom: 0 !important;
+}
+
+.st-key-trade-search-suggestions {
+    position: absolute !important;
+    top: calc(100% + 0.15rem);
+    left: 0;
+    right: 0;
+    z-index: 80;
+    max-height: 18rem;
+    overflow: hidden !important;
+    border: 1px solid #CAD2DF !important;
+    border-radius: 0 0 8px 8px !important;
+    background: #FFFFFF !important;
+    box-shadow: 0 18px 42px rgba(23, 32, 51, 0.18) !important;
+}
+
+.st-key-trade-search-suggestions [data-testid="stVerticalBlock"] {
+    gap: 0 !important;
+    max-height: 18rem;
+    overflow-y: auto !important;
+    padding: 0 !important;
+}
+
+.trade-search-suggestions__status {
+    padding: 0.72rem 0.85rem 0.48rem;
+    color: #4A5568;
+    font-size: 0.82rem;
+    font-weight: 800;
+    border-bottom: 1px solid #E5E8EF;
+    background: #F8FBF6;
+}
+
+.st-key-trade-search-suggestions [data-testid="stButton"] {
+    margin: 0 !important;
+}
+
+.st-key-trade-search-suggestions [data-testid="stButton"] > button {
+    min-height: 3.15rem !important;
+    width: 100% !important;
+    padding: 0.62rem 0.85rem !important;
+    border: 0 !important;
+    border-bottom: 1px solid #E5E8EF !important;
+    border-radius: 0 !important;
+    background: #FFFFFF !important;
+    box-shadow: none !important;
+    color: #172033 !important;
+    justify-content: flex-start !important;
+    align-items: center !important;
+}
+
+.st-key-trade-search-suggestions [data-testid="stButton"] > button:hover,
+.st-key-trade-search-suggestions [data-testid="stButton"] > button:focus,
+.st-key-trade-search-suggestions [data-testid="stButton"] > button:focus-visible {
+    background: #F8FBF6 !important;
+    color: #172033 !important;
+    outline: none !important;
+    box-shadow: inset 3px 0 0 #5DBB92 !important;
+}
+
+.st-key-trade-search-suggestions [data-testid="stButton"] > button p {
+    margin: 0 !important;
+    width: 100%;
+    text-align: left;
+    white-space: pre-line;
+    line-height: 1.38;
+    font-size: 0.86rem;
+}
+
+/* 상품 등록: 자산 구분/거래일자/메모는 항상 노출하되 compact하게 배치 */
+.st-key-trade-product-meta {
+    margin-top: 0.2rem;
+}
+
+.st-key-trade-product-meta [data-testid="stHorizontalBlock"] {
+    align-items: flex-end !important;
+}
+
+.st-key-trade-product-meta [data-testid="stSelectbox"],
+.st-key-trade-product-meta [data-testid="stDateInput"],
+.st-key-trade-product-meta [data-testid="stTextInput"] {
+    width: 100% !important;
+}
+
+/* 상품 등록 카드 자체의 과도한 세로 여백 축소 */
+.st-key-trade-product-entry [data-testid="stVerticalBlock"] {
+    gap: 0.62rem !important;
+}
+
+.st-key-trade-product-entry [data-testid="stCaptionContainer"] {
+    margin-top: -0.18rem !important;
+}
+
+@media (max-width: 768px) {
+    .st-key-trade-search-suggestions {
+        position: relative !important;
+        top: auto;
+        left: auto;
+        right: auto;
+        margin-top: 0.2rem;
+        max-height: 14rem;
+        border-radius: 8px !important;
+        box-shadow: 0 12px 28px rgba(23, 32, 51, 0.12) !important;
+    }
+
+    .st-key-trade-search-suggestions [data-testid="stVerticalBlock"] {
+        max-height: 14rem;
+    }
+
+    .st-key-trade-product-meta [data-testid="stHorizontalBlock"] {
+        flex-direction: column !important;
+        gap: 0.55rem !important;
+    }
+
+    .st-key-trade-product-meta [data-testid="stHorizontalBlock"] > div,
+    .st-key-trade-product-meta [data-testid="column"] {
+        width: 100% !important;
+        min-width: 100% !important;
+        flex: 1 1 auto !important;
+    }
+}
+
 .st-key-trade-log-table [data-testid="stCaptionContainer"] p {
     color: var(--brand-deep);
     font-weight: 800;
@@ -2087,8 +2243,8 @@ div[role="dialog"] [data-testid="stFormSubmitButton"] > button {
 
 .dashboard-overview-hero {
     position: relative;
-    height: 206px;
-    min-height: 206px;
+    height: 220px;
+    min-height: 220px;
     margin: 0;
     padding: 1.18rem 1.35rem;
     border-radius: 22px;
@@ -2102,7 +2258,7 @@ div[role="dialog"] [data-testid="stFormSubmitButton"] > button {
     position: relative;
 }
 
-.st-key-dashboard-overview-hero-shell > [data-testid="stLayoutWrapper"]:has(.st-key-dashboard-overview-period-controls) {
+.st-key-dashboard-overview-hero-shell > [data-testid="stLayoutWrapper"]:has(.st-key-capture_input_panel) {
     position: absolute !important;
     top: 0 !important;
     right: 0 !important;
@@ -2112,11 +2268,11 @@ div[role="dialog"] [data-testid="stFormSubmitButton"] > button {
     z-index: 6 !important;
 }
 
-.st-key-dashboard-overview-hero-shell > [data-testid="stLayoutWrapper"]:has(.st-key-dashboard-overview-period-controls) [data-testid="stVerticalBlock"] {
+.st-key-dashboard-overview-hero-shell > [data-testid="stLayoutWrapper"]:has(.st-key-capture_input_panel) [data-testid="stVerticalBlock"] {
     overflow: visible !important;
 }
 
-.st-key-dashboard-overview-period-controls {
+.st-key-capture_input_panel {
     position: absolute;
     top: 1.18rem;
     right: 1.35rem;
@@ -2124,7 +2280,13 @@ div[role="dialog"] [data-testid="stFormSubmitButton"] > button {
     width: auto;
 }
 
-.st-key-dashboard-overview-period-controls [data-testid="stHorizontalBlock"] {
+.st-key-capture_input_panel {
+    display: block !important;
+    min-width: 12.2rem !important;
+    min-height: 1.45rem !important;
+}
+
+.st-key-capture_input_panel [data-testid="stHorizontalBlock"] {
     display: flex !important;
     align-items: center !important;
     justify-content: flex-end !important;
@@ -2132,8 +2294,8 @@ div[role="dialog"] [data-testid="stFormSubmitButton"] > button {
     gap: 0.24rem !important;
 }
 
-.st-key-dashboard-overview-period-controls [data-testid="stColumn"],
-.st-key-dashboard-overview-period-controls [data-testid="column"] {
+.st-key-capture_input_panel [data-testid="stColumn"],
+.st-key-capture_input_panel [data-testid="column"] {
     display: flex !important;
     width: 2rem !important;
     min-width: 0 !important;
@@ -2142,24 +2304,24 @@ div[role="dialog"] [data-testid="stFormSubmitButton"] > button {
     padding: 0 !important;
 }
 
-.st-key-dashboard-overview-period-controls [data-testid="stColumn"]:last-child,
-.st-key-dashboard-overview-period-controls [data-testid="column"]:last-child {
+.st-key-capture_input_panel [data-testid="stColumn"]:last-child,
+.st-key-capture_input_panel [data-testid="column"]:last-child {
     width: 2.35rem !important;
     max-width: 2.35rem !important;
     flex-basis: 2.35rem !important;
 }
 
-.st-key-dashboard-overview-period-controls [data-testid="stButton"] {
+.st-key-capture_input_panel [data-testid="stButton"] {
     width: 2rem !important;
     margin: 0 !important;
 }
 
-.st-key-dashboard-overview-period-controls [data-testid="stColumn"]:last-child [data-testid="stButton"],
-.st-key-dashboard-overview-period-controls [data-testid="column"]:last-child [data-testid="stButton"] {
+.st-key-capture_input_panel [data-testid="stColumn"]:last-child [data-testid="stButton"],
+.st-key-capture_input_panel [data-testid="column"]:last-child [data-testid="stButton"] {
     width: 2.35rem !important;
 }
 
-.st-key-dashboard-overview-period-controls [data-testid="stButton"] button {
+.st-key-capture_input_panel [data-testid="stButton"] button {
     display: inline-flex !important;
     align-items: center !important;
     justify-content: center !important;
@@ -2183,15 +2345,15 @@ div[role="dialog"] [data-testid="stFormSubmitButton"] > button {
     text-transform: none !important;
 }
 
-.st-key-dashboard-overview-period-controls [data-testid="stColumn"]:last-child [data-testid="stButton"] button,
-.st-key-dashboard-overview-period-controls [data-testid="column"]:last-child [data-testid="stButton"] button {
+.st-key-capture_input_panel [data-testid="stColumn"]:last-child [data-testid="stButton"] button,
+.st-key-capture_input_panel [data-testid="column"]:last-child [data-testid="stButton"] button {
     min-width: 2.35rem !important;
     width: 2.35rem !important;
     max-width: 2.35rem !important;
 }
 
-.st-key-dashboard-overview-period-controls [data-testid="stButton"] button *,
-.st-key-dashboard-overview-period-controls [data-testid="stButton"] button p {
+.st-key-capture_input_panel [data-testid="stButton"] button *,
+.st-key-capture_input_panel [data-testid="stButton"] button p {
     margin: 0 !important;
     padding: 0 !important;
     line-height: 1 !important;
@@ -2200,12 +2362,12 @@ div[role="dialog"] [data-testid="stFormSubmitButton"] > button {
     overflow-wrap: normal !important;
 }
 
-.st-key-dashboard-overview-period-controls [data-testid="stButton"] button:hover {
+.st-key-capture_input_panel [data-testid="stButton"] button:hover {
     background: rgba(255, 255, 255, 0.16) !important;
     color: #ffffff !important;
 }
 
-.st-key-dashboard-overview-period-controls [data-testid="stButton"] button[kind="primary"] {
+.st-key-capture_input_panel [data-testid="stButton"] button[kind="primary"] {
     background: #ffffff !important;
     border-color: #ffffff !important;
     color: #1f2b69 !important;
@@ -2237,8 +2399,8 @@ div[role="dialog"] [data-testid="stFormSubmitButton"] > button {
     align-items: center;
     min-height: 1.9rem;
     padding: 0.32rem 0.7rem;
-    border-radius: 8px;
-    background: rgba(255, 255, 255, 0.12);
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.15);
     color: #ffffff;
     font-size: 0.82rem;
     font-weight: 900;
@@ -2255,10 +2417,10 @@ div[role="dialog"] [data-testid="stFormSubmitButton"] > button {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: 2rem;
-    min-height: 1.55rem;
+    min-width: 2.1rem;
+    min-height: 1.65rem;
     padding: 0 0.42rem;
-    border-radius: 7px;
+    border-radius: 8px;
     border: 1px solid rgba(255, 255, 255, 0.18);
     color: rgba(255, 255, 255, 0.72);
     font-size: 0.72rem;
@@ -2268,6 +2430,7 @@ div[role="dialog"] [data-testid="stFormSubmitButton"] > button {
 .dashboard-overview-hero__period.is-active {
     background: #ffffff;
     color: #1f2b69;
+    box-shadow: 0 2px 8px rgba(30, 43, 110, 0.18);
 }
 
 .dashboard-overview-hero__label {
@@ -2283,10 +2446,10 @@ div[role="dialog"] [data-testid="stFormSubmitButton"] > button {
     position: relative;
     z-index: 1;
     color: #ffffff !important;
-    font-size: clamp(2.05rem, 3.45vw, 2.85rem);
+    font-size: clamp(2.1rem, 3.6vw, 3rem);
     font-weight: 950;
     line-height: 1.05;
-    letter-spacing: -0.055em;
+    letter-spacing: -0.06em;
 }
 
 .dashboard-overview-hero__delta {
@@ -2393,14 +2556,23 @@ div[role="dialog"] [data-testid="stFormSubmitButton"] > button {
 .dashboard-overview-card {
     position: relative;
     box-sizing: border-box;
-    height: 206px;
-    min-height: 206px;
+    height: 220px;
+    min-height: 220px;
     padding: 1rem 0.95rem 1.24rem;
-    border-radius: 18px;
+    border-radius: 20px;
     border: 1px solid rgba(226, 232, 240, 0.92);
     background: rgba(255, 255, 255, 0.94);
-    box-shadow: 0 12px 28px rgba(23, 32, 51, 0.055);
+    box-shadow:
+        0 1px 3px rgba(23, 32, 51, 0.04),
+        0 8px 22px rgba(23, 32, 51, 0.055);
     overflow: hidden;
+    transition: transform 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.dashboard-overview-card:hover {
+    transform: translateY(-1px);
+    border-color: rgba(93, 187, 146, 0.32) !important;
+    box-shadow: 0 14px 32px rgba(23, 32, 51, 0.09) !important;
 }
 
 .dashboard-overview-card--no-sparkline {
@@ -2484,9 +2656,9 @@ div[role="dialog"] [data-testid="stFormSubmitButton"] > button {
 }
 
 .dashboard-overview-card__label {
-    color: var(--brand-deep);
-    font-size: 0.82rem;
-    font-weight: 900;
+    color: #4a5568;
+    font-size: 0.8rem;
+    font-weight: 800;
     line-height: 1.2;
 }
 
@@ -2494,10 +2666,10 @@ div[role="dialog"] [data-testid="stFormSubmitButton"] > button {
     position: relative;
     z-index: 1;
     color: var(--brand-deep);
-    font-size: clamp(1.05rem, 1.35vw, 1.45rem);
+    font-size: clamp(1.08rem, 1.4vw, 1.52rem);
     font-weight: 950;
     line-height: 1.1;
-    letter-spacing: -0.045em;
+    letter-spacing: -0.048em;
     overflow-wrap: anywhere;
 }
 
@@ -2714,6 +2886,77 @@ div[role="dialog"] [data-testid="stFormSubmitButton"] > button {
 
     .dashboard-treemap-legend__range {
         width: min(300px, 48vw);
+    }
+}
+
+/* Streamlit 1.55 key 기반 flex wrapper 보강 */
+.dashboard-overview-card-grid.dashboard-summary-strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.72rem;
+    align-items: stretch;
+}
+
+.dashboard-overview-card-grid.dashboard-summary-strip .dashboard-overview-card {
+    flex: 1 1 calc(25% - 0.72rem);
+    height: 120px;
+    min-height: 120px;
+}
+
+.dashboard-overview-card-grid.dashboard-summary-strip .dashboard-overview-card__header {
+    margin-bottom: 0.58rem;
+}
+
+.dashboard-overview-card-grid.dashboard-summary-strip .dashboard-overview-card__value {
+    font-size: clamp(1rem, 1.1vw, 1.3rem);
+}
+
+.dashboard-overview-card-grid.dashboard-summary-strip .dashboard-overview-card--no-sparkline .dashboard-overview-card__value {
+    margin-top: 0.78rem;
+    text-align: left;
+}
+
+.dashboard-overview-card-grid.dashboard-summary-strip .dashboard-overview-card--no-sparkline .dashboard-overview-card__caption {
+    text-align: left;
+}
+
+.dashboard-overview-card-grid.dashboard-summary-strip .dashboard-overview-card__sparkline,
+.dashboard-overview-card-grid.dashboard-summary-strip .dashboard-overview-card::after {
+    display: none;
+}
+
+.st-key-dashboard-trend-controls [data-testid="stElementContainer"],
+.st-key-trade-form-cols [data-testid="stElementContainer"] {
+    width: auto !important;
+    min-width: 0 !important;
+}
+
+.st-key-trade-form-cols [data-testid="stHorizontalBlock"] {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.9rem !important;
+    align-items: stretch;
+}
+
+.st-key-trade-form-cols [data-testid="stHorizontalBlock"] > div,
+.st-key-trade-form-cols [data-testid="column"] {
+    flex: 1 1 calc(50% - 0.9rem) !important;
+    min-width: min(100%, 340px) !important;
+}
+
+@media (max-width: 1280px) {
+    .dashboard-overview-card-grid.dashboard-summary-strip .dashboard-overview-card {
+        flex-basis: calc(50% - 0.72rem);
+    }
+}
+
+@media (max-width: 860px) {
+    .dashboard-overview-card-grid.dashboard-summary-strip .dashboard-overview-card,
+    .st-key-trade-form-cols [data-testid="stHorizontalBlock"] > div,
+    .st-key-trade-form-cols [data-testid="column"] {
+        flex-basis: 100% !important;
+        min-width: 100% !important;
+        width: 100% !important;
     }
 }
 
@@ -4160,5 +4403,160 @@ div[role="dialog"] [data-testid="stFormSubmitButton"] > button {
     .st-key-trade-log-panel .trade-log-pagination {
         align-items: flex-start;
         flex-direction: column;
+    }
+}
+
+/* 상단 요약 카드 통일 */
+.dashboard-summary-strip .stVerticalBlockBorderWrapper,
+.dashboard-summary-strip [data-testid="stVerticalBlockBorderWrapper"],
+.st-key-dashboard-summary-strip [data-testid="stVerticalBlockBorderWrapper"] {
+    min-height: 120px;
+    display: flex;
+    flex-direction: column;
+}
+
+.dashboard-summary-strip .stVerticalBlockBorderWrapper > div,
+.dashboard-summary-strip [data-testid="stVerticalBlockBorderWrapper"] > div,
+.st-key-dashboard-summary-strip [data-testid="stVerticalBlockBorderWrapper"] > div {
+    flex: 1 1 auto;
+}
+
+.dashboard-summary-strip .ghost-action,
+.st-key-dashboard-summary-strip .ghost-action,
+.st-key-dashboard-summary-strip .dashboard-summary-card__action--ghost {
+    min-width: 48px;
+}
+
+/* 카드 라벨 줄바꿈 제거 */
+.dashboard-summary-strip .card-label,
+.st-key-dashboard-summary-strip .card-label,
+.st-key-dashboard-summary-strip .dashboard-summary-card__label {
+    white-space: nowrap;
+    font-size: 0.85rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* 트렌드 컨트롤 컴팩트 레이아웃 */
+.trend-controls,
+.st-key-dashboard-trend-controls [data-testid="stHorizontalBlock"] {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px !important;
+    align-items: center;
+}
+
+.st-key-dashboard-trend-controls [data-testid="stHorizontalBlock"] > div,
+.st-key-dashboard-trend-controls [data-testid="column"] {
+    flex: 0 0 auto !important;
+    min-width: 0 !important;
+    width: auto !important;
+}
+
+.trend-controls .stSelectbox,
+.trend-controls [data-testid="stSelectbox"],
+.st-key-dashboard-trend-controls [data-testid="stSelectbox"] {
+    width: 120px;
+    min-width: 120px;
+}
+
+.trend-controls .stSelectbox [data-baseweb="select"] > div,
+.trend-controls [data-testid="stSelectbox"] [data-baseweb="select"] > div,
+.st-key-dashboard-trend-controls [data-baseweb="select"] > div {
+    width: 120px;
+    min-height: 30px;
+    height: 30px;
+    padding: 2px 8px;
+    font-size: 0.85rem;
+    border-radius: 6px;
+}
+
+.trend-controls .stSelectbox [data-baseweb="select"] span,
+.trend-controls [data-testid="stSelectbox"] [data-baseweb="select"] span,
+.st-key-dashboard-trend-controls [data-baseweb="select"] span,
+.st-key-dashboard-trend-controls [data-baseweb="select"] div {
+    font-size: 0.85rem;
+}
+
+.st-key-dashboard-trend-controls [data-testid="stButton"] > button {
+    min-height: 30px;
+    height: 30px;
+    border-radius: 6px;
+    padding: 2px 8px;
+    font-size: 0.85rem;
+}
+
+/* 실현손익 컬럼 색상 */
+.dataframe .positive,
+.st-key-trade-log-panel .trade-log-profit-rate--positive {
+    color: #2e7d32;
+}
+
+.dataframe .negative,
+.st-key-trade-log-panel .trade-log-profit-rate--negative {
+    color: #c62828;
+}
+
+/* 행 구분선 및 교차 음영 처리 */
+.dataframe tbody tr + tr td {
+    border-top: 1px solid #E2E4EC;
+}
+
+.dataframe tbody tr:nth-child(even) {
+    background-color: var(--color-fill-light);
+}
+
+[class*="st-key-trade-log-row-"] [data-testid="stHorizontalBlock"] {
+    border-bottom: 1px solid #E2E4EC;
+}
+
+[class*="st-key-trade-log-row-"]:nth-of-type(even) [data-testid="stHorizontalBlock"] {
+    background-color: var(--color-fill-light);
+}
+
+/* 차트 높이 조정 */
+.dashboard-charts .chart-container,
+.st-key-dashboard-secondary-grid .chart-container,
+.st-key-dashboard-panel-allocation [data-testid="stVerticalBlockBorderWrapper"],
+.st-key-dashboard-panel-selected-trend [data-testid="stVerticalBlockBorderWrapper"],
+.st-key-dashboard-panel-holdings [data-testid="stVerticalBlockBorderWrapper"] {
+    height: 560px;
+    min-height: 560px;
+}
+
+@media (max-width: 860px) {
+    .dashboard-summary-strip {
+        grid-template-columns: 1fr;
+    }
+
+    .st-key-dashboard-summary-strip [data-testid="stHorizontalBlock"],
+    .st-key-dashboard-secondary-grid [data-testid="stHorizontalBlock"] {
+        flex-direction: column;
+        flex-wrap: nowrap;
+        overflow-x: visible;
+    }
+
+    .st-key-dashboard-summary-strip [data-testid="column"],
+    .st-key-dashboard-secondary-grid [data-testid="column"] {
+        width: 100% !important;
+        min-width: 100% !important;
+        flex: 1 1 auto !important;
+    }
+
+    .trend-controls,
+    .st-key-dashboard-trend-controls [data-testid="stHorizontalBlock"],
+    .dashboard-charts {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .trend-controls .stSelectbox,
+    .trend-controls [data-testid="stSelectbox"],
+    .st-key-dashboard-trend-controls [data-testid="stSelectbox"],
+    .trend-controls .stSelectbox [data-baseweb="select"] > div,
+    .trend-controls [data-testid="stSelectbox"] [data-baseweb="select"] > div,
+    .st-key-dashboard-trend-controls [data-baseweb="select"] > div {
+        width: 100%;
+        min-width: 100%;
     }
 }

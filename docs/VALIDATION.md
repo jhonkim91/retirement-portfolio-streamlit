@@ -6,22 +6,30 @@
 - 기준일: `2026-05-17`
 
 ## 최신 대표 검증 결과
-- 작업 범위: Dashboard 자산 배분 트리맵 예수금 중립색 처리 및 운영 배포.
-- 원인: 운영 `main`에서는 예수금 leaf가 수익률 0% 값으로 rollup되어 visualMap 색상표의 보라색 계열로 표시됐다.
-- 수정: 예수금을 `node_kind="cash"`, `profit_rate=None`, `FEARGREED_FLAT_COLOR`로 처리하고 수익률 색상표 계산에서 제외했다.
-- 회귀 테스트: 예수금 node metadata, 중립색, visualMap 범위, 라벨 formatter를 `tests/test_analytics.py`와 `tests/test_app_dashboard.py`에 고정했다.
-- 환경: Python 3.11, Streamlit Cloud 운영 앱.
+- 작업 범위: 거래 입력 > 상품 등록 검색 결과 compact dropdown 전환 및 자산 구분/거래일자/메모 항상 표시.
+- 수정: `st.container(border=True, height=260, key="trade-search-suggestions")`를 제거하고 `trade-product-search-box`, `trade-search-suggestions`, `trade-product-meta` key 기반 구조로 정리했다.
+- CSS: 검색 결과는 desktop에서 absolute dropdown, mobile에서 relative list로 표시하며, 자산 구분/거래일자/메모는 desktop 3열, mobile 1열로 배치한다.
+- 회귀 테스트: `tests/test_app_dashboard.py`에서 compact dropdown source 구조와 관련 CSS selector/속성을 고정했다.
+- 환경: Python 3.11, 로컬 Streamlit 서버 `http://localhost:8501`, GitHub Actions.
 
 ## 명령 검증
 - `python -m compileall app.py src scripts tests` 성공
-- `python -m unittest tests.test_app_dashboard.AllocationTreemapVisualMapTests.test_allocation_treemap_renders_cash_as_neutral_without_profit_rate_mapping tests.test_analytics.AccountSummaryTests.test_allocation_treemap_nodes_groups_holdings_and_cash` 성공, 2 tests
-- `python -m unittest discover -s tests -p "test_*.py"` 성공, 282 tests
-- 운영 Streamlit Cloud `?demo=1&capture=1` 대시보드에서 예수금 회색 표시 확인 완료.
+- `python -m pytest tests/test_app_dashboard.py` 성공, 125 passed
+- `python -m unittest discover -s tests -p "test_*.py"` 성공, 291 tests
+- `python scripts/capture_app.py --page trades --viewport desktop --strict` 성공
+- `python scripts/capture_app.py --page trades --viewport tablet --strict` 성공
+- `python scripts/capture_app.py --page trades --viewport mobile --strict` 성공
+- GitHub Actions run `25991712602`의 `capture-ui` 성공
 
-## 검증 범위
-- 예수금 node가 현금 자산으로 metadata를 유지하는지 검증.
-- 예수금이 수익률 visualMap min/max 계산에서 제외되고 회색 중립색으로 표시되는지 검증.
-- 운영 데모 대시보드에서 예수금 표시가 반영됐는지 확인.
+## 산출물 확인
+- desktop 상품 등록 캡처: `artifacts/ui_captures/2026-05-17_125933/trades/desktop/blocks/03_trade_product_entry.png`
+- tablet 상품 등록 캡처: `artifacts/ui_captures/2026-05-17_130031/trades/tablet/blocks/03_trade_product_entry.png`
+- mobile 상품 등록 캡처: `artifacts/ui_captures/2026-05-17_130127/trades/mobile/blocks/03_trade_product_entry.png`
+
+## 이전 운영 검증 유지 사항
+- Dashboard 자산 배분 트리맵 예수금 중립색은 `main`에서 운영 배포 검증 완료 상태다.
+- 운영 Streamlit Cloud `?demo=1&capture=1` 대시보드에서 예수금 회색 표시를 확인했다.
 
 ## 미수행 항목
 - 운영 DB 데이터 직접 수정은 수행하지 않았다.
+- production 배포는 PR 충돌 해소와 `main` 병합 후 진행 대상이다.

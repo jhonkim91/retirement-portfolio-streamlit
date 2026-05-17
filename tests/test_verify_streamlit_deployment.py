@@ -145,7 +145,7 @@ class DeploymentSummaryParserTests(unittest.TestCase):
             거래
             평가액 기록
             내 계좌
-            데모 일반계좌
+            데모 주식
             일반
             test
             로그아웃
@@ -274,7 +274,7 @@ class DebugHelperTests(unittest.TestCase):
         hint = format_debug_dir_hint("artifacts/debug-verify")
 
         self.assertIn("디버그 산출물:", hint)
-        self.assertIn("artifacts/debug-verify", hint)
+        self.assertIn("artifacts/debug-verify", hint.replace("\\", "/"))
 
 
 if __name__ == "__main__":

@@ -6,37 +6,13 @@
 - 기준일: `2026-05-17`
 
 ## 작업 상태
-- [x] 입금액 기준 일별 평가액 기록 기능 추가
-- [x] Supabase/SQLite `daily_valuation_snapshot` 테이블, 인덱스, RLS, 정책, GRANT 정의
-- [x] `src/valuation.py` 순수 계산 로직과 재계산/저장 서비스 함수 추가
-- [x] `src/db.py`, `src/sqlite_db.py` 평가 스냅샷 저장/조회/삭제 wrapper 추가
-- [x] 거래 UI, CSV import, 수동 가격 갱신, daily rollup 재계산 hook 추가
-- [x] Dashboard 스냅샷 우선 표시와 `평가액 기록` 페이지 추가
-- [x] 평가액 기록 시작일과 원금을 회사 납입금 단독 기준에서 개인 입금 포함 입금성 거래 기준으로 변경
-- [x] Supabase 평가 스냅샷 저장 전 중복 계좌 재조회로 발생하던 “계좌를 찾을 수 없습니다” 경고 방지
-- [x] 평가액 기록 CSV 저장/불러오기와 화면 수정 저장 기능 추가
-- [x] 사이드바 연금 유형 뱃지 제거, Dashboard 히어로 전일 대비 증감 표시, 손익/수익률 KPI 차트 확대
-- [x] 평가액 기록 과거 현금을 단순 원금-잔여원가에서 거래 원장 `cash_delta` 누적 기준으로 변경
-- [x] 평가액 기록 스냅샷 조회/표시 순서를 최신 기준일 우선으로 변경
-- [x] 계산/DB/스키마/UI/배치 회귀 테스트 추가 및 통과
-- [x] Supabase 운영 DB에 `migrations/2026-05-14_add_daily_valuation_snapshot.sql` 적용 및 평가 스냅샷 재계산
-- [x] 운영 `jhonkim2025` 계정 평가 스냅샷을 원장 현금 기준으로 재계산
-- [x] 기존 `migrations/2026-05-14_normalize_temporal_columns.sql` 적용 전 cast 실패 행 여부 점검
-- [x] KIS WebSocket worker 장시간 실행 중 재연결/상태 복구를 장중 운영 로그 기준으로 추가 점검
-- [x] Supabase/SQLite 실시간 tick retention 전용 인덱스 보강
-- [x] 평가액 기록 수익률 계산 시 일반 출금을 순입금 원금에서 차감
-- [x] 거래 기록 선택 삭제 UI/로직 추가
-- [x] 거래 기록 선택 삭제 시 연관 매도 자동 포함으로 음수 보유수량 오류 방지
-- [x] 평가액 기록 현금값을 일별 실제 계좌 스냅샷 현금 우선으로 보정
-- [x] 평가액 기록/원화 표시 금액을 원 단위 일반 반올림으로 보정
-- [x] 1,000배 총액 중복 거래와 국내 종목 코드 접미사 차이로 인한 평가/실현손익 왜곡 보정
-- [x] 거래 기록 생성/수정/삭제 후 평가액 기록을 영향 시작일 이후만 부분 재계산하도록 최적화
-- [x] 펀드성 코드(`K...`)의 1,000좌 기준가 단위를 보유 평가/거래 UI/저장 경로에 일관 적용
-- [x] Dashboard KPI 카드의 입금 대비 손익/수익률 전일 대비 델타 표시
-- [x] Dashboard KPI 값 급등 방지를 위해 오늘 평가 스냅샷 현금 산정 fallback 추가
-- [x] `?demo=1` URL query parameter 기반 데모 자동 진입 추가
+- [x] 입금액 기준 평가액 기록, 거래 UI, Dashboard 스냅샷 우선 표시 기능 반영
+- [x] 데모 자동 진입(`?demo=1`)과 데모 데이터 2계좌 구성을 보강
+- [x] Dashboard 자산 배분 트리맵 예수금 중립색/수익률 라벨 개선 및 운영 배포
+- [x] Streamlit UI 캡처 자동화와 거래/평가액 기록 페이지 캡처 확장
+- [x] 대시보드 UI 개선 및 요약 카드/트렌드/거래 패널/차트 반응형 보강
 - [x] 로그인/온보딩 화면의 Streamlit 기본 사이드바 컨테이너 숨김
-- [x] Dashboard 자산 배분 트리맵 예수금 중립색 배포
+- [x] 거래 상품 검색 결과 compact dropdown 및 자산 구분/거래일자 항상 표시 반영
 - [ ] temporal normalize migration 실제 적용 전 운영 `realtime_price_bars` 테이블 생성/노출 여부 결정
 
 ## 프로젝트 개요
@@ -51,42 +27,28 @@
 - 배포 앱: `https://retirement-portfolio-app-nh2vq9ferqnpehsslbykbe.streamlit.app/`
 
 ## 최근 변경 파일
-- `src/analytics.py`: 트리맵 예수금 bucket/leaf 색상을 회색 중립색으로 변경하고 `node_kind="cash"` metadata를 추가.
-- `src/ui/app_core.py`: 예수금 leaf를 수익률 visualMap에서 제외하고 `FEARGREED_FLAT_COLOR`로 표시하도록 rollup/label formatter를 보정.
-- `tests/test_analytics.py`, `tests/test_app_dashboard.py`: 예수금 중립색, 수익률 매핑 제외, 라벨 회귀 테스트 추가.
-- `docs/VALIDATION.md`, `docs/CHANGELOG.md`, `Memory.md`: 최신 검증 결과와 배포 요약 갱신.
+- `src/ui/app_core.py`: 상품 검색 결과 컨테이너의 border/height 박스를 제거하고 compact dropdown wrapper 및 자산 구분/거래일자/메모 3열 meta 영역을 적용.
+- `.streamlit/app.css`: 상품 검색 결과 dropdown absolute 배치, 모바일 relative fallback, 자산 구분/거래일자/메모 compact 반응형 스타일 추가.
+- `tests/test_app_dashboard.py`: 검색 dropdown 구조와 필수 입력 노출, CSS selector/속성 회귀 테스트 추가.
+- `docs/VALIDATION.md`, `docs/CHANGELOG.md`, `Memory.md`: 이번 UI 변경 검증 결과와 `origin/main` 병합 상태를 반영.
 
 ## 핵심 설계 결정
 - 기존 `account_summary`와 `daily_account_snapshot` 계산은 유지하고, 입금 기준 이력은 별도 `daily_valuation_snapshot`에 저장한다.
 - `company_principal` 컬럼은 기존 스키마명을 유지하되 `employer_deposit`, `personal_deposit`, legacy `deposit`, `opening_cash`에서 일반 출금을 차감한 순입금 원금으로 계산한다.
 - 매수 lot은 FIFO로 쌓고 매도는 FIFO 기준으로 잔여 수량과 잔여 매입원가를 차감한다.
-- 과거 날짜 현금은 같은 날짜 `daily_account_snapshot.cash_balance`가 있으면 실제 현금을 사용하고, 없으면 거래 원장의 `cash_delta`를 누적한 원장 현금으로 fallback한다. 오늘 날짜는 `account.cash_balance`가 원장 현금과 원 단위로 맞을 때만 실제 현금으로 사용하고, 크게 다르면 원장 현금으로 fallback한다.
-- 매도 실현손익, 이자, 배당, 수수료, 현금 조정처럼 `cash_delta`가 있는 이벤트는 원금이 아니라 원장 현금에 반영한다.
-- UI/배치에서 넘기는 오늘 기준일은 Asia/Seoul 날짜를 사용한다.
-- 가격은 해당일 종가, 없으면 직전 종가, 그래도 없으면 lot 단가를 사용한다. `missing_price_symbols`에는 lot 단가 fallback 종목만 기록한다.
-- `source_hash`에는 거래 원장, 가격 lookup 요약, 오늘 실제 현금, 기준 날짜를 포함해 가격 갱신 재계산도 구분한다.
-- `rebuild_and_save_daily_valuation_snapshots()`는 stale row 방지를 위해 전체 재계산 시 기존 평가 스냅샷을 전부 삭제하고, 거래 UI 등 부분 재계산 시 영향 시작일 이후 스냅샷만 삭제/재저장한다.
-- realtime tick마다 재계산하지 않고 거래 UI, CSV import 완료, 수동 가격 refresh, daily rollup에서 계좌별 1회 재계산한다. 거래 UI/CSV import/수동 현금·가격 갱신은 영향 시작일 이후만 부분 재계산하고, daily rollup과 수동 재계산 버튼은 전체 재계산을 유지한다.
-- Dashboard는 오늘 평가 스냅샷이 있으면 `보유 평가액`, `입금 원금`, `현재 보유현금`, `입금 대비 손익`, `입금 대비 수익률`을 우선 표시한다.
-- 평가액 기록 조회와 화면 표시는 `valuation_date DESC, id DESC` 최신 기준일 우선 순서를 사용한다.
-- 평가액 기록 현금값은 오늘은 `account.cash_balance`와 원장 현금이 일치할 때만 실제 현금, 과거일은 같은 날짜 `daily_account_snapshot.cash_balance`가 있으면 실제 현금, 그 외에는 매수/매도/현금흐름 원장 현금으로 계산한다.
-- 평가액 기록의 금액 컬럼과 원화 UI 표시는 소수점 이하를 원 단위로 일반 반올림한다. 수익률은 기존처럼 소수점 표시를 유지한다.
+- 과거 날짜 현금은 같은 날짜 `daily_account_snapshot.cash_balance`가 있으면 실제 현금을 사용하고, 없으면 거래 원장의 `cash_delta`를 누적한 원장 현금으로 fallback한다.
+- 오늘 날짜는 `account.cash_balance`가 원장 현금과 원 단위로 맞을 때만 실제 현금으로 사용하고, 크게 다르면 원장 현금으로 fallback한다.
 - 펀드성 코드(`K...`)는 수량을 좌수로 보고 기준가를 1,000좌당 가격으로 해석해 거래금액과 보유 평가액을 `좌수 * 기준가 / 1000`으로 계산한다.
-- 향후 저장되는 펀드 매수/매도 로그는 `total_amount`, `cash_delta`만 1,000좌 기준으로 정규화하고, `avg_cost/current_price`에는 기준가 원값을 유지한다.
-- 기존에 저장된 1,000배 총액 데이터는 운영 DB에서 직접 수정하지 않고 표시/계산 경로에서 계속 정규화한다.
-- Dashboard treemap intraday 상세 조회는 ECharts 렌더링 가능 경로에서만 수행한다.
-- 평가액 부분 재계산은 영향 시작일 이전 계좌 스냅샷 조회를 피하기 위해 `list_account_snapshots(account_id, start_date=...)`를 사용한다.
-- 같은 날짜/유형/종목/수량/단가에 총액만 1,000배 수준으로 큰 중복 매수/매도가 있으면 큰 총액 행은 평가/실현손익 계산에서 제외한다.
-- 국내 종목 코드는 `.KS/.KQ` 접미사를 제거하고 숫자 코드는 6자리로 맞춰 `487240`과 `487240.KS`, `69500`과 `069500`을 같은 종목으로 매칭한다.
-- 보유 수량 없이 먼저 들어온 매도 기록은 평가 현금을 부풀리지 않도록 FIFO lot에 매칭된 수량 비율만 현금 유입으로 반영한다.
-- 거래 기록 삭제는 개별 행 삭제 버튼 대신 선택 id 목록을 세션에 저장하고, 선택 삭제 dialog에서 기존 `delete_trade_log()`와 평가액 기록 재계산 경로를 반복 호출한다.
+- 거래 기록 삭제는 선택 id 목록을 세션에 저장하고, 선택 삭제 dialog에서 기존 `delete_trade_log()`와 평가액 기록 재계산 경로를 반복 호출한다.
 - 선택 매수 삭제로 남은 매도 원장이 보유 수량을 음수로 만들 경우 해당 연관 매도 기록을 확인 dialog의 삭제 대상에 자동 포함한다.
-- 선택 삭제는 매도/매수 종속성으로 인한 중간 상태 오류를 줄이기 위해 거래일/id 역순으로 삭제한다.
 - Dashboard 히어로의 `전일 대비` 값은 입금 대비 손익이 아니라 추이 데이터의 마지막 두 `total_value` 차이로 계산한다.
-- Dashboard 자산 배분 트리맵에서 예수금은 투자 수익률이 없는 현금 자산으로 보고, `profit_rate=None`, `node_kind="cash"`, `FEARGREED_FLAT_COLOR` 회색 중립색으로 표시한다. 예수금은 수익률 색상표의 최저/최고 범위 계산에서도 제외한다.
+- Dashboard 자산 배분 트리맵에서 예수금은 투자 수익률이 없는 현금 자산으로 보고, `profit_rate=None`, `node_kind="cash"`, `FEARGREED_FLAT_COLOR` 회색 중립색으로 표시한다.
 - 사이드바 계좌 카드에서는 계좌명만 표시하고 `연금(IRP/퇴직연금)` 유형 뱃지는 표시하지 않는다.
-- 스냅샷이 없으면 기존 summary와 `daily_account_snapshot` 기반 표시로 fallback한다.
-- `?demo=1`, `?demo=true`, `?demo=yes`, `?demo=demo`는 비로그인 사용자에게만 기존 데모 버튼과 같은 `start_demo_workspace_session()` 흐름을 자동 실행한다. 이미 인증된 사용자는 query parameter로 세션을 바꾸지 않는다.
+- `?demo=1`, `?demo=true`, `?demo=yes`, `?demo=demo`는 비로그인 사용자에게만 기존 데모 버튼과 같은 `start_demo_workspace_session()` 흐름을 자동 실행한다.
+- UI 캡처 기본 URL은 `?demo=1&capture=1`을 사용한다. 캡처 스크립트가 로컬 앱을 직접 실행할 때는 `PORTFOLIO_BACKEND=sqlite`와 캡처 전용 SQLite 파일을 사용해 실제 사용자 데이터 캡처를 피한다.
+- `scripts/capture_app.py --page all --viewport all`은 viewport별 같은 브라우저 세션에서 dashboard → trades → valuation 순서로 이동한다.
+- 캡처 모드는 기본 기준일을 `2026-05-15`로 고정한다.
+- 데모 워크스페이스는 `데모 IRP`(`retirement`)와 `데모 주식`(`brokerage`) 두 계좌만 생성한다.
 - KIS WebSocket worker는 운영 중 `ping/pong timed out` 후 재연결할 수 있지만, 종료 신호 수신 시에는 WebSocket을 닫고 재연결 루프 대신 `stopped` 상태 저장 경로로 이동한다.
 - realtime retention은 시간 범위 count/delete 성능을 우선해 `quote_time, id` 정렬 인덱스를 사용하고, 집계 정확도는 `aggregate_ticks()` 내부 정렬로 유지한다.
 
@@ -101,22 +63,23 @@ streamlit run app.py --server.port 8501 --server.address 0.0.0.0 --server.fileWa
 ```
 
 ## 최신 검증 결과
-- 작업 범위: Dashboard 자산 배분 트리맵 예수금 중립색 처리 및 운영 배포.
-- 변경 파일: `src/analytics.py`, `src/ui/app_core.py`, `tests/test_analytics.py`, `tests/test_app_dashboard.py`, `docs/VALIDATION.md`, `docs/CHANGELOG.md`, `Memory.md`
-- 원인: 운영 `main`에서는 예수금 leaf가 수익률 0% 값으로 rollup되어 visualMap 색상표의 보라색 계열로 표시됐다.
-- 수정: 예수금을 `node_kind="cash"`, `profit_rate=None`, `FEARGREED_FLAT_COLOR`로 처리하고 수익률 색상표 계산에서 제외했다.
-- `python -m compileall app.py src scripts tests` 성공
-- `python -m unittest tests.test_app_dashboard.AllocationTreemapVisualMapTests.test_allocation_treemap_renders_cash_as_neutral_without_profit_rate_mapping tests.test_analytics.AccountSummaryTests.test_allocation_treemap_nodes_groups_holdings_and_cash` 성공, 2 tests
-- `python -m unittest discover -s tests -p "test_*.py"` 성공, 282 tests
-- 운영 Streamlit Cloud `?demo=1&capture=1` 대시보드에서 예수금 회색 표시 확인 완료.
-- 운영 DB 데이터 직접 수정과 migration 추가는 수행하지 않았다.
+- 작업 범위: 거래 입력 > 상품 등록 검색 결과를 compact dropdown으로 변경하고 자산 구분/거래일자/메모를 항상 노출.
+- 코드 검증: `python -m compileall app.py src scripts tests` 성공.
+- 단위 검증: `python -m pytest tests/test_app_dashboard.py` 성공, 125 passed.
+- 전체 검증: `python -m unittest discover -s tests -p "test_*.py"` 성공, 291 tests.
+- UI 캡처 검증: `python scripts/capture_app.py --page trades --viewport desktop --strict`, `tablet --strict`, `mobile --strict` 모두 성공.
+- 원격 PR 체크: GitHub Actions run `25991712602`의 `capture-ui` 성공.
+- 확인 산출물: `artifacts/ui_captures/2026-05-17_125933/trades/desktop/blocks/03_trade_product_entry.png`, `artifacts/ui_captures/2026-05-17_130031/trades/tablet/blocks/03_trade_product_entry.png`, `artifacts/ui_captures/2026-05-17_130127/trades/mobile/blocks/03_trade_product_entry.png`.
+- 운영 DB 데이터 수정은 수행하지 않았다.
 
 ## Git/GitHub 상태
 - 기본 브랜치: `main`
-- 최근 배포 코드 커밋: `9b17a48 Render cash treemap as neutral`
-- 배포 방법: `git push origin main`으로 Streamlit Cloud 자동 재배포 트리거.
-- 운영 배포 검증: 공개 URL `https://retirement-portfolio-app-nh2vq9ferqnpehsslbykbe.streamlit.app/?demo=1&capture=1` 대시보드에서 예수금 회색 표시 확인.
-- 워크트리에는 이번 요청 전부터 `data/portfolio.db`, 로컬 도구 디렉터리, 산출물 등 여러 변경/미추적 파일이 함께 있었다.
+- 작업 브랜치: `codex/ui-capture-automation`
+- 이번 작업 커밋: `7c88a55 Refine trade product entry layout`
+- PR: `https://github.com/jhonkim91/retirement-portfolio-streamlit/pull/1`
+- 배포 방법: `main` 병합 후 `git push origin main` 또는 PR merge로 Streamlit Cloud 자동 재배포 트리거.
+- `origin/main` 병합 충돌은 문서(`Memory.md`, `docs/CHANGELOG.md`, `docs/VALIDATION.md`) 중심으로 해결 중이며, 병합 완료 후 재검증과 push가 필요하다.
+- 워크트리에는 이번 요청 전부터 `data/portfolio.db`, 로컬 도구 디렉터리, 캡처 산출물 등 여러 변경/미추적 파일이 함께 있었다.
 - 커밋 시 요청 관련 파일만 선별하고 `data/portfolio.db`, `.local/`, `.playtools*/`, `.playwright-browsers/`, `.vscode/`, `artifacts/`, `data/kis_cache/` 등 로컬 산출물은 제외한다.
 
 ## 운영 시크릿 메모

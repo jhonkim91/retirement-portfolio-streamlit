@@ -558,6 +558,8 @@ def rebuild_and_save_daily_valuation_snapshots(*args: Any, **kwargs: Any) -> Any
 def valuation_today() -> date:
     """평가 스냅샷에서 사용할 KST 기준 오늘 날짜를 반환한다."""
 
+    if is_capture_mode():
+        return capture_reference_date()
     return datetime.now(KST_TIMEZONE).date()
 
 
@@ -729,11 +731,14 @@ st.set_page_config(
     page_title="은퇴 포트폴리오",
     page_icon="💼",
     layout="wide",
+    initial_sidebar_state="expanded",
 )
 
 
 DESIGN_TOKENS = load_design_tokens()
 PAGES = ("Dashboard", "Trades", "Valuation")
+CAPTURE_REFERENCE_DATE = date(2026, 5, 15)
+CAPTURE_REFERENCE_DATE_ENV_KEYS = ("PORTFOLIO_CAPTURE_REFERENCE_DATE", "CAPTURE_REFERENCE_DATE")
 NAVIGATION_CONTEXT_KEY = "navigation_page_context"
 PENDING_CONFIRMATION_EMAIL_KEY = "pending_confirmation_email"
 AUTH_FEEDBACK_KEY = "auth_feedback"
@@ -979,11 +984,13 @@ DASHBOARD_PERIOD_LABELS = {
     "6mo": "6M",
     "1y": "1Y",
 }
-DASHBOARD_ALLOCATION_CHART_HEIGHT = 560
-DASHBOARD_HOLDINGS_CHART_HEIGHT = 360
-DASHBOARD_HOLDINGS_COMPARE_CHART_HEIGHT = 430
+DASHBOARD_CHART_HEIGHT = 560
+DASHBOARD_ALLOCATION_CHART_HEIGHT = DASHBOARD_CHART_HEIGHT
+DASHBOARD_HOLDINGS_CHART_HEIGHT = DASHBOARD_CHART_HEIGHT
+DASHBOARD_HOLDINGS_COMPARE_CHART_HEIGHT = DASHBOARD_CHART_HEIGHT
 DASHBOARD_DETAIL_CHART_HEIGHT = DASHBOARD_HOLDINGS_COMPARE_CHART_HEIGHT
 DASHBOARD_HOLDINGS_TABLE_HEIGHT = 380
+REALIZED_MONTHLY_CHART_HEIGHT = DASHBOARD_CHART_HEIGHT
 REALTIME_STATUS_FRAGMENT_INTERVAL = "10s"
 
 
@@ -1019,6 +1026,8 @@ class ChartColors:
     chart_text: str
     chart_accent_soft: str
     chart_accent_strong: str
+    realized_profit_positive: str
+    realized_profit_negative: str
 
 
 def build_chart_colors(tokens: dict[str, str | list[str]]) -> ChartColors:
@@ -1057,6 +1066,8 @@ def build_chart_colors(tokens: dict[str, str | list[str]]) -> ChartColors:
         chart_text=str(tokens["chart_text_color"]),
         chart_accent_soft=str(tokens["chart_accent_soft_color"]),
         chart_accent_strong=str(tokens["chart_accent_strong_color"]),
+        realized_profit_positive="#2e7d32",
+        realized_profit_negative="#c62828",
     )
 
 
@@ -1093,6 +1104,8 @@ CHART_TOOLTIP_TEXT_COLOR = CHART_COLORS.chart_tooltip_text
 CHART_TEXT_COLOR = CHART_COLORS.chart_text
 CHART_ACCENT_SOFT_COLOR = CHART_COLORS.chart_accent_soft
 CHART_ACCENT_STRONG_COLOR = CHART_COLORS.chart_accent_strong
+REALIZED_PROFIT_POSITIVE_COLOR = CHART_COLORS.realized_profit_positive
+REALIZED_PROFIT_NEGATIVE_COLOR = CHART_COLORS.realized_profit_negative
 PRODUCT_TYPE_LABELS = {
     "stock": "주식",
     "stock/ETF": "주식/ETF",
@@ -1106,6 +1119,39 @@ PRODUCT_TYPE_LABELS = {
     "mutualfund": "펀드",
     "MUTUALFUND": "펀드",
 }
+
+
+def normalize_chart_height(height: Any = None, *, fallback: int = DASHBOARD_CHART_HEIGHT) -> int:
+    """차트 렌더링 높이를 px 단위 정수로 정규화한다."""
+
+    raw_height = fallback if height in (None, "") else height
+    if isinstance(raw_height, str):
+        raw_height = raw_height.strip().removesuffix("px")
+    try:
+        numeric_height = int(float(raw_height))
+    except (TypeError, ValueError):
+        numeric_height = int(fallback)
+    return max(120, numeric_height)
+
+
+def attach_chart_height(options: dict[str, Any], height: Any = None) -> dict[str, Any]:
+    """ECharts option에 렌더링용 높이 메타데이터를 붙인다."""
+
+    metadata = dict(options.get("_meta") or {})
+    metadata["height"] = normalize_chart_height(height)
+    options["_meta"] = metadata
+    return options
+
+
+def chart_height_px(options_or_height: Any = None, *, fallback: int = DASHBOARD_CHART_HEIGHT) -> str:
+    """ECharts/Altair 렌더러에 넘길 높이 문자열을 반환한다."""
+
+    raw_height = options_or_height
+    if isinstance(options_or_height, dict):
+        raw_height = (options_or_height.get("_meta") or {}).get("height", fallback)
+    return f"{normalize_chart_height(raw_height, fallback=fallback)}px"
+
+
 EXCHANGE_LABELS = {
     "KRX": "국내",
     "Korea": "국내",
@@ -3169,7 +3215,7 @@ def latest_date_text(rows: list[dict[str, Any]], field_name: str) -> str:
 def period_start_date(period: str) -> date:
     """선택한 기간에 해당하는 시작 날짜를 반환한다."""
 
-    today = date.today()
+    today = capture_current_date()
     normalized = str(period or "6mo")
     if normalized == "today":
         return today
@@ -3257,16 +3303,16 @@ def init_state() -> None:
     st.session_state.setdefault(TRADE_QUANTITY_KEY, 1.0)
     st.session_state.setdefault(TRADE_PRICE_KEY, 0.0)
     st.session_state.setdefault(TRADE_PRICE_AUTO_FILLED_KEY, False)
-    st.session_state.setdefault(TRADE_DATE_KEY, date.today())
+    st.session_state.setdefault(TRADE_DATE_KEY, capture_current_date())
     st.session_state.setdefault(TRADE_NOTES_KEY, "")
     st.session_state.setdefault(TRADE_PREFILL_MARKER_KEY, "")
     st.session_state.setdefault(CASH_FLOW_TYPE_KEY, "personal_deposit")
     st.session_state.setdefault(CASH_FLOW_AMOUNT_KEY, 0)
-    st.session_state.setdefault(CASH_FLOW_DATE_KEY, date.today())
+    st.session_state.setdefault(CASH_FLOW_DATE_KEY, capture_current_date())
     st.session_state.setdefault(CASH_FLOW_NOTES_KEY, "")
     for flow_type in CASH_FLOW_TYPES:
         st.session_state.setdefault(cash_flow_widget_key(CASH_FLOW_AMOUNT_KEY, flow_type), 0)
-        st.session_state.setdefault(cash_flow_widget_key(CASH_FLOW_DATE_KEY, flow_type), date.today())
+        st.session_state.setdefault(cash_flow_widget_key(CASH_FLOW_DATE_KEY, flow_type), capture_current_date())
         st.session_state.setdefault(cash_flow_widget_key(CASH_FLOW_NOTES_KEY, flow_type), "")
     st.session_state.setdefault(TRADE_FORM_RESET_PENDING_KEY, False)
     st.session_state.setdefault(CASH_FLOW_FORM_RESET_PENDING_KEY, False)
@@ -3306,7 +3352,7 @@ def current_rollup_signature(account_id: int) -> str:
     """현재 세션에서 롤업 재실행 여부를 판단할 서명을 반환한다."""
 
     dirty_token = int(st.session_state.get("rollup_dirty_token", 0) or 0)
-    return f"{int(account_id)}:{date.today().isoformat()}:{dirty_token}"
+    return f"{int(account_id)}:{capture_current_date().isoformat()}:{dirty_token}"
 
 
 def should_sync_rollup(account_id: int) -> bool:
@@ -3321,10 +3367,37 @@ def mark_rollup_synced(account_id: int) -> None:
     st.session_state["rollup_sync_signature"] = current_rollup_signature(account_id)
 
 
+def capture_stability_stylesheet() -> str:
+    """캡처 모드에서 애니메이션과 전환 효과를 제거하는 CSS를 반환한다."""
+
+    return """
+*, *::before, *::after {
+    animation: none !important;
+    animation-delay: 0s !important;
+    animation-duration: 0s !important;
+    transition: none !important;
+    transition-delay: 0s !important;
+    transition-duration: 0s !important;
+    scroll-behavior: auto !important;
+    caret-color: transparent !important;
+}
+
+[data-testid="stSpinner"],
+[data-testid="stStatusWidget"],
+[data-testid="stProgress"] {
+    animation: none !important;
+    transition: none !important;
+}
+"""
+
+
 def inject_app_styles() -> None:
     """대시보드 중심 UI 정리를 위한 앱 전역 스타일을 주입한다."""
 
-    st.markdown(f"<style>{render_app_stylesheet()}</style>", unsafe_allow_html=True)
+    stylesheet = render_app_stylesheet()
+    if is_capture_mode():
+        stylesheet = f"{stylesheet}\n{capture_stability_stylesheet()}"
+    st.markdown(f"<style>{stylesheet}</style>", unsafe_allow_html=True)
 
 
 def set_auth_feedback(level: str, message: str) -> None:
@@ -3369,6 +3442,49 @@ def set_auth_mode(mode: str) -> None:
     st.rerun()
 
 
+def is_query_flag_requested(raw_value: Any) -> bool:
+    """URL query parameter 값이 명시적인 활성 요청인지 판별한다."""
+
+    value = raw_value[0] if isinstance(raw_value, list) and raw_value else raw_value
+    return str(value or "").strip().lower() in {"1", "true", "yes", "demo"}
+
+
+def is_capture_query_requested(raw_value: Any) -> bool:
+    """URL query parameter 값이 캡처 모드 요청인지 판별한다."""
+
+    return is_query_flag_requested(raw_value)
+
+
+def is_capture_mode() -> bool:
+    """현재 요청이 UI 캡처 안정화 모드인지 반환한다."""
+
+    try:
+        raw_value = st.query_params.get("capture", "")
+    except Exception:
+        return False
+    return is_capture_query_requested(raw_value)
+
+
+def capture_reference_date() -> date:
+    """캡처 산출물의 변동값을 고정할 기준일을 반환한다."""
+
+    for key in CAPTURE_REFERENCE_DATE_ENV_KEYS:
+        raw_value = str(os.getenv(key, "") or "").strip()
+        if not raw_value:
+            continue
+        try:
+            return date.fromisoformat(raw_value[:10])
+        except ValueError:
+            continue
+    return CAPTURE_REFERENCE_DATE
+
+
+def capture_current_date() -> date:
+    """캡처 모드에서는 고정 기준일, 일반 모드에서는 오늘 날짜를 반환한다."""
+
+    return capture_reference_date() if is_capture_mode() else date.today()
+
+
 def start_demo_workspace_session() -> None:
     """데모 계정 또는 로컬 데모 작업공간으로 진입한다."""
 
@@ -3377,7 +3493,8 @@ def start_demo_workspace_session() -> None:
         with st.spinner("데모 계정으로 접속하고 테스트 데이터를 준비하는 중입니다..."):
             demo_identity = app_auth.sign_in_demo_user()
             initialize_database()
-            result = seed_demo_workspace()
+            seed_kwargs = {"snapshot_base_date": capture_reference_date()} if is_capture_mode() else {}
+            result = seed_demo_workspace(**seed_kwargs)
     except Exception as exc:  # noqa: BLE001
         if demo_identity:
             set_auth_feedback("error", f"데모 계정 로그인 후 테스트 데이터 준비에 실패했습니다: {exc}")
@@ -3402,8 +3519,7 @@ def start_demo_workspace_session() -> None:
 def is_demo_query_requested(raw_value: Any) -> bool:
     """URL query parameter 값이 데모 자동 진입 요청인지 판별한다."""
 
-    value = raw_value[0] if isinstance(raw_value, list) and raw_value else raw_value
-    return str(value or "").strip().lower() in {"1", "true", "yes", "demo"}
+    return is_query_flag_requested(raw_value)
 
 
 def maybe_enter_demo_from_query_param() -> None:
@@ -4106,45 +4222,48 @@ def render_dashboard_top_overview_option2(
                 disabled=refresh_disabled,
             )
 
-        overview_cols = st.columns((0.4, 0.6), gap="small", vertical_alignment="top")
+        overview_cols = st.columns((0.42, 0.58), gap="medium", vertical_alignment="top")
         with overview_cols[0]:
-            with st.container(key="dashboard-overview-hero-shell"):
-                with st.container(key="dashboard-overview-period-controls"):
-                    period_cols = st.columns(len(DASHBOARD_OVERVIEW_PERIOD_OPTIONS), gap="small")
-                    for period, period_col in zip(DASHBOARD_OVERVIEW_PERIOD_OPTIONS, period_cols, strict=True):
-                        with period_col:
-                            if st.button(
-                                period,
-                                key=f"dashboard-overview-period-button:{period}",
-                                type="primary" if period == selected_period else "secondary",
-                                help=f"{period} 기준 그래프",
-                            ):
-                                st.session_state[DASHBOARD_OVERVIEW_PERIOD_KEY] = period
-                                st.rerun()
+            with st.container(key="capture_header"):
+                with st.container(key="dashboard-overview-hero-shell"):
+                    with st.container(key="capture_input_panel"):
+                        period_cols = st.columns(len(DASHBOARD_OVERVIEW_PERIOD_OPTIONS), gap="small")
+                        for period, period_col in zip(DASHBOARD_OVERVIEW_PERIOD_OPTIONS, period_cols, strict=True):
+                            with period_col:
+                                if st.button(
+                                    period,
+                                    key=f"dashboard-overview-period-button:{period}",
+                                    type="primary" if period == selected_period else "secondary",
+                                    help=f"{period} 기준 그래프",
+                                ):
+                                    st.session_state[DASHBOARD_OVERVIEW_PERIOD_KEY] = period
+                                    st.rerun()
 
-                st.markdown(
-                    (
-                        f'<section class="soft-wealth-hero dashboard-overview-hero dashboard-overview-hero--{hero_tone}">'
-                        '<div class="dashboard-overview-hero__top">'
-                        f'<div class="dashboard-overview-hero__broker">{escaped_account_name}</div>'
-                        "</div>"
-                        f'<div class="dashboard-overview-hero__label">{html.escape(hero_label)}</div>'
-                        f'<div class="soft-wealth-hero__value dashboard-overview-hero__value">{dashboard_format_won(total_value)}</div>'
-                        f'<div class="dashboard-overview-hero__delta dashboard-overview-hero__delta--{hero_tone}">'
-                        f"{hero_arrow} {dashboard_format_won(abs(previous_day_delta))} "
-                        f"({dashboard_format_rate(previous_day_rate, signed=True)})"
-                        "</div>"
-                        '<div class="dashboard-overview-hero__caption">전일 대비</div>'
-                        f'<div class="dashboard-overview-hero__chart">{hero_sparkline}</div>'
-                        "</section>"
-                    ),
-                    unsafe_allow_html=True,
-                )
+                    st.markdown(
+                        (
+                            f'<section class="soft-wealth-hero dashboard-overview-hero dashboard-overview-hero--{hero_tone}">'
+                            '<div class="dashboard-overview-hero__top">'
+                            f'<div class="dashboard-overview-hero__broker">{escaped_account_name}</div>'
+                            "</div>"
+                            f'<div class="dashboard-overview-hero__label">{html.escape(hero_label)}</div>'
+                            f'<div class="soft-wealth-hero__value dashboard-overview-hero__value">{dashboard_format_won(total_value)}</div>'
+                            f'<div class="dashboard-overview-hero__delta dashboard-overview-hero__delta--{hero_tone}">'
+                            f"{hero_arrow} {dashboard_format_won(abs(previous_day_delta))} "
+                            f"({dashboard_format_rate(previous_day_rate, signed=True)})"
+                            "</div>"
+                            '<div class="dashboard-overview-hero__caption">전일 대비</div>'
+                            f'<div class="dashboard-overview-hero__chart">{hero_sparkline}</div>'
+                            "</section>"
+                        ),
+                        unsafe_allow_html=True,
+                    )
         with overview_cols[1]:
-            st.markdown(
-                f'<section class="dashboard-overview-card-grid">{metric_cards}</section>',
-                unsafe_allow_html=True,
-            )
+            with st.container(key="capture_summary_cards"):
+                with st.container(key="dashboard-summary-strip", horizontal=True, gap="small"):
+                    st.markdown(
+                        f'<section class="dashboard-overview-card-grid dashboard-summary-strip">{metric_cards}</section>',
+                        unsafe_allow_html=True,
+                    )
 
     return refresh_clicked
 
@@ -5027,6 +5146,7 @@ def allocation_treemap_options(
     *,
     selected_symbol: str | None = None,
     include_market_details: bool = True,
+    height: int = DASHBOARD_ALLOCATION_CHART_HEIGHT,
 ) -> dict[str, Any] | None:
     """자산 배분 트리맵용 ECharts 옵션을 만든다."""
 
@@ -5191,7 +5311,7 @@ def allocation_treemap_options(
             """
         )
 
-    return {
+    return attach_chart_height({
         "backgroundColor": TREEMAP_CANVAS_BG_COLOR,
         "animationDurationUpdate": 220,
         "title": {
@@ -5245,9 +5365,9 @@ def allocation_treemap_options(
                 "name": "자산 배분",
                 "type": "treemap",
                 "top": 38,
-                "left": 0,
-                "right": 0,
-                "bottom": 52,
+                "left": 2,
+                "right": 2,
+                "bottom": 48,
                 "roam": False,
                 "nodeClick": False,
                 "sort": "desc",
@@ -5262,10 +5382,13 @@ def allocation_treemap_options(
                     "color": CHART_TEXT_COLOR,
                     "fontWeight": 700,
                     "fontSize": 14,
-                    "lineHeight": 18,
+                    "lineHeight": 19,
+                    "align": "center",
+                    "verticalAlign": "middle",
                     "overflow": "truncate",
                     "ellipsis": "…",
                 },
+                "labelLayout": {"hideOverlap": True},
                 "upperLabel": {
                     "show": True,
                     "formatter": label_formatter,
@@ -5338,7 +5461,7 @@ def allocation_treemap_options(
                 "data": nodes,
             }
         ],
-    }
+    }, height)
 
 
 def returns_chart_icon_style(index: int) -> tuple[str, str]:
@@ -5367,7 +5490,7 @@ def returns_chart_reference_date(frame: pd.DataFrame) -> str:
                 return datetime.fromisoformat(latest_value.replace("Z", "+00:00")).strftime("%Y-%m-%d")
             except ValueError:
                 return latest_value[:10]
-    return date.today().isoformat()
+    return capture_current_date().isoformat()
 
 
 def returns_chart_component_height(row_count: int, divider_count: int = 0) -> int:
@@ -5711,7 +5834,12 @@ def render_returns_chart(frame: pd.DataFrame, *, selected_symbol: str | None = N
     )
 
 
-def holdings_bar_options(frame: pd.DataFrame, *, selected_symbol: str | None = None) -> dict[str, Any] | None:
+def holdings_bar_options(
+    frame: pd.DataFrame,
+    *,
+    selected_symbol: str | None = None,
+    height: int = DASHBOARD_HOLDINGS_COMPARE_CHART_HEIGHT,
+) -> dict[str, Any] | None:
     """보유 종목 수익률 ECharts 막대 옵션을 만든다."""
 
     get_jscode_runtime()
@@ -5793,7 +5921,7 @@ def holdings_bar_options(frame: pd.DataFrame, *, selected_symbol: str | None = N
     elif maximum <= 0:
         y_axis_config["max"] = 0.0
 
-    return {
+    return attach_chart_height({
         "backgroundColor": "transparent",
         "animationDuration": 260,
         "animationDurationUpdate": 320,
@@ -5834,7 +5962,7 @@ def holdings_bar_options(frame: pd.DataFrame, *, selected_symbol: str | None = N
                 },
             }
         ],
-    }
+    }, height)
 
 
 def holdings_bar_fallback_chart(frame: pd.DataFrame, *, selected_symbol: str | None = None) -> alt.Chart | None:
@@ -5905,7 +6033,7 @@ def holdings_bar_fallback_chart(frame: pd.DataFrame, *, selected_symbol: str | N
     return style_dashboard_altair_chart(bars + labels, height=DASHBOARD_HOLDINGS_COMPARE_CHART_HEIGHT)
 
 
-def realized_profit_bar_options(frame: pd.DataFrame) -> dict[str, Any] | None:
+def realized_profit_bar_options(frame: pd.DataFrame, *, height: int = DASHBOARD_HOLDINGS_CHART_HEIGHT) -> dict[str, Any] | None:
     """실현 손익 요약을 대시보드 보유 종목 수익률과 같은 톤의 막대 옵션으로 만든다."""
 
     get_jscode_runtime()
@@ -5930,13 +6058,13 @@ def realized_profit_bar_options(frame: pd.DataFrame) -> dict[str, Any] | None:
                 "sell_amount": round(float(row.get("sell_amount") or 0), 2),
                 "profit_rate": round(profit_rate, 2),
                 "itemStyle": {
-                    "color": FEARGREED_UP_COLOR if profit_loss >= 0 else FEARGREED_DOWN_COLOR,
+                    "color": REALIZED_PROFIT_POSITIVE_COLOR if profit_loss >= 0 else REALIZED_PROFIT_NEGATIVE_COLOR,
                     "borderRadius": [10, 10, 0, 0] if profit_loss >= 0 else [0, 0, 10, 10],
                     "opacity": 0.94,
                 },
                 "label": {
                     "show": True,
-                    "position": "top" if profit_loss >= 0 else "bottom",
+                    "position": "top",
                     "distance": 8,
                     "formatter": format_won(profit_loss),
                     "color": FEARGREED_MID_TEXT_COLOR,
@@ -5995,7 +6123,7 @@ def realized_profit_bar_options(frame: pd.DataFrame) -> dict[str, Any] | None:
     elif maximum <= 0:
         y_axis_config["max"] = 0.0
 
-    return {
+    return attach_chart_height({
         "backgroundColor": "transparent",
         "animationDuration": 260,
         "animationDurationUpdate": 320,
@@ -6036,10 +6164,10 @@ def realized_profit_bar_options(frame: pd.DataFrame) -> dict[str, Any] | None:
                 },
             }
         ],
-    }
+    }, height)
 
 
-def realized_monthly_profit_bar_options(frame: pd.DataFrame) -> dict[str, Any] | None:
+def realized_monthly_profit_bar_options(frame: pd.DataFrame, *, height: int = REALIZED_MONTHLY_CHART_HEIGHT) -> dict[str, Any] | None:
     """월별 실현손익 막대 차트 옵션을 만든다."""
 
     get_jscode_runtime()
@@ -6059,13 +6187,13 @@ def realized_monthly_profit_bar_options(frame: pd.DataFrame) -> dict[str, Any] |
                 "display_month": str(row.get("display_month") or row.get("month") or ""),
                 "sold_count": int(row.get("sold_count") or 0),
                 "itemStyle": {
-                    "color": FEARGREED_UP_COLOR if profit_loss >= 0 else FEARGREED_DOWN_COLOR,
+                    "color": REALIZED_PROFIT_POSITIVE_COLOR if profit_loss >= 0 else REALIZED_PROFIT_NEGATIVE_COLOR,
                     "borderRadius": [8, 8, 0, 0] if profit_loss >= 0 else [0, 0, 8, 8],
                     "opacity": 0.94,
                 },
                 "label": {
                     "show": True,
-                    "position": "top" if profit_loss >= 0 else "bottom",
+                    "position": "top",
                     "distance": 7,
                     "formatter": format_won(profit_loss),
                     "color": FEARGREED_MID_TEXT_COLOR,
@@ -6120,7 +6248,7 @@ def realized_monthly_profit_bar_options(frame: pd.DataFrame) -> dict[str, Any] |
     elif maximum <= 0:
         y_axis_config["max"] = 0.0
 
-    return {
+    return attach_chart_height({
         "backgroundColor": "transparent",
         "animationDuration": 260,
         "animationDurationUpdate": 320,
@@ -6155,7 +6283,7 @@ def realized_monthly_profit_bar_options(frame: pd.DataFrame) -> dict[str, Any] |
                 },
             }
         ],
-    }
+    }, height)
 
 
 def realized_profit_bar_fallback_chart(frame: pd.DataFrame) -> alt.Chart | None:
@@ -6199,7 +6327,11 @@ def realized_profit_bar_fallback_chart(frame: pd.DataFrame) -> alt.Chart | None:
                     titleColor=FEARGREED_MID_TEXT_COLOR,
                 ),
             ),
-            color=alt.Color("tone:N", legend=None, scale=alt.Scale(domain=["수익", "손실"], range=[FEARGREED_UP_COLOR, FEARGREED_DOWN_COLOR])),
+            color=alt.Color(
+                "tone:N",
+                legend=None,
+                scale=alt.Scale(domain=["수익", "손실"], range=[REALIZED_PROFIT_POSITIVE_COLOR, REALIZED_PROFIT_NEGATIVE_COLOR]),
+            ),
             tooltip=[
                 alt.Tooltip("product_name:N", title="종목"),
                 alt.Tooltip("profit_loss:Q", title="실현손익", format=",.0f"),
@@ -6220,7 +6352,7 @@ def realized_profit_bar_fallback_chart(frame: pd.DataFrame) -> alt.Chart | None:
     return style_dashboard_altair_chart(bars + labels, height=DASHBOARD_HOLDINGS_CHART_HEIGHT)
 
 
-def realized_monthly_profit_fallback_chart(frame: pd.DataFrame) -> alt.Chart | None:
+def realized_monthly_profit_fallback_chart(frame: pd.DataFrame, *, height: int = REALIZED_MONTHLY_CHART_HEIGHT) -> alt.Chart | None:
     """월별 실현손익을 Altair 막대차트로 대체한다."""
 
     if frame.empty:
@@ -6251,7 +6383,11 @@ def realized_monthly_profit_fallback_chart(frame: pd.DataFrame) -> alt.Chart | N
                     titleColor=FEARGREED_MID_TEXT_COLOR,
                 ),
             ),
-            color=alt.Color("tone:N", legend=None, scale=alt.Scale(domain=["수익", "손실"], range=[FEARGREED_UP_COLOR, FEARGREED_DOWN_COLOR])),
+            color=alt.Color(
+                "tone:N",
+                legend=None,
+                scale=alt.Scale(domain=["수익", "손실"], range=[REALIZED_PROFIT_POSITIVE_COLOR, REALIZED_PROFIT_NEGATIVE_COLOR]),
+            ),
             tooltip=[
                 alt.Tooltip("month:N", title="월"),
                 alt.Tooltip("profit_loss:Q", title="실현손익", format=",.0f"),
@@ -6268,7 +6404,7 @@ def realized_monthly_profit_fallback_chart(frame: pd.DataFrame) -> alt.Chart | N
             text=alt.Text("profit_loss_label:N"),
         )
     )
-    return style_dashboard_altair_chart(bars + labels, height=260)
+    return style_dashboard_altair_chart(bars + labels, height=normalize_chart_height(height))
 
 
 def build_selected_holding_intraday_trend_frame(holding: dict[str, Any]) -> pd.DataFrame:
@@ -6507,6 +6643,7 @@ def selected_holding_trend_options(
     selected_symbol_code: str,
     measure: str,
     period_label: str,
+    height: int = DASHBOARD_DETAIL_CHART_HEIGHT,
 ) -> dict[str, Any] | None:
     """선택 종목 트렌드 ECharts 옵션을 만든다."""
 
@@ -6633,7 +6770,7 @@ def selected_holding_trend_options(
 
     data_view_option = _selected_holding_trend_data_view_option()
 
-    return {
+    return attach_chart_height({
         "backgroundColor": "transparent",
         "animationDuration": 260,
         "animationDurationUpdate": 320,
@@ -6831,7 +6968,7 @@ def selected_holding_trend_options(
         "aria": {
             "enabled": True,
         },
-    }
+    }, height)
 
 
 def show_holdings_table(frame: pd.DataFrame, *, height: int = 420) -> None:
@@ -7352,62 +7489,63 @@ def sidebar(accounts: list[dict[str, Any]], selected_account_id: int | None, use
         st.session_state["selected_account_id"] = selected_account_id
 
     with st.sidebar:
-        render_sidebar_navigation()
-        user_label = user.get("email") or user.get("id") or "로그인 사용자"
-        st.divider()
+        with st.container(key="capture_sidebar"):
+            render_sidebar_navigation()
+            user_label = user.get("email") or user.get("id") or "로그인 사용자"
+            st.divider()
 
-        with st.container(border=True, key="sidebar-account-panel"):
-            header_col, add_col = st.columns((3.0, 0.72), gap="small", vertical_alignment="center")
-            with header_col:
-                st.caption("내 계좌")
-            with add_col:
-                popover = getattr(st, "popover", None)
-                if callable(popover):
-                    with popover("＋", help="새 계좌 만들기"):
-                        render_new_account_form()
-                elif st.button("＋", key="sidebar-new-account-toggle", help="새 계좌 만들기", width="stretch"):
-                    st.session_state["sidebar_show_new_account_form"] = not bool(
-                        st.session_state.get("sidebar_show_new_account_form")
+            with st.container(border=True, key="sidebar-account-panel"):
+                header_col, add_col = st.columns((3.0, 0.72), gap="small", vertical_alignment="center")
+                with header_col:
+                    st.caption("내 계좌")
+                with add_col:
+                    popover = getattr(st, "popover", None)
+                    if callable(popover):
+                        with popover("＋", help="새 계좌 만들기"):
+                            render_new_account_form()
+                    elif st.button("＋", key="sidebar-new-account-toggle", help="새 계좌 만들기", width="stretch"):
+                        st.session_state["sidebar_show_new_account_form"] = not bool(
+                            st.session_state.get("sidebar_show_new_account_form")
+                        )
+
+                if len(account_ids) > 1:
+                    selected_account_id = st.selectbox(
+                        "계좌",
+                        options=account_ids,
+                        index=account_ids.index(selected_account_id),
+                        format_func=lambda account_id: str(
+                            next(account for account in accounts if int(account["id"]) == account_id).get("name") or account_id
+                        ),
+                        label_visibility="collapsed",
                     )
+                else:
+                    selected_account_id = account_ids[0]
+                    single_account = next(account for account in accounts if int(account["id"]) == int(selected_account_id))
+                    st.markdown(sidebar_account_name_html(single_account), unsafe_allow_html=True)
+                st.session_state["selected_account_id"] = selected_account_id
+                selected_account = next(account for account in accounts if int(account["id"]) == int(selected_account_id))
 
-            if len(account_ids) > 1:
-                selected_account_id = st.selectbox(
-                    "계좌",
-                    options=account_ids,
-                    index=account_ids.index(selected_account_id),
-                    format_func=lambda account_id: str(
-                        next(account for account in accounts if int(account["id"]) == account_id).get("name") or account_id
-                    ),
-                    label_visibility="collapsed",
-                )
-            else:
-                selected_account_id = account_ids[0]
-                single_account = next(account for account in accounts if int(account["id"]) == int(selected_account_id))
-                st.markdown(sidebar_account_name_html(single_account), unsafe_allow_html=True)
-            st.session_state["selected_account_id"] = selected_account_id
-            selected_account = next(account for account in accounts if int(account["id"]) == int(selected_account_id))
+                if st.button(
+                    "⚙ 계좌 설정",
+                    key=f"open-delete-account-dialog:{selected_account_id}",
+                    width="stretch",
+                    type="secondary",
+                ):
+                    st.session_state[SIDEBAR_DELETE_ACCOUNT_ID_KEY] = int(selected_account_id)
+                    render_account_delete_dialog(selected_account, account_ids)
 
-            if st.button(
-                "⚙ 계좌 설정",
-                key=f"open-delete-account-dialog:{selected_account_id}",
-                width="stretch",
-                type="secondary",
-            ):
-                st.session_state[SIDEBAR_DELETE_ACCOUNT_ID_KEY] = int(selected_account_id)
-                render_account_delete_dialog(selected_account, account_ids)
+                if not callable(getattr(st, "popover", None)) and st.session_state.get("sidebar_show_new_account_form"):
+                    with st.expander("새 계좌 만들기", expanded=True):
+                        render_new_account_form()
 
-            if not callable(getattr(st, "popover", None)) and st.session_state.get("sidebar_show_new_account_form"):
-                with st.expander("새 계좌 만들기", expanded=True):
-                    render_new_account_form()
-
-        st.divider()
-        with st.container(key="sidebar-user-panel"):
-            st.caption("로그인 계정")
-            st.write(f"`{user_label}`")
-            if st.button("로그아웃", width="stretch"):
-                app_auth.sign_out()
-                st.session_state["selected_account_id"] = None
-                st.rerun()
+            st.divider()
+            with st.container(key="sidebar-user-panel"):
+                st.caption("로그인 계정")
+                st.write(f"`{user_label}`")
+                if st.button("로그아웃", width="stretch"):
+                    app_auth.sign_out()
+                    st.session_state["selected_account_id"] = None
+                    st.rerun()
 
     return int(selected_account_id)
 
@@ -7453,7 +7591,7 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]], roll
         st.session_state[trend_measure_key] = DEFAULT_SELECTED_TREND_MEASURE
     overview_frame = holdings_overview_frame(holdings, selected_symbol=selected_symbol or None, limit=10)
     snapshot_rows = list_account_snapshots(account_id)
-    snapshot_date = str((rollup_state or {}).get("snapshot_date") or date.today().isoformat()).strip()
+    snapshot_date = str((rollup_state or {}).get("snapshot_date") or capture_current_date().isoformat()).strip()
     valuation_trend_frame = valuation_snapshot_trend_frame(valuation_rows)
     if not valuation_trend_frame.empty:
         overview_trend_frame = valuation_trend_frame
@@ -7504,61 +7642,56 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]], roll
     if not echarts_available:
         st.warning(echarts_error or "현재 환경에서는 ECharts 모듈을 불러오지 못해 대시보드 차트를 표시할 수 없습니다.")
 
-    with st.container(border=True, key="dashboard-panel-allocation"):
-        treemap_options = allocation_treemap_options(
-            summary,
-            holdings,
-            selected_symbol=selected_symbol or None,
-            include_market_details=echarts_available,
-        )
-        render_dashboard_allocation_status_header_fragment(
-            account_id,
-            holdings,
-            has_allocation_data=treemap_options is not None,
-            status_palette_colors=FEARGREED_TREEMAP_PALETTE if treemap_options is not None else None,
-        )
-        if treemap_options is None:
-            st.info("배분을 그릴 데이터가 아직 없습니다.")
-        elif not echarts_available:
-            st.info("현재 환경에서는 자산 배분 차트를 표시할 수 없습니다.")
-        else:
-            treemap_selection = st_echarts(
-                options=treemap_options,
-                height=f"{DASHBOARD_ALLOCATION_CHART_HEIGHT}px",
-                key=f"allocation-treemap:{account_id}",
-                on_select="rerun",
-                selection_mode="points",
+    with st.container(key="capture_asset_allocation_chart"):
+        with st.container(border=True, key="dashboard-panel-allocation"):
+            treemap_options = allocation_treemap_options(
+                summary,
+                holdings,
+                selected_symbol=selected_symbol or None,
+                include_market_details=echarts_available,
+                height=DASHBOARD_ALLOCATION_CHART_HEIGHT,
             )
-            if sync_dashboard_selected_holding(account_id, treemap_selection, holdings=holdings):
-                st.rerun()
+            render_dashboard_allocation_status_header_fragment(
+                account_id,
+                holdings,
+                has_allocation_data=treemap_options is not None,
+                status_palette_colors=FEARGREED_TREEMAP_PALETTE if treemap_options is not None else None,
+            )
+            if treemap_options is None:
+                st.info("배분을 그릴 데이터가 아직 없습니다.")
+            elif not echarts_available:
+                st.info("현재 환경에서는 자산 배분 차트를 표시할 수 없습니다.")
+            else:
+                treemap_selection = st_echarts(
+                    options=treemap_options,
+                    height=chart_height_px(treemap_options, fallback=DASHBOARD_ALLOCATION_CHART_HEIGHT),
+                    key=f"allocation-treemap:{account_id}",
+                    on_select="rerun",
+                    selection_mode="points",
+                )
+                if sync_dashboard_selected_holding(account_id, treemap_selection, holdings=holdings):
+                    st.rerun()
 
     with st.container(key="dashboard-secondary-grid"):
         trend_col, holdings_col = st.columns((1, 1), gap="large", vertical_alignment="top")
 
         with trend_col:
-            with st.container(border=True, key="dashboard-panel-selected-trend"):
-                selected_trend_measure = DEFAULT_SELECTED_TREND_MEASURE
-                st.markdown("### 선택 종목 트렌드")
+            with st.container(key="capture_retirement_projection_chart"):
+                with st.container(border=True, key="dashboard-panel-selected-trend"):
+                    selected_trend_measure = DEFAULT_SELECTED_TREND_MEASURE
+                    st.markdown("### 선택 종목 트렌드")
 
-                if not selected_symbol:
-                    st.info("자산 배분 트리맵에서 종목 타일을 누르면 여기에서 해당 종목 트렌드가 표시됩니다.")
-                elif selected_symbol == "CASH":
-                    with st.container(key="dashboard-trend-controls"):
-                        _, action_col = st.columns((1, 0.36), gap="medium", vertical_alignment="bottom")
-                        with action_col:
+                    if not selected_symbol:
+                        st.info("자산 배분 트리맵에서 종목 타일을 누르면 여기에서 해당 종목 트렌드가 표시됩니다.")
+                    elif selected_symbol == "CASH":
+                        with st.container(key="dashboard-trend-controls", horizontal=True, vertical_alignment="center", gap="small"):
                             if st.button("선택 해제", key=f"clear-selected-holding:{account_id}", width="stretch"):
                                 st.session_state[selection_key] = ""
                                 st.rerun()
-                    st.info("예수금은 시장 가격 추이가 없어서 개별 트렌드 차트를 표시하지 않습니다.")
-                else:
-                    selected_holding_name = dashboard_selected_holding_name(holdings, selected_symbol)
-                    with st.container(key="dashboard-trend-controls"):
-                        period_col, measure_col, action_col = st.columns(
-                            (0.98, 0.82, 0.46),
-                            gap="small",
-                            vertical_alignment="center",
-                        )
-                        with period_col:
+                        st.info("예수금은 시장 가격 추이가 없어서 개별 트렌드 차트를 표시하지 않습니다.")
+                    else:
+                        selected_holding_name = dashboard_selected_holding_name(holdings, selected_symbol)
+                        with st.container(key="dashboard-trend-controls", horizontal=True, vertical_alignment="center", gap="small"):
                             period = st.selectbox(
                                 "기간",
                                 options=list(DASHBOARD_SELECTED_TREND_PERIOD_OPTIONS),
@@ -7567,7 +7700,6 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]], roll
                                 index=list(DASHBOARD_SELECTED_TREND_PERIOD_OPTIONS).index(period),
                                 label_visibility="collapsed",
                             )
-                        with measure_col:
                             selected_trend_measure = st.selectbox(
                                 "표시 지표",
                                 options=["market_value", "profit_rate", "close"],
@@ -7578,7 +7710,6 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]], roll
                                 ),
                                 label_visibility="collapsed",
                             )
-                        with action_col:
                             if st.button(
                                 "선택 해제",
                                 key=f"clear-selected-holding:{account_id}",
@@ -7587,67 +7718,70 @@ def dashboard_page(account: dict[str, Any], holdings: list[dict[str, Any]], roll
                             ):
                                 st.session_state[selection_key] = ""
                                 st.rerun()
-                    selected_holdings = [
-                        holding for holding in holdings if normalize_holding_symbol(holding.get("symbol")) == selected_symbol
-                    ]
-                    if not selected_holdings:
-                        st.info("선택한 종목을 현재 보유 목록에서 찾지 못했습니다.")
-                    else:
-                        try:
-                            with st.spinner(f"{selected_holding_name} 추이를 불러오는 중입니다..."):
-                                selected_holding_trend = build_selected_holding_trend_frame(
-                                    selected_holdings,
-                                    period=period,
-                                )
-                        except Exception as exc:  # noqa: BLE001
-                            st.warning(f"선택 종목 추이를 불러오지 못했습니다: {exc}")
+                        selected_holdings = [
+                            holding for holding in holdings if normalize_holding_symbol(holding.get("symbol")) == selected_symbol
+                        ]
+                        if not selected_holdings:
+                            st.info("선택한 종목을 현재 보유 목록에서 찾지 못했습니다.")
                         else:
-                            if selected_holding_trend.empty:
-                                st.info("선택 종목의 시세 이력이 아직 없어 트렌드 차트를 표시할 수 없습니다.")
+                            try:
+                                with st.spinner(f"{selected_holding_name} 추이를 불러오는 중입니다..."):
+                                    selected_holding_trend = build_selected_holding_trend_frame(
+                                        selected_holdings,
+                                        period=period,
+                                    )
+                            except Exception as exc:  # noqa: BLE001
+                                st.warning(f"선택 종목 추이를 불러오지 못했습니다: {exc}")
                             else:
-                                selected_frame = selected_holding_trend.sort_values("date").copy()
-                                selected_measure = str(selected_trend_measure or DEFAULT_SELECTED_TREND_MEASURE)
-                                selected_symbol_code = str(selected_holdings[0].get("symbol") or selected_symbol).strip() or selected_symbol
-                                if echarts_available:
-                                    trend_options = selected_holding_trend_options(
-                                        selected_frame,
-                                        selected_holding_name=selected_holding_name,
-                                        selected_symbol_code=selected_symbol_code,
-                                        measure=selected_measure,
-                                        period_label=label_period(period),
-                                    )
-                                    if trend_options is None:
-                                        st.info("선택 종목의 추이 옵션을 만들지 못했습니다.")
-                                    else:
-                                        st_echarts(
-                                            options=trend_options,
-                                            height=f"{DASHBOARD_DETAIL_CHART_HEIGHT}px",
-                                            key=f"selected-holding-trend:{account_id}:{selected_symbol}:{selected_measure}:{period}",
-                                        )
+                                if selected_holding_trend.empty:
+                                    st.info("선택 종목의 시세 이력이 아직 없어 트렌드 차트를 표시할 수 없습니다.")
                                 else:
-                                    trend_chart = selected_holding_trend_chart(
-                                        selected_frame,
-                                        measure=selected_measure,
-                                        selected_holding_name=selected_holding_name,
-                                        selected_symbol_code=selected_symbol_code,
-                                        period_label=label_period(period),
-                                    )
-                                    st.altair_chart(
-                                        style_dashboard_altair_chart(trend_chart, height=DASHBOARD_DETAIL_CHART_HEIGHT),
-                                        width="stretch",
-                                    )
+                                    selected_frame = selected_holding_trend.sort_values("date").copy()
+                                    selected_measure = str(selected_trend_measure or DEFAULT_SELECTED_TREND_MEASURE)
+                                    selected_symbol_code = str(selected_holdings[0].get("symbol") or selected_symbol).strip() or selected_symbol
+                                    if echarts_available:
+                                        trend_options = selected_holding_trend_options(
+                                            selected_frame,
+                                            selected_holding_name=selected_holding_name,
+                                            selected_symbol_code=selected_symbol_code,
+                                            measure=selected_measure,
+                                            period_label=label_period(period),
+                                            height=DASHBOARD_DETAIL_CHART_HEIGHT,
+                                        )
+                                        if trend_options is None:
+                                            st.info("선택 종목의 추이 옵션을 만들지 못했습니다.")
+                                        else:
+                                            st_echarts(
+                                                options=trend_options,
+                                                height=chart_height_px(trend_options, fallback=DASHBOARD_DETAIL_CHART_HEIGHT),
+                                                key=f"selected-holding-trend:{account_id}:{selected_symbol}:{selected_measure}:{period}",
+                                            )
+                                    else:
+                                        trend_chart = selected_holding_trend_chart(
+                                            selected_frame,
+                                            measure=selected_measure,
+                                            selected_holding_name=selected_holding_name,
+                                            selected_symbol_code=selected_symbol_code,
+                                            period_label=label_period(period),
+                                        )
+                                        st.altair_chart(
+                                            style_dashboard_altair_chart(trend_chart, height=DASHBOARD_DETAIL_CHART_HEIGHT),
+                                            width="stretch",
+                                        )
 
         with holdings_col:
-            with st.container(border=True, key="dashboard-panel-holdings"):
-                if overview_frame.empty:
-                    st.info("보유 종목이 없어 수익률 차트를 그릴 수 없습니다.")
-                else:
-                    render_returns_chart(overview_frame, selected_symbol=selected_symbol or None)
+            with st.container(key="capture_recommendation_panel"):
+                with st.container(border=True, key="dashboard-panel-holdings"):
+                    if overview_frame.empty:
+                        st.info("보유 종목이 없어 수익률 차트를 그릴 수 없습니다.")
+                    else:
+                        render_returns_chart(overview_frame, selected_symbol=selected_symbol or None)
 
-    with st.container(border=True, key="dashboard-panel-holdings-table"):
-        render_dashboard_section_header("현재 보유 종목", "계좌 전체 포지션을 표로 읽고 현재 선택 종목과 함께 확인합니다.", compact=True)
-        render_holdings_mix_bar(summary)
-        show_holdings_table(frame, height=DASHBOARD_HOLDINGS_TABLE_HEIGHT)
+    with st.container(key="capture_holdings_table"):
+        with st.container(border=True, key="dashboard-panel-holdings-table"):
+            render_dashboard_section_header("현재 보유 종목", "계좌 전체 포지션을 표로 읽고 현재 선택 종목과 함께 확인합니다.", compact=True)
+            render_holdings_mix_bar(summary)
+            show_holdings_table(frame, height=DASHBOARD_HOLDINGS_TABLE_HEIGHT)
 
 
 def trade_entry_page(account: dict[str, Any], holdings: list[dict[str, Any]], accounts: list[dict[str, Any]]) -> None:
@@ -7671,8 +7805,9 @@ def trade_entry_page(account: dict[str, Any], holdings: list[dict[str, Any]], ac
         reset_values=cash_flow_reset_values(),
     )
 
-    st.title("거래")
-    st.caption("매수/매도와 현금 흐름을 한 화면에서 이어서 기록합니다. 보유현금은 거래와 연동하지 않고 직접 수정한 값만 유지합니다.")
+    with st.container(key="capture_trades_header"):
+        st.title("거래")
+        st.caption("매수/매도와 현금 흐름을 한 화면에서 이어서 기록합니다. 보유현금은 거래와 연동하지 않고 직접 수정한 값만 유지합니다.")
     echarts_error = ""
     try:
         echarts_available = load_echarts_runtime()
@@ -7688,7 +7823,7 @@ def trade_entry_page(account: dict[str, Any], holdings: list[dict[str, Any]], ac
     trade_input_tab, trade_log_tab, realized_tab = st.tabs(["거래 입력", "거래 기록", "실현 손익"])
 
     with trade_input_tab:
-        with st.container(key="trade-form-cols"):
+        with st.container(key="trade-form-cols", horizontal=True, gap="small"):
             trade_col, cash_flow_col = st.columns((1.45, 1.0), gap="large", vertical_alignment="top")
 
         with trade_col:
@@ -7723,36 +7858,46 @@ def trade_entry_page(account: dict[str, Any], holdings: list[dict[str, Any]], ac
                 else:
                     st.session_state[TRADE_PREFILL_MARKER_KEY] = "buy"
 
-                st.markdown(
-                    '<div class="trade-search-label">상품명 또는 코드 검색 <span>자동완성</span></div>',
-                    unsafe_allow_html=True,
-                )
-                keyup_input = load_keyup_runtime()
-                search_query = keyup_input(
-                    "상품명 또는 코드 검색",
-                    value=str(st.session_state.get(TRADE_SEARCH_QUERY_KEY) or ""),
-                    key=TRADE_SEARCH_QUERY_KEY,
-                    debounce=150,
-                    placeholder="예: K55207BU0715, 0177N0, 파인인덱스",
-                )
+                with st.container(key="trade-product-search-box"):
+                    st.markdown(
+                        '<div class="trade-search-label">상품명 또는 코드 검색 <span>자동완성</span></div>',
+                        unsafe_allow_html=True,
+                    )
 
-                cleaned_search_query = str(search_query or "").strip()
-                if cleaned_search_query and cleaned_search_query != str(st.session_state.get(TRADE_PRODUCT_NAME_KEY) or "").strip():
-                    st.session_state[TRADE_PRODUCT_NAME_KEY] = cleaned_search_query
-                if len(cleaned_search_query) >= 2:
-                    suggestions = search_products(cleaned_search_query, limit=8)
-                    with st.container(border=True, height=260, key="trade-search-suggestions"):
-                        if suggestions:
-                            for product in suggestions:
-                                if st.button(
-                                    product_search_option_label(product),
-                                    key=f"product-suggestion:{account['id']}:{product['code']}",
-                                    width="stretch",
-                                ):
-                                    apply_search_product(product)
-                                    st.rerun()
-                        else:
-                            st.caption("검색 결과가 없습니다.")
+                    keyup_input = load_keyup_runtime()
+                    search_query = keyup_input(
+                        "상품명 또는 코드 검색",
+                        value=str(st.session_state.get(TRADE_SEARCH_QUERY_KEY) or ""),
+                        key=TRADE_SEARCH_QUERY_KEY,
+                        debounce=150,
+                        placeholder="예: 삼성전자, 005930, K55207BU0715",
+                    )
+
+                    cleaned_search_query = str(search_query or "").strip()
+                    if cleaned_search_query and cleaned_search_query != str(st.session_state.get(TRADE_PRODUCT_NAME_KEY) or "").strip():
+                        st.session_state[TRADE_PRODUCT_NAME_KEY] = cleaned_search_query
+
+                    if len(cleaned_search_query) >= 2:
+                        suggestions = search_products(cleaned_search_query, limit=8)
+                        with st.container(key="trade-search-suggestions"):
+                            if suggestions:
+                                st.markdown(
+                                    '<div class="trade-search-suggestions__status">검색 결과</div>',
+                                    unsafe_allow_html=True,
+                                )
+                                for product in suggestions:
+                                    if st.button(
+                                        product_search_option_label(product),
+                                        key=f"product-suggestion:{account['id']}:{product['code']}",
+                                        width="stretch",
+                                    ):
+                                        apply_search_product(product)
+                                        st.rerun()
+                            else:
+                                st.markdown(
+                                    '<div class="trade-search-suggestions__status">검색 결과가 없습니다.</div>',
+                                    unsafe_allow_html=True,
+                                )
 
                 st.markdown(build_product_code_status_html(st.session_state.get(TRADE_SYMBOL_KEY)), unsafe_allow_html=True)
                 symbol = st.text_input(
@@ -7785,18 +7930,29 @@ def trade_entry_page(account: dict[str, Any], holdings: list[dict[str, Any]], ac
                 if trade_disabled:
                     st.caption("가격과 수량을 0보다 크게 입력하면 저장할 수 있습니다.")
 
-                asset_col, notes_col = st.columns(2, gap="medium")
-                with asset_col:
-                    asset_type = st.selectbox(
-                        "자산 구분",
-                        ["risk", "safe"],
-                        format_func=label_asset_type,
-                        key=TRADE_ASSET_TYPE_KEY,
-                    )
-                with notes_col:
-                    notes = st.text_input("메모", key=TRADE_NOTES_KEY, placeholder="선택 입력")
+                with st.container(key="trade-product-meta"):
+                    meta_cols = st.columns((0.85, 0.95, 1.25), gap="medium", vertical_alignment="bottom")
 
-                trade_date = st.date_input(trade_date_label(trade_type), key=TRADE_DATE_KEY)
+                    with meta_cols[0]:
+                        asset_type = st.selectbox(
+                            "자산 구분",
+                            ["risk", "safe"],
+                            format_func=label_asset_type,
+                            key=TRADE_ASSET_TYPE_KEY,
+                        )
+
+                    with meta_cols[1]:
+                        trade_date = st.date_input(
+                            trade_date_label(trade_type),
+                            key=TRADE_DATE_KEY,
+                        )
+
+                    with meta_cols[2]:
+                        notes = st.text_input(
+                            "메모",
+                            key=TRADE_NOTES_KEY,
+                            placeholder="선택 입력",
+                        )
 
                 submitted = st.button(
                     trade_submit_button_label(trade_type),
@@ -7964,17 +8120,17 @@ def trade_entry_page(account: dict[str, Any], holdings: list[dict[str, Any]], ac
                 with chart_col:
                     st.caption("월별 실현손익")
                     if echarts_available:
-                        monthly_options = realized_monthly_profit_bar_options(monthly_frame)
+                        monthly_options = realized_monthly_profit_bar_options(monthly_frame, height=REALIZED_MONTHLY_CHART_HEIGHT)
                         if monthly_options is None:
                             st.info("월별 실현손익 차트를 만들 데이터가 아직 없습니다.")
                         else:
                             st_echarts(
                                 options=monthly_options,
-                                height="280px",
+                                height=chart_height_px(monthly_options, fallback=REALIZED_MONTHLY_CHART_HEIGHT),
                                 key=f"realized-monthly-profit-bar:{account['id']}:{realized_period}",
                             )
                     else:
-                        monthly_chart = realized_monthly_profit_fallback_chart(monthly_frame)
+                        monthly_chart = realized_monthly_profit_fallback_chart(monthly_frame, height=REALIZED_MONTHLY_CHART_HEIGHT)
                         if monthly_chart is None:
                             st.info("현재 환경에서는 월별 실현손익 차트를 표시할 수 없습니다.")
                         else:
@@ -7988,11 +8144,11 @@ def trade_entry_page(account: dict[str, Any], holdings: list[dict[str, Any]], ac
 
                 chart_frame = pd.DataFrame(filtered_realized_positions).sort_values("profit_loss", ascending=False).head(10).copy()
                 if echarts_available:
-                    realized_options = realized_profit_bar_options(chart_frame)
+                    realized_options = realized_profit_bar_options(chart_frame, height=DASHBOARD_HOLDINGS_CHART_HEIGHT)
                     if realized_options is not None:
                         st_echarts(
                             options=realized_options,
-                            height=f"{DASHBOARD_HOLDINGS_CHART_HEIGHT}px",
+                            height=chart_height_px(realized_options, fallback=DASHBOARD_HOLDINGS_CHART_HEIGHT),
                             key=f"realized-profit-bar:{account['id']}:{realized_period}",
                         )
                 else:
@@ -8340,22 +8496,23 @@ def valuation_page(account: dict[str, Any], rollup_state: dict[str, Any] | None 
 
     del rollup_state
     account_id = int(account["id"])
-    st.title("평가액 기록")
-    st.caption(
-        "개인 입금과 회사 납입금에서 일반 출금을 차감한 순입금 원금을 기준으로, "
-        "보유상품 평가액과 거래 원장 기준 현금을 더해 일별 보유 평가액을 기록합니다."
-    )
+    with st.container(key="capture_valuation_header"):
+        st.title("평가액 기록")
+        st.caption(
+            "개인 입금과 회사 납입금에서 일반 출금을 차감한 순입금 원금을 기준으로, "
+            "보유상품 평가액과 거래 원장 기준 현금을 더해 일별 보유 평가액을 기록합니다."
+        )
 
-    action_cols = st.columns((1, 0.26), gap="medium", vertical_alignment="center")
-    with action_cols[1]:
-        if st.button("재계산", key=f"valuation-rebuild:{account_id}", width="stretch"):
-            with st.spinner("평가액 기록 재계산 중..."):
-                count, error = rebuild_valuation_snapshots_for_account(account_id, "manual_rebuild")
-            if error:
-                st.warning(f"평가액 기록 재계산을 완료하지 못했습니다: {error}")
-            else:
-                st.success(f"평가액 기록 {count:,}건을 재계산했습니다.")
-                st.rerun()
+        action_cols = st.columns((1, 0.26), gap="medium", vertical_alignment="center")
+        with action_cols[1]:
+            if st.button("재계산", key=f"valuation-rebuild:{account_id}", width="stretch"):
+                with st.spinner("평가액 기록 재계산 중..."):
+                    count, error = rebuild_valuation_snapshots_for_account(account_id, "manual_rebuild")
+                if error:
+                    st.warning(f"평가액 기록 재계산을 완료하지 못했습니다: {error}")
+                else:
+                    st.success(f"평가액 기록 {count:,}건을 재계산했습니다.")
+                    st.rerun()
 
     snapshots = list_valuation_snapshots(account_id)
     render_valuation_snapshot_csv_editor(account_id, snapshots)
@@ -8364,11 +8521,12 @@ def valuation_page(account: dict[str, Any], rollup_state: dict[str, Any] | None 
         return
 
     latest_row = latest_valuation_snapshot(snapshots) or snapshots[-1]
-    metric_cols = st.columns(4, gap="small")
-    metric_cols[0].metric("보유 평가액", format_won(latest_row.get("valuation_amount")))
-    metric_cols[1].metric("입금 원금", format_won(latest_row.get("company_principal")))
-    metric_cols[2].metric("입금 대비 손익", format_won(latest_row.get("profit_loss")))
-    metric_cols[3].metric("입금 대비 수익률", format_pct(latest_row.get("profit_rate")))
+    with st.container(key="capture_valuation_summary_cards"):
+        metric_cols = st.columns(4, gap="small")
+        metric_cols[0].metric("보유 평가액", format_won(latest_row.get("valuation_amount")))
+        metric_cols[1].metric("입금 원금", format_won(latest_row.get("company_principal")))
+        metric_cols[2].metric("입금 대비 손익", format_won(latest_row.get("profit_loss")))
+        metric_cols[3].metric("입금 대비 수익률", format_pct(latest_row.get("profit_rate")))
 
     trend_frame = valuation_snapshot_trend_frame(snapshots)
     if not trend_frame.empty:
@@ -8401,7 +8559,8 @@ def valuation_page(account: dict[str, Any], rollup_state: dict[str, Any] | None 
             )
             .properties(height=320)
         )
-        st.altair_chart(line_chart, width="stretch")
+        with st.container(key="capture_valuation_chart"):
+            st.altair_chart(line_chart, width="stretch")
 
     display_rows: list[dict[str, Any]] = []
     for row in snapshots:
@@ -8421,7 +8580,8 @@ def valuation_page(account: dict[str, Any], rollup_state: dict[str, Any] | None 
                 "가격 fallback": ", ".join(map(str, missing_symbols)) if missing_symbols else "-",
             }
         )
-    st.dataframe(pd.DataFrame(display_rows), width="stretch", hide_index=True, height=420)
+    with st.container(key="capture_valuation_table"):
+        st.dataframe(pd.DataFrame(display_rows), width="stretch", hide_index=True, height=420)
 
 
 @st.fragment(run_every=REALTIME_STATUS_FRAGMENT_INTERVAL)
@@ -8459,7 +8619,7 @@ def data_page(account: dict[str, Any], rollup_state: dict[str, Any] | None = Non
     trade_logs = list_trade_logs(account_id)
     visible_trade_logs = [row for row in trade_logs if is_visible_trade_log(row)]
     snapshot_rows = list_account_snapshots(account_id)
-    snapshot_date = str((rollup_state or {}).get("snapshot_date") or date.today().isoformat()).strip()
+    snapshot_date = str((rollup_state or {}).get("snapshot_date") or capture_current_date().isoformat()).strip()
     summary = account_summary(account, holdings, trade_logs=trade_logs)
     cumulative_frame = cumulative_contribution_frame(
         trade_logs=trade_logs,
@@ -8758,7 +8918,7 @@ def main() -> None:
         st.rerun()
     st.session_state[INVALID_ACCOUNT_RERUN_GUARD_KEY] = False
     holdings = list_holdings(int(account["id"]))
-    rollup_state: dict[str, Any] = {"snapshot_date": date.today().isoformat(), "snapshot_updated": False}
+    rollup_state: dict[str, Any] = {"snapshot_date": capture_current_date().isoformat(), "snapshot_updated": False}
     if should_sync_rollup(int(account["id"])):
         try:
             rollup_state.update(

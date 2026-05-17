@@ -31,6 +31,19 @@ python -m pip install -r requirements.txt
 streamlit run app.py
 ```
 
+## UI 캡처 자동화
+
+디자인 리뷰용 전체 화면/블록별 PNG 산출물은 `scripts/capture_app.py`로 생성한다.
+
+```powershell
+python -m pip install -r requirements-dev.txt
+python -m playwright install chromium
+python scripts/capture_app.py --page all --viewport desktop
+```
+
+기본 실행은 `http://localhost:8501/?demo=1&capture=1` 데모 화면을 사용한다. 대시보드만 캡처하려면 `--page dashboard`, 거래와 평가액 기록까지 함께 캡처하려면 `--page all`을 사용한다. 상세 옵션과 GitHub Actions 산출물 구조는 [docs/ui_capture.md](docs/ui_capture.md)를 참고한다.
+캡처 모드에서는 기준일을 고정하고 sidebar, loading 대기, animation/transition 비활성화를 적용해 before/after 비교가 흔들리지 않도록 처리한다.
+
 ## 배포 메모
 
 ### Supabase 연동 (권장)

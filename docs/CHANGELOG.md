@@ -8,18 +8,65 @@
 ## 최근 완료 변경 요약
 
 ### 2026-05-17
+- 거래 상품 검색 dropdown 및 필수 입력 노출 개선.
+  - 상품 등록 검색 결과를 카드 내부 고정 높이 박스에서 compact dropdown으로 변경.
+  - 자산 구분, 거래일자, 메모 입력을 한 줄 meta 영역으로 묶어 항상 보이도록 정리하고 모바일에서는 세로 배치되도록 CSS를 보강.
+  - 검색 dropdown 구조와 CSS selector 회귀 테스트를 추가.
+  - `tests/test_app_dashboard.py`, 전체 compileall/unittest discover, 거래 페이지 desktop/tablet/mobile strict 캡처 검증 완료.
 - Dashboard 자산 배분 예수금 중립색 배포.
   - 예수금은 투자 수익률이 없는 현금 자산이므로 트리맵 visualMap 수익률 색상 매핑에서 제외.
   - `CASH` leaf를 `node_kind="cash"`, `profit_rate=None`, `FEARGREED_FLAT_COLOR`로 처리해 회색 중립색으로 표시.
   - 예수금 라벨은 종목 수익률 대신 `예수금`/`현금` 2줄 구성을 사용.
   - 관련 단위 테스트, 전체 compileall/unittest discover, 운영 데모 대시보드 확인 완료.
 - 로그인 화면 사이드바 노출 핫픽스.
-  - 인증/온보딩 화면에서도 Streamlit 기본 사이드바 컨테이너가 생성되고, 기존 CSS가 `stSidebarNav`만 숨겨 빈 사이드바가 남을 수 있는 원인을 확인.
+  - 인증/온보딩 화면에서도 Streamlit 기본 사이드바 컨테이너가 생성되고, 기존 CSS가 `stSidebarNav`만 숨겨 빈 사이드바가 남는 원인을 확인.
   - `.auth-page-shell`/`.empty-state-shell` 화면에 한해 `stSidebar`, `stSidebarCollapsedControl`, `stSidebarNav`를 숨기도록 CSS selector를 보강.
   - 인증 화면 전용 사이드바 숨김 selector 회귀 테스트를 추가.
   - CSS 중괄호 균형, `ThemeStylesheetTests`, 전체 compileall/unittest discover, 로컬 Streamlit 로그인 화면 브라우저 검증 완료.
 
+### 2026-05-16
+- UI Capture GitHub Actions 시작 실패 보정.
+  - `codex/ui-capture-automation` 브랜치 push 후 원격 run `25968169216`이 job 로그 생성 전 실패한 것을 확인.
+  - workflow 시작 단계 호환성을 위해 `actions/checkout@v4`, `actions/setup-python@v5` 안정 버전으로 고정.
+  - job-level `env`의 `${{ runner.temp }}` expression을 제거하고 `/tmp/portfolio-capture.db` 고정 경로로 변경.
+  - GitHub Actions run `25968358824`의 desktop 거래 탭 selector 누락을 재현하고, non-dashboard 이동 전 데모 대시보드 wrapper 대기와 visible 탭 클릭을 캡처 스크립트에 추가.
+  - workflow YAML 파싱과 action version 확인을 로컬에서 검증.
+- 대시보드/거래 UI 반응형 보강.
+  - Streamlit 1.55의 `class_name` 미지원에 맞춰 `key`와 `horizontal=True`로 상단 요약 카드, 선택 종목 트렌드 컨트롤, 거래 입력 패널의 flex wrapper를 구성.
+  - 요약 카드 높이를 120px로 고정하고 desktop flex wrap, mobile 1열 적층, 라벨 ellipsis를 보강.
+  - 선택 종목 트렌드 컨트롤은 desktop 한 줄 compact 배치, 860px 이하 세로 적층으로 정리.
+  - 상품 등록/현금 흐름 패널은 desktop 2열, mobile 1열로 유지되도록 CSS를 보강.
+  - 대시보드/거래 차트 높이를 560px 기준으로 통일하고, 실현손익 막대 차트 색상과 label 위치를 고정.
+  - CSS 중괄호 균형, compileall, `tests.test_app_dashboard`, 전체 unittest discover 검증 완료.
+- 대시보드 UI 개선 로컬 반영.
+  - GitHub 원격 PR/커밋에는 해당 패치가 없어 보고서의 변경 의도를 로컬에 직접 적용.
+  - 대시보드 block container 폭을 줄이고 overview hero/card 높이와 컬럼 비율을 조정해 첫 화면 균형을 개선.
+  - 기간 버튼, 카드 hover, 자산 배분/보유종목 패널 radius/shadow, treemap legend, 보유종목 테이블 대비/패딩을 보강.
+  - CSS 중괄호 균형, compileall, 전체 unittest discover, desktop dashboard strict 캡처 검증 완료.
+- Streamlit UI 캡처 자동화 추가.
+  - 대시보드 주요 영역에 `capture_header`, `capture_input_panel`, `capture_summary_cards`, `capture_asset_allocation_chart`, `capture_retirement_projection_chart`, `capture_holdings_table`, `capture_recommendation_panel` wrapper를 추가.
+  - 거래 페이지 header와 평가액 기록 header/요약/차트/테이블에 캡처용 wrapper를 추가하고, `--page dashboard|trades|valuation|all` 옵션으로 페이지별 캡처를 지원.
+  - `config/capture_blocks.yaml`과 `scripts/capture_app.py`를 추가해 full page 및 블록별 PNG와 `manifest.json`을 단일 페이지는 `artifacts/ui_captures/{timestamp}/{viewport}/`, 여러 페이지는 `{timestamp}/{page}/{viewport}/`에 생성.
+  - `requirements-dev.txt`, `docs/ui_capture.md`, `.github/workflows/ui-capture.yml`을 추가해 로컬/GitHub Actions 캡처 실행 절차를 문서화.
+  - 캡처 전 sidebar 기본 상태 고정, spinner/loading 대기, animation/transition 비활성화, `capture=1` 기준일과 거래 입력 기본 날짜 고정, selector 누락 로그를 보강.
+  - 한 viewport 안에서는 같은 브라우저 세션으로 dashboard → trades → valuation 순서 이동을 유지해 데모 seed 반복과 선택 계좌 상태 꼬임을 방지.
+  - 캡처 검증 중 기존 테스트 실패 원인이던 인증 기본 Supabase URL 하드코딩과 `src.market` 누락 호환 함수를 보정.
+  - 전체 compileall/unittest discover와 dashboard/trades/valuation desktop/tablet/mobile strict 캡처 검증 완료.
+- Dashboard 자산 배분 트리맵 예수금 색상/라벨 개선.
+  - 예수금을 수익률 `visualMap` 대상에서 제외하고 회색 중립 타일로 표시하도록 변경.
+  - 보유 종목 타일은 종목명과 보유 수익률을 2줄 라벨로 표시하고, 예수금은 `예수금 / 현금` 라벨로 표시.
+  - 트리맵 leaf 라벨 정렬과 겹침 방지 설정을 보강해 작은 타일에서도 정보가 잘리거나 오해되지 않도록 조정.
+  - 로컬 Streamlit 데모 대시보드 스크린샷 검증, `tests.test_analytics`, `AllocationTreemapVisualMapTests`, 전체 compileall/unittest discover 검증 완료.
+
 ### 2026-05-15
+- 데모 워크스페이스 데이터 규칙 보강.
+  - 데모 계좌를 `데모 IRP`(`retirement`)와 `데모 주식`(`brokerage`) 두 종류로 유지하고, 퇴직연금 계좌에는 일반 주식 없이 ETF/채권/금/리츠 ETF만 남도록 테스트로 고정.
+  - 기존 이름인 `데모 일반계좌`가 남아 있으면 새 `데모 주식` 계좌와 중복되지 않도록 재시드 때 함께 초기화.
+  - 일반계좌에는 삼성전자, SK하이닉스, 두산에너빌리티, NAVER, Apple 등 일반 주식과 ETF를 섞어 테스트 가능하게 구성.
+  - 데모 IRP에 출금 이벤트를 추가해 두 계좌 모두 5년치 입금/출금 이력을 포함.
+  - 거래와 현금흐름마다 매매일지 메모를 포함하고, 현재 보유 종목이 17개로 10~20개 범위에 들어오는지 테스트로 고정.
+  - 데모 seed 후 입출금과 매수/매도 원장을 반영한 최종 현금을 계좌 현금으로 갱신해 KPI/스냅샷 계산 정합성을 보강.
+  - `tests/test_db.py`, `tests/test_verify_streamlit_deployment.py`, 전체 compileall/unittest discover 검증 완료.
 - AI/자동 접근용 데모 링크 진입 추가.
   - `?demo=1` URL query parameter가 있으면 비로그인 사용자에 한해 기존 데모 진입 흐름을 자동 실행.
   - 데모 버튼과 동일하게 데모 로그인, 데이터 seed, 선택 계좌 설정을 `start_demo_workspace_session()`으로 처리.
