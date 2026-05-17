@@ -75,12 +75,12 @@ streamlit run app.py --server.port 8501 --server.address 0.0.0.0 --server.fileWa
 
 ## Git/GitHub 상태
 - 기본 브랜치: `main`
-- 최근 배포 커밋: `83c3463 Fix dashboard overview alignment`
-- 현재 로컬 검증 완료 변경: 상품 등록 카드 preview 스타일 동기화. 커밋/푸시 후 이 항목을 최신 배포 커밋으로 갱신한다.
+- 최근 기능 커밋: `a033595 Refine trade product card layout`
+- 최근 배포 커밋: `a033595 Refine trade product card layout` 이후 기록 커밋 포함 예정
 - 이전 거래 UI 커밋: `7c88a55 Refine trade product entry layout`, main 병합 커밋 `82038a3`, 배포 기록 커밋 `424467c`
 - PR: `https://github.com/jhonkim91/retirement-portfolio-streamlit/pull/1` merged.
 - 배포 방법: `origin/main` push로 Streamlit Cloud 자동 재배포 트리거.
-- 배포 검증: GitHub Actions run `25992989168`의 `UI Capture` 성공, 운영 Streamlit Cloud 대시보드 로그인 기반 검증 및 사용자 스크린샷 확인 완료.
+- 배포 검증: 상품 등록 카드 preview 스타일 변경은 로컬 전체 검증 완료, push 후 GitHub Actions UI Capture와 운영 Streamlit Cloud 확인을 이어서 수행한다.
 - 워크트리에는 이번 요청 전부터 `data/portfolio.db`, 로컬 도구 디렉터리, 캡처 산출물 등 여러 변경/미추적 파일이 함께 있었다.
 - 커밋 시 요청 관련 파일만 선별하고 `data/portfolio.db`, `.local/`, `.playtools*/`, `.playwright-browsers/`, `.vscode/`, `artifacts/`, `data/kis_cache/` 등 로컬 산출물은 제외한다.
 
