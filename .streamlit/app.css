@@ -4560,3 +4560,140 @@ div[role="dialog"] [data-testid="stFormSubmitButton"] > button {
         min-width: 100%;
     }
 }
+
+/* 대시보드 Overview: 기간 버튼과 KPI 카드 정렬을 Streamlit 래퍼 차이와 무관하게 고정 */
+.st-key-dashboard-overview-hero-shell {
+    position: relative !important;
+}
+
+.st-key-dashboard-overview-hero-shell [data-testid="stElementContainer"]:has(.st-key-capture_input_panel):not(:has(.dashboard-overview-hero)),
+.st-key-dashboard-overview-hero-shell [data-testid="stLayoutWrapper"]:has(.st-key-capture_input_panel):not(:has(.dashboard-overview-hero)) {
+    position: absolute !important;
+    top: 0 !important;
+    right: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    height: 0 !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    z-index: 12 !important;
+}
+
+.st-key-dashboard-overview-hero-shell .st-key-capture_input_panel {
+    position: absolute !important;
+    top: 1.05rem !important;
+    right: 1.2rem !important;
+    left: auto !important;
+    z-index: 14 !important;
+    width: auto !important;
+    max-width: calc(100% - 2.4rem) !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+.st-key-dashboard-overview-option2 .dashboard-overview-card-grid.dashboard-summary-strip {
+    display: grid !important;
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    gap: 0.72rem !important;
+    align-items: stretch !important;
+    height: 220px !important;
+    padding-bottom: 0 !important;
+}
+
+.st-key-dashboard-overview-option2 .dashboard-overview-card-grid.dashboard-summary-strip .dashboard-overview-card {
+    flex: none !important;
+    width: auto !important;
+    min-width: 0 !important;
+    height: 220px !important;
+    min-height: 220px !important;
+}
+
+.st-key-dashboard-overview-option2 .dashboard-overview-card-grid.dashboard-summary-strip .dashboard-overview-card__sparkline,
+.st-key-dashboard-overview-option2 .dashboard-overview-card-grid.dashboard-summary-strip .dashboard-overview-card::after {
+    display: block !important;
+}
+
+.st-key-dashboard-overview-option2 .dashboard-overview-card-grid.dashboard-summary-strip .dashboard-overview-card--no-sparkline::after {
+    display: none !important;
+}
+
+.st-key-dashboard-overview-option2 .dashboard-overview-card-grid.dashboard-summary-strip .dashboard-overview-card--no-sparkline .dashboard-overview-card__value {
+    margin-top: 2.2rem !important;
+    text-align: center !important;
+}
+
+.st-key-dashboard-overview-option2 .dashboard-overview-card-grid.dashboard-summary-strip .dashboard-overview-card--no-sparkline .dashboard-overview-card__caption {
+    text-align: center !important;
+}
+
+@media (max-width: 1180px) {
+    .st-key-dashboard-overview-option2 .dashboard-overview-card-grid.dashboard-summary-strip {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+        height: auto !important;
+    }
+
+    .st-key-dashboard-overview-option2 .dashboard-overview-card-grid.dashboard-summary-strip .dashboard-overview-card {
+        height: 170px !important;
+        min-height: 170px !important;
+    }
+}
+
+@media (max-width: 920px) {
+    .st-key-dashboard-overview-hero-shell .st-key-capture_input_panel [data-testid="stHorizontalBlock"] {
+        gap: 0.14rem !important;
+    }
+
+    .st-key-dashboard-overview-hero-shell .st-key-capture_input_panel [data-testid="stColumn"],
+    .st-key-dashboard-overview-hero-shell .st-key-capture_input_panel [data-testid="column"],
+    .st-key-dashboard-overview-hero-shell .st-key-capture_input_panel [data-testid="stButton"] {
+        width: 1.72rem !important;
+        max-width: 1.72rem !important;
+        flex-basis: 1.72rem !important;
+    }
+
+    .st-key-dashboard-overview-hero-shell .st-key-capture_input_panel [data-testid="stColumn"]:last-child,
+    .st-key-dashboard-overview-hero-shell .st-key-capture_input_panel [data-testid="column"]:last-child,
+    .st-key-dashboard-overview-hero-shell .st-key-capture_input_panel [data-testid="stColumn"]:last-child [data-testid="stButton"],
+    .st-key-dashboard-overview-hero-shell .st-key-capture_input_panel [data-testid="column"]:last-child [data-testid="stButton"] {
+        width: 2.05rem !important;
+        max-width: 2.05rem !important;
+        flex-basis: 2.05rem !important;
+    }
+
+    .st-key-dashboard-overview-hero-shell .st-key-capture_input_panel [data-testid="stButton"] button {
+        min-width: 1.72rem !important;
+        width: 1.72rem !important;
+        max-width: 1.72rem !important;
+        min-height: 1.35rem !important;
+        height: 1.35rem !important;
+        padding: 0 0.24rem !important;
+        font-size: 0.72rem !important;
+    }
+
+    .st-key-dashboard-overview-hero-shell .st-key-capture_input_panel [data-testid="stColumn"]:last-child [data-testid="stButton"] button,
+    .st-key-dashboard-overview-hero-shell .st-key-capture_input_panel [data-testid="column"]:last-child [data-testid="stButton"] button {
+        min-width: 2.05rem !important;
+        width: 2.05rem !important;
+        max-width: 2.05rem !important;
+    }
+}
+
+@media (max-width: 720px) {
+    .st-key-dashboard-overview-hero-shell .st-key-capture_input_panel {
+        top: 0.88rem !important;
+        right: 0.9rem !important;
+        transform: scale(0.94);
+        transform-origin: top right;
+    }
+
+    .st-key-dashboard-overview-option2 .dashboard-overview-card-grid.dashboard-summary-strip {
+        grid-template-columns: 1fr !important;
+    }
+
+    .st-key-dashboard-overview-option2 .dashboard-overview-card-grid.dashboard-summary-strip .dashboard-overview-card {
+        height: 156px !important;
+        min-height: 156px !important;
+    }
+}
