@@ -93,6 +93,11 @@ class ThemeStylesheetTests(unittest.TestCase):
         self.assertIn(".st-key-sidebar-account-panel", stylesheet)
         self.assertIn(".sidebar-brand", stylesheet)
         self.assertIn(".st-key-trade-product-entry", stylesheet)
+        self.assertIn(".st-key-trade-product-search-box", stylesheet)
+        self.assertIn(".trade-search-suggestions__status", stylesheet)
+        self.assertIn(".st-key-trade-product-meta", stylesheet)
+        self.assertIn("position: absolute !important;", stylesheet)
+        self.assertIn("max-height: 18rem;", stylesheet)
         self.assertIn(".trade-total-preview", stylesheet)
         self.assertIn(".cash-flow-preview", stylesheet)
         self.assertIn(".product-code-status-row", stylesheet)
@@ -138,6 +143,17 @@ class ThemeStylesheetTests(unittest.TestCase):
         self.assertIn("box-shadow: var(--shadow-hover);", stylesheet)
         self.assertIn(".dashboard-summary-card--positive .dashboard-summary-card__delta", stylesheet)
         self.assertIn(".dashboard-summary-card--negative .dashboard-summary-card__delta", stylesheet)
+
+    def test_auth_stylesheet_hides_sidebar_container(self) -> None:
+        """인증/온보딩 화면은 Streamlit 기본 사이드바 컨테이너까지 숨긴다."""
+
+        stylesheet = dashboard_app.render_app_stylesheet()
+
+        self.assertIn('.stApp:has(.auth-page-shell) [data-testid="stSidebar"]', stylesheet)
+        self.assertIn('body:has(.auth-page-shell) [data-testid="stSidebar"]', stylesheet)
+        self.assertIn('.stApp:has(.empty-state-shell) [data-testid="stSidebar"]', stylesheet)
+        self.assertIn('[data-testid="stSidebarCollapsedControl"]', stylesheet)
+        self.assertIn("display: none !important;", stylesheet)
         self.assertIn(".dashboard-summary-card--accent .dashboard-summary-card__delta", stylesheet)
         self.assertIn('@media (max-width: 1180px) {\n    .dashboard-metric-strip {\n        grid-template-columns: repeat(3, minmax(0, 1fr));', stylesheet)
         self.assertIn('@media (max-width: 820px) {\n    .dashboard-metric-strip {\n        grid-template-columns: repeat(2, minmax(0, 1fr));', stylesheet)
@@ -222,6 +238,23 @@ class ThemeStylesheetTests(unittest.TestCase):
         self.assertIn('st.container(key="trade-form-cols", horizontal=True, gap="small")', source)
         self.assertIn('st.container(border=True, key="trade-product-entry")', source)
         self.assertIn('st.container(border=True, key="trade-cash-flow-entry")', source)
+
+    def test_trade_product_search_uses_compact_dropdown_and_keeps_required_fields_visible(self) -> None:
+        """상품 등록 검색 결과는 compact dropdown이고 자산 구분/거래일자는 항상 노출한다."""
+
+        source = inspect.getsource(dashboard_app.trade_entry_page)
+
+        self.assertIn('st.container(key="trade-product-search-box")', source)
+        self.assertIn('st.container(key="trade-search-suggestions")', source)
+        self.assertNotIn(
+            'st.container(border=True, height=260, key="trade-search-suggestions")',
+            source,
+        )
+
+        self.assertIn('st.container(key="trade-product-meta")', source)
+        self.assertIn('asset_type = st.selectbox(', source)
+        self.assertIn('trade_date = st.date_input(', source)
+        self.assertIn('trade_date_label(trade_type)', source)
 
     def test_dashboard_summary_and_trend_controls_use_flex_wrappers(self) -> None:
         """상단 요약 카드와 선택 종목 컨트롤은 key 기반 flex wrapper를 사용한다."""

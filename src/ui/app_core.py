@@ -7858,36 +7858,46 @@ def trade_entry_page(account: dict[str, Any], holdings: list[dict[str, Any]], ac
                 else:
                     st.session_state[TRADE_PREFILL_MARKER_KEY] = "buy"
 
-                st.markdown(
-                    '<div class="trade-search-label">상품명 또는 코드 검색 <span>자동완성</span></div>',
-                    unsafe_allow_html=True,
-                )
-                keyup_input = load_keyup_runtime()
-                search_query = keyup_input(
-                    "상품명 또는 코드 검색",
-                    value=str(st.session_state.get(TRADE_SEARCH_QUERY_KEY) or ""),
-                    key=TRADE_SEARCH_QUERY_KEY,
-                    debounce=150,
-                    placeholder="예: K55207BU0715, 0177N0, 파인인덱스",
-                )
+                with st.container(key="trade-product-search-box"):
+                    st.markdown(
+                        '<div class="trade-search-label">상품명 또는 코드 검색 <span>자동완성</span></div>',
+                        unsafe_allow_html=True,
+                    )
 
-                cleaned_search_query = str(search_query or "").strip()
-                if cleaned_search_query and cleaned_search_query != str(st.session_state.get(TRADE_PRODUCT_NAME_KEY) or "").strip():
-                    st.session_state[TRADE_PRODUCT_NAME_KEY] = cleaned_search_query
-                if len(cleaned_search_query) >= 2:
-                    suggestions = search_products(cleaned_search_query, limit=8)
-                    with st.container(border=True, height=260, key="trade-search-suggestions"):
-                        if suggestions:
-                            for product in suggestions:
-                                if st.button(
-                                    product_search_option_label(product),
-                                    key=f"product-suggestion:{account['id']}:{product['code']}",
-                                    width="stretch",
-                                ):
-                                    apply_search_product(product)
-                                    st.rerun()
-                        else:
-                            st.caption("검색 결과가 없습니다.")
+                    keyup_input = load_keyup_runtime()
+                    search_query = keyup_input(
+                        "상품명 또는 코드 검색",
+                        value=str(st.session_state.get(TRADE_SEARCH_QUERY_KEY) or ""),
+                        key=TRADE_SEARCH_QUERY_KEY,
+                        debounce=150,
+                        placeholder="예: 삼성전자, 005930, K55207BU0715",
+                    )
+
+                    cleaned_search_query = str(search_query or "").strip()
+                    if cleaned_search_query and cleaned_search_query != str(st.session_state.get(TRADE_PRODUCT_NAME_KEY) or "").strip():
+                        st.session_state[TRADE_PRODUCT_NAME_KEY] = cleaned_search_query
+
+                    if len(cleaned_search_query) >= 2:
+                        suggestions = search_products(cleaned_search_query, limit=8)
+                        with st.container(key="trade-search-suggestions"):
+                            if suggestions:
+                                st.markdown(
+                                    '<div class="trade-search-suggestions__status">검색 결과</div>',
+                                    unsafe_allow_html=True,
+                                )
+                                for product in suggestions:
+                                    if st.button(
+                                        product_search_option_label(product),
+                                        key=f"product-suggestion:{account['id']}:{product['code']}",
+                                        width="stretch",
+                                    ):
+                                        apply_search_product(product)
+                                        st.rerun()
+                            else:
+                                st.markdown(
+                                    '<div class="trade-search-suggestions__status">검색 결과가 없습니다.</div>',
+                                    unsafe_allow_html=True,
+                                )
 
                 st.markdown(build_product_code_status_html(st.session_state.get(TRADE_SYMBOL_KEY)), unsafe_allow_html=True)
                 symbol = st.text_input(
@@ -7920,18 +7930,29 @@ def trade_entry_page(account: dict[str, Any], holdings: list[dict[str, Any]], ac
                 if trade_disabled:
                     st.caption("가격과 수량을 0보다 크게 입력하면 저장할 수 있습니다.")
 
-                asset_col, notes_col = st.columns(2, gap="medium")
-                with asset_col:
-                    asset_type = st.selectbox(
-                        "자산 구분",
-                        ["risk", "safe"],
-                        format_func=label_asset_type,
-                        key=TRADE_ASSET_TYPE_KEY,
-                    )
-                with notes_col:
-                    notes = st.text_input("메모", key=TRADE_NOTES_KEY, placeholder="선택 입력")
+                with st.container(key="trade-product-meta"):
+                    meta_cols = st.columns((0.85, 0.95, 1.25), gap="medium", vertical_alignment="bottom")
 
-                trade_date = st.date_input(trade_date_label(trade_type), key=TRADE_DATE_KEY)
+                    with meta_cols[0]:
+                        asset_type = st.selectbox(
+                            "자산 구분",
+                            ["risk", "safe"],
+                            format_func=label_asset_type,
+                            key=TRADE_ASSET_TYPE_KEY,
+                        )
+
+                    with meta_cols[1]:
+                        trade_date = st.date_input(
+                            trade_date_label(trade_type),
+                            key=TRADE_DATE_KEY,
+                        )
+
+                    with meta_cols[2]:
+                        notes = st.text_input(
+                            "메모",
+                            key=TRADE_NOTES_KEY,
+                            placeholder="선택 입력",
+                        )
 
                 submitted = st.button(
                     trade_submit_button_label(trade_type),

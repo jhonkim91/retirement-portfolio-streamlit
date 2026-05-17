@@ -3,37 +3,28 @@
 ## 문서 목적
 - 최신 대표 검증 결과 1세트를 기록한다.
 - 과거 상세 이력은 `docs/archive/`, `docs/CHANGELOG.md`, `docs/DECISIONS.md`를 기준으로 확인한다.
-- 기준일: `2026-05-16`
+- 기준일: `2026-05-17`
 
 ## 최신 대표 검증 결과
-- 작업 범위: 대시보드 요약 카드/선택 종목 트렌드 컨트롤/거래 입력 패널/실현손익 차트 반응형 보강
-- 수정: Streamlit 1.55의 `class_name` 미지원에 맞춰 `key` + `horizontal=True` 기반 flex wrapper를 `dashboard-summary-strip`, `dashboard-trend-controls`, `trade-form-cols`에 적용.
-- 수정: 상단 요약 카드 높이를 120px로 고정하고 flex wrapping, 라벨 ellipsis, ghost action slot 폭 고정을 보강.
-- 수정: 선택 종목 트렌드 컨트롤은 desktop 한 줄 compact 배치, 860px 이하 세로 적층으로 정리.
-- 수정: 거래 입력의 상품 등록/현금 흐름 패널은 desktop 2열, mobile 1열로 wrapping되도록 보강.
-- 수정: 대시보드/거래 차트 높이를 560px 기준으로 통일하고 ECharts option에 높이 metadata를 부여해 렌더링 높이를 같은 값에서 읽도록 변경.
-- 수정: 실현손익 막대 차트 양수/음수 색상을 `#2e7d32`/`#c62828`로 고정하고 bar label을 상단에 표시.
-- 수정: UI Capture GitHub Actions가 job 로그 생성 전 실패한 상태를 확인하고 `actions/checkout@v4`, `actions/setup-python@v5` 안정 버전으로 고정.
-- 수정: workflow job-level `env`에서 `${{ runner.temp }}` expression을 제거하고 `/tmp/portfolio-capture.db` 고정 경로로 변경.
-- 수정: 캡처 스크립트가 non-dashboard 페이지 이동 전 데모 대시보드 wrapper를 기다리고, 숨은 탭 대신 visible tab/button만 클릭하도록 보강.
-- 환경: Python 3.11.
+- 작업 범위: 거래 입력 > 상품 등록 검색 결과 compact dropdown 전환 및 자산 구분/거래일자/메모 항상 표시.
+- 수정: `st.container(border=True, height=260, key="trade-search-suggestions")`를 제거하고 `trade-product-search-box`, `trade-search-suggestions`, `trade-product-meta` key 기반 구조로 정리했다.
+- CSS: 검색 결과는 desktop에서 absolute dropdown, mobile에서 relative list로 표시하며, 자산 구분/거래일자/메모는 desktop 3열, mobile 1열로 배치한다.
+- 회귀 테스트: `tests/test_app_dashboard.py`에서 compact dropdown source 구조와 관련 CSS selector/속성을 고정했다.
+- 환경: Python 3.11, 기존 로컬 Streamlit 서버 `http://localhost:8501`.
 
 ## 명령 검증
-- CSS 중괄호 균형 확인 성공 (`{` 679개, `}` 679개)
 - `python -m compileall app.py src scripts tests` 성공
-- `python -m unittest tests.test_app_dashboard` 성공, 122 tests
-- `python -m unittest discover -s tests -p "test_*.py"` 성공, 289 tests
-- `.github/workflows/ui-capture.yml` YAML 파싱 및 action version 확인 성공
-- `.github/workflows/ui-capture.yml`에서 job-level `env`의 `runner.temp` expression 제거 확인 성공
-- `python -m unittest tests.test_app_dashboard` 재실행 성공, 123 tests
-- `python scripts/capture_app.py --url "http://localhost:8506/?demo=1&capture=1" --page trades --viewport desktop --out-dir /tmp/ui_captures_8506_fixed --strict` 성공
-- `python scripts/capture_app.py --url "http://localhost:8506/?demo=1&capture=1" --page all --viewport desktop --out-dir /tmp/ui_captures_8506_all_desktop --strict` 성공
+- `python -m pytest tests/test_app_dashboard.py` 성공, 125 passed
+- `python -m unittest discover -s tests -p "test_*.py"` 성공, 291 tests
+- `python scripts/capture_app.py --page trades --viewport desktop --strict` 성공
+- `python scripts/capture_app.py --page trades --viewport tablet --strict` 성공
+- `python scripts/capture_app.py --page trades --viewport mobile --strict` 성공
 
 ## 산출물 확인
-- 이번 변경은 레이아웃/CSS/차트 option/test 보강으로 저장소 내 신규 PNG 캡처 산출물은 생성하지 않았다.
-- 로컬 재검증 캡처는 `/tmp/ui_captures_8506_all_desktop/2026-05-16_175042/`이며 dashboard/trades/valuation desktop manifest status `success`, 누락 selector 없음.
-- 직전 저장소 대표 캡처는 `artifacts/ui_captures/2026-05-16_162900/desktop/`이며, manifest status `success`, 누락 selector 없음.
+- desktop 상품 등록 캡처: `artifacts/ui_captures/2026-05-17_125933/trades/desktop/blocks/03_trade_product_entry.png`
+- tablet 상품 등록 캡처: `artifacts/ui_captures/2026-05-17_130031/trades/tablet/blocks/03_trade_product_entry.png`
+- mobile 상품 등록 캡처: `artifacts/ui_captures/2026-05-17_130127/trades/mobile/blocks/03_trade_product_entry.png`
 
 ## 미수행 항목
-- 운영 Streamlit 배포와 운영 DB 데이터 직접 수정은 수행하지 않았다.
-- 원격 GitHub Actions run `25968169216`, `25968290999`는 job 생성 전 실패했고, run `25968358824`는 desktop 거래 탭 selector 누락으로 실패했다. 캡처 스크립트 대기/visible 탭 클릭 보정 후 재실행 대상이다.
+- 운영 DB 데이터 직접 수정은 수행하지 않았다.
+- 커밋, 원격 push, 배포는 수행하지 않았다.

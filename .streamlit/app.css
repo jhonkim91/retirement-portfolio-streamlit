@@ -264,9 +264,20 @@ h6 {
     background: transparent;
 }
 
+.stApp:has(.auth-page-shell) [data-testid="stSidebar"],
+.stApp:has(.empty-state-shell) [data-testid="stSidebar"],
+body:has(.auth-page-shell) [data-testid="stSidebar"],
+body:has(.empty-state-shell) [data-testid="stSidebar"],
+.stApp:has(.auth-page-shell) [data-testid="stSidebarCollapsedControl"],
+.stApp:has(.empty-state-shell) [data-testid="stSidebarCollapsedControl"],
+body:has(.auth-page-shell) [data-testid="stSidebarCollapsedControl"],
+body:has(.empty-state-shell) [data-testid="stSidebarCollapsedControl"] {
+    display: none !important;
+}
+
 .stApp:has(.auth-page-shell) [data-testid="stSidebarNav"],
 .stApp:has(.empty-state-shell) [data-testid="stSidebarNav"] {
-    display: none;
+    display: none !important;
 }
 
 .block-container:has(.auth-page-shell) {
@@ -1761,6 +1772,141 @@ h6 {
     text-align: left;
     white-space: pre-line;
     line-height: 1.5;
+}
+
+/* 상품 등록: 검색 결과를 카드 내부 대형 박스가 아닌 compact dropdown으로 표시 */
+.st-key-trade-product-entry,
+.st-key-trade-product-entry [data-testid="stVerticalBlockBorderWrapper"],
+.st-key-trade-product-entry [data-testid="stVerticalBlock"] {
+    overflow: visible !important;
+}
+
+.st-key-trade-product-search-box {
+    position: relative;
+    z-index: 40;
+}
+
+.st-key-trade-product-search-box [data-testid="stElementContainer"] {
+    margin-bottom: 0 !important;
+}
+
+.st-key-trade-search-suggestions {
+    position: absolute !important;
+    top: calc(100% + 0.15rem);
+    left: 0;
+    right: 0;
+    z-index: 80;
+    max-height: 18rem;
+    overflow: hidden !important;
+    border: 1px solid #CAD2DF !important;
+    border-radius: 0 0 8px 8px !important;
+    background: #FFFFFF !important;
+    box-shadow: 0 18px 42px rgba(23, 32, 51, 0.18) !important;
+}
+
+.st-key-trade-search-suggestions [data-testid="stVerticalBlock"] {
+    gap: 0 !important;
+    max-height: 18rem;
+    overflow-y: auto !important;
+    padding: 0 !important;
+}
+
+.trade-search-suggestions__status {
+    padding: 0.72rem 0.85rem 0.48rem;
+    color: #4A5568;
+    font-size: 0.82rem;
+    font-weight: 800;
+    border-bottom: 1px solid #E5E8EF;
+    background: #F8FBF6;
+}
+
+.st-key-trade-search-suggestions [data-testid="stButton"] {
+    margin: 0 !important;
+}
+
+.st-key-trade-search-suggestions [data-testid="stButton"] > button {
+    min-height: 3.15rem !important;
+    width: 100% !important;
+    padding: 0.62rem 0.85rem !important;
+    border: 0 !important;
+    border-bottom: 1px solid #E5E8EF !important;
+    border-radius: 0 !important;
+    background: #FFFFFF !important;
+    box-shadow: none !important;
+    color: #172033 !important;
+    justify-content: flex-start !important;
+    align-items: center !important;
+}
+
+.st-key-trade-search-suggestions [data-testid="stButton"] > button:hover,
+.st-key-trade-search-suggestions [data-testid="stButton"] > button:focus,
+.st-key-trade-search-suggestions [data-testid="stButton"] > button:focus-visible {
+    background: #F8FBF6 !important;
+    color: #172033 !important;
+    outline: none !important;
+    box-shadow: inset 3px 0 0 #5DBB92 !important;
+}
+
+.st-key-trade-search-suggestions [data-testid="stButton"] > button p {
+    margin: 0 !important;
+    width: 100%;
+    text-align: left;
+    white-space: pre-line;
+    line-height: 1.38;
+    font-size: 0.86rem;
+}
+
+/* 상품 등록: 자산 구분/거래일자/메모는 항상 노출하되 compact하게 배치 */
+.st-key-trade-product-meta {
+    margin-top: 0.2rem;
+}
+
+.st-key-trade-product-meta [data-testid="stHorizontalBlock"] {
+    align-items: flex-end !important;
+}
+
+.st-key-trade-product-meta [data-testid="stSelectbox"],
+.st-key-trade-product-meta [data-testid="stDateInput"],
+.st-key-trade-product-meta [data-testid="stTextInput"] {
+    width: 100% !important;
+}
+
+/* 상품 등록 카드 자체의 과도한 세로 여백 축소 */
+.st-key-trade-product-entry [data-testid="stVerticalBlock"] {
+    gap: 0.62rem !important;
+}
+
+.st-key-trade-product-entry [data-testid="stCaptionContainer"] {
+    margin-top: -0.18rem !important;
+}
+
+@media (max-width: 768px) {
+    .st-key-trade-search-suggestions {
+        position: relative !important;
+        top: auto;
+        left: auto;
+        right: auto;
+        margin-top: 0.2rem;
+        max-height: 14rem;
+        border-radius: 8px !important;
+        box-shadow: 0 12px 28px rgba(23, 32, 51, 0.12) !important;
+    }
+
+    .st-key-trade-search-suggestions [data-testid="stVerticalBlock"] {
+        max-height: 14rem;
+    }
+
+    .st-key-trade-product-meta [data-testid="stHorizontalBlock"] {
+        flex-direction: column !important;
+        gap: 0.55rem !important;
+    }
+
+    .st-key-trade-product-meta [data-testid="stHorizontalBlock"] > div,
+    .st-key-trade-product-meta [data-testid="column"] {
+        width: 100% !important;
+        min-width: 100% !important;
+        flex: 1 1 auto !important;
+    }
 }
 
 .st-key-trade-log-table [data-testid="stCaptionContainer"] p {

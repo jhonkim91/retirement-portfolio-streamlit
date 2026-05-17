@@ -3,42 +3,17 @@
 ## 문서 목적
 - 현재 프로젝트 상태와 다음 작업에 필요한 최소 정보만 유지한다.
 - 상세 검증 이력은 `docs/VALIDATION.md`, 완료 변경 이력은 `docs/CHANGELOG.md`, 설계 결정은 `docs/DECISIONS.md`를 기준으로 확인한다.
-- 기준일: `2026-05-16`
+- 기준일: `2026-05-17`
 
 ## 작업 상태
-- [x] 입금액 기준 일별 평가액 기록 기능 추가
-- [x] Supabase/SQLite `daily_valuation_snapshot` 테이블, 인덱스, RLS, 정책, GRANT 정의
-- [x] `src/valuation.py` 순수 계산 로직과 재계산/저장 서비스 함수 추가
-- [x] `src/db.py`, `src/sqlite_db.py` 평가 스냅샷 저장/조회/삭제 wrapper 추가
-- [x] 거래 UI, CSV import, 수동 가격 갱신, daily rollup 재계산 hook 추가
-- [x] Dashboard 스냅샷 우선 표시와 `평가액 기록` 페이지 추가
-- [x] 평가액 기록 시작일과 원금을 회사 납입금 단독 기준에서 개인 입금 포함 입금성 거래 기준으로 변경
-- [x] Supabase 평가 스냅샷 저장 전 중복 계좌 재조회로 발생하던 “계좌를 찾을 수 없습니다” 경고 방지
-- [x] 평가액 기록 CSV 저장/불러오기와 화면 수정 저장 기능 추가
-- [x] 사이드바 연금 유형 뱃지 제거, Dashboard 히어로 전일 대비 증감 표시, 손익/수익률 KPI 차트 확대
-- [x] 평가액 기록 과거 현금을 단순 원금-잔여원가에서 거래 원장 `cash_delta` 누적 기준으로 변경
-- [x] 평가액 기록 스냅샷 조회/표시 순서를 최신 기준일 우선으로 변경
-- [x] 계산/DB/스키마/UI/배치 회귀 테스트 추가 및 통과
-- [x] Supabase 운영 DB에 `migrations/2026-05-14_add_daily_valuation_snapshot.sql` 적용 및 평가 스냅샷 재계산
-- [x] 운영 `jhonkim2025` 계정 평가 스냅샷을 원장 현금 기준으로 재계산
-- [x] 기존 `migrations/2026-05-14_normalize_temporal_columns.sql` 적용 전 cast 실패 행 여부 점검
-- [x] KIS WebSocket worker 장시간 실행 중 재연결/상태 복구를 장중 운영 로그 기준으로 추가 점검
-- [x] Supabase/SQLite 실시간 tick retention 전용 인덱스 보강
-- [x] 평가액 기록 수익률 계산 시 일반 출금을 순입금 원금에서 차감
-- [x] 거래 기록 선택 삭제 UI/로직 추가
-- [x] 거래 기록 선택 삭제 시 연관 매도 자동 포함으로 음수 보유수량 오류 방지
-- [x] 평가액 기록 현금값을 일별 실제 계좌 스냅샷 현금 우선으로 보정
-- [x] 평가액 기록/원화 표시 금액을 원 단위 일반 반올림으로 보정
-- [x] 1,000배 총액 중복 거래와 국내 종목 코드 접미사 차이로 인한 평가/실현손익 왜곡 보정
-- [x] 거래 기록 생성/수정/삭제 후 평가액 기록을 영향 시작일 이후만 부분 재계산하도록 최적화
-- [x] 펀드성 코드(`K...`)의 1,000좌 기준가 단위를 보유 평가/거래 UI/저장 경로에 일관 적용
-- [x] Dashboard KPI 카드의 입금 대비 손익/수익률 전일 대비 델타 표시
-- [x] Dashboard KPI 값 급등 방지를 위해 오늘 평가 스냅샷 현금 산정 fallback 추가
-- [x] `?demo=1` URL query parameter 기반 데모 자동 진입 추가
-- [x] 데모 데이터 `데모 IRP`/`데모 주식` 2계좌 구성, 현재 보유 17개 종목, 5년치 입출금/매매일지 규칙 보강
-- [x] 자산 배분 트리맵 예수금 중립색 처리와 타일 수익률 라벨 표시 개선
+- [x] 입금액 기준 평가액 기록, 거래 UI, Dashboard 스냅샷 우선 표시 기능 반영
+- [x] 데모 자동 진입(`?demo=1`)과 데모 데이터 2계좌 구성을 보강
+- [x] Dashboard 자산 배분 트리맵 예수금 중립색/수익률 라벨 개선
 - [x] Streamlit UI 캡처 자동화와 거래/평가액 기록 페이지 캡처 확장
-- [x] 대시보드 UI 개선 로컬 반영 및 요약 카드/트렌드/거래 패널/차트 반응형 보강
+- [x] 대시보드 UI 개선 및 요약 카드/트렌드/거래 패널/차트 반응형 보강
+- [x] 로그인/온보딩 화면의 Streamlit 기본 사이드바 컨테이너 숨김
+- [x] 로컬/운영 웹 desktop 데모 UI 차이 확인
+- [x] 거래 상품 검색 결과 compact dropdown 및 자산 구분/거래일자 항상 표시 반영
 - [ ] temporal normalize migration 실제 적용 전 운영 `realtime_price_bars` 테이블 생성/노출 여부 결정
 
 ## 프로젝트 개요
@@ -53,18 +28,10 @@
 - 배포 앱: `https://retirement-portfolio-app-nh2vq9ferqnpehsslbykbe.streamlit.app/`
 
 ## 최근 변경 파일
-- `src/ui/app_core.py`: 대시보드/거래/평가액 기록 주요 UI 영역에 캡처용 `capture_*` wrapper 추가, `capture=1` 기준일과 거래 입력 기본 날짜 고정, overview 컬럼 비율 조정, 요약 카드/트렌드 컨트롤/거래 입력 flex wrapper, 차트 높이 metadata, 실현손익 차트 색상 보강
-- `.streamlit/app.css`: dashboard max-width, overview hero/card, 기간 버튼, 패널 radius/shadow, treemap legend, 보유종목 테이블 스타일, 요약 카드 120px 높이/라벨, 트렌드 컨트롤, 거래 행 구분선, 거래 입력 2열/1열 responsive, 모바일 적층 레이아웃 보강
-- `config/capture_blocks.yaml`: 페이지별 블록 name, selector, PNG 파일명, required, hidden tab 활성화 설정 정의
-- `scripts/capture_app.py`: Playwright 기반 전체/블록 캡처, 로컬 Streamlit 자동 실행, page/viewport all, strict, manifest 생성, sidebar 상태 고정, loading 대기, selector 누락 로그, 데모 준비 대기와 visible 탭 클릭 구현
-- `requirements-dev.txt`: UI 캡처용 `playwright`, `pyyaml` dev dependency 추가
-- `docs/ui_capture.md`, `README.md`: 로컬 설치/실행, 산출물 구조, 보안 주의 문서화
-- `.github/workflows/ui-capture.yml`: GitHub Actions에서 캡처 후 artifact 업로드 workflow 추가, checkout/setup-python 안정 버전 고정, job env DB 경로를 `/tmp/portfolio-capture.db`로 변경
-- `src/db.py`: 캡처 모드 데모 seed 기준일 고정용 `snapshot_base_date` 인자 추가
-- `src/auth.py`: 운영 Supabase URL 하드코딩 제거와 `https://*.supabase.co` URL 검증 복구
-- `src/market.py`: KRX 심볼 판별, Naver 가격/이력 fallback, `fetch_price_history_range()` 호환 함수 복구
-- `tests/test_app_dashboard.py`, `tests/test_db.py`: capture query, 고정 데모 기준일, 거래/평가액 캡처 wrapper, flex wrapper, 560px 차트 높이, 실현손익 차트 색상/라벨 테스트 추가
-- `docs/VALIDATION.md`, `docs/CHANGELOG.md`, `Memory.md`: 최신 검증 결과와 변경 요약 갱신
+- `src/ui/app_core.py`: 상품 검색 결과 컨테이너의 border/height 박스를 제거하고 compact dropdown용 wrapper 및 자산 구분/거래일자/메모 3열 meta 영역을 적용.
+- `.streamlit/app.css`: 상품 검색 결과 dropdown absolute 배치, 모바일 relative fallback, 자산 구분/거래일자/메모 compact 반응형 스타일 추가.
+- `tests/test_app_dashboard.py`: 검색 dropdown 구조와 필수 입력 노출, CSS selector/속성 회귀 테스트 추가.
+- `docs/VALIDATION.md`, `Memory.md`: 이번 UI 변경 검증 결과와 산출물 경로 갱신.
 
 ## 핵심 설계 결정
 - 기존 `account_summary`와 `daily_account_snapshot` 계산은 유지하고, 입금 기준 이력은 별도 `daily_valuation_snapshot`에 저장한다.
@@ -119,28 +86,28 @@ streamlit run app.py --server.port 8501 --server.address 0.0.0.0 --server.fileWa
 ```
 
 ## 최신 검증 결과
-- 작업 범위: 대시보드 요약 카드/선택 종목 트렌드 컨트롤/거래 입력 패널/실현손익 차트 반응형 보강, UI Capture GitHub Actions 시작 실패와 거래 탭 캡처 누락 보정
-- 변경 파일: `.streamlit/app.css`, `src/ui/app_core.py`, `scripts/capture_app.py`, `tests/test_app_dashboard.py`, `.github/workflows/ui-capture.yml`, `docs/VALIDATION.md`, `docs/CHANGELOG.md`, `Memory.md`
-- CSS 중괄호 균형 확인 성공 (`{` 679개, `}` 679개)
-- `python -m compileall app.py src scripts tests` 성공
-- `python -m unittest tests.test_app_dashboard` 성공, 122 tests
-- `python -m unittest discover -s tests -p "test_*.py"` 성공, 289 tests
-- `.github/workflows/ui-capture.yml` YAML 파싱 및 action version 확인 성공
-- `.github/workflows/ui-capture.yml`에서 job-level `env`의 `runner.temp` expression 제거 확인 성공
-- `python -m unittest tests.test_app_dashboard` 재실행 성공, 123 tests
-- `python scripts/capture_app.py --url "http://localhost:8506/?demo=1&capture=1" --page all --viewport desktop --out-dir /tmp/ui_captures_8506_all_desktop --strict` 성공
-- 운영 DB 데이터 직접 수정과 migration 추가는 수행하지 않았다.
+- 작업 범위: 거래 입력 > 상품 등록 검색 결과를 compact dropdown으로 변경하고 자산 구분/거래일자/메모를 항상 노출.
+- 코드 검증: `python -m compileall app.py src scripts tests` 성공.
+- 단위 검증: `python -m pytest tests/test_app_dashboard.py` 성공, 125 passed.
+- 전체 검증: `python -m unittest discover -s tests -p "test_*.py"` 성공, 291 tests.
+- UI 캡처 검증: `python scripts/capture_app.py --page trades --viewport desktop --strict`, `tablet --strict`, `mobile --strict` 모두 성공.
+- 확인 산출물: `artifacts/ui_captures/2026-05-17_125933/trades/desktop/blocks/03_trade_product_entry.png`, `artifacts/ui_captures/2026-05-17_130031/trades/tablet/blocks/03_trade_product_entry.png`, `artifacts/ui_captures/2026-05-17_130127/trades/mobile/blocks/03_trade_product_entry.png`.
+- 운영 DB 데이터 수정, 커밋, 원격 push, 배포는 수행하지 않았다.
 
 ## Git/GitHub 상태
 - 기본 브랜치: `main`
-- 최근 배포 코드 커밋: `0f19336 Add demo query auto entry`
+- 최근 배포 코드 커밋: `ce4b2d5 Hide auth sidebar on login screen`
+- 배포 기록 커밋: `d66f015 Record auth sidebar deployment`
+- 배포 방법: `git push origin main`으로 Streamlit Cloud 자동 재배포 트리거.
+- 운영 배포 검증: 공개 URL `https://retirement-portfolio-app-nh2vq9ferqnpehsslbykbe.streamlit.app/` 로그인 화면 iframe에서 새 CSS selector 반영과 사이드바 숨김 상태 확인.
 - 기본 UI 캡처 자동화 코드는 `codex/ui-capture-automation` 브랜치에 `89c5e16 Add Streamlit UI capture automation`으로 커밋했고 `origin/codex/ui-capture-automation`에 push했다.
 - 이번 최신 변경은 `e9c1b04 Expand UI captures and refine dashboard design` 커밋으로 대시보드 UI 개선과 거래/평가액 기록 캡처 확장을 함께 반영한다.
 - 최신 반응형 UI 보강은 `eec7ac1 Refine responsive dashboard UI`, `9828696 Record responsive UI publish` 커밋으로 `codex/ui-capture-automation` 브랜치에 반영했고 `origin/codex/ui-capture-automation`에 push했다.
 - UI Capture GitHub Actions 시작 실패 보정은 `fcab67a Fix UI capture workflow actions`, `fb8d51d Fix UI capture workflow env` 커밋으로 반영했다.
 - UI Capture 거래 탭 캡처 안정화는 `cad83fa Stabilize UI capture navigation` 커밋으로 반영했다.
+- 최신 원격 브랜치 head는 `7fb6f9c Record UI capture navigation publish`이고, PR 체크는 `capture-ui` 2건 모두 성공 상태다.
 - GitHub draft PR은 `https://github.com/jhonkim91/retirement-portfolio-streamlit/pull/1`이다.
-- 원격 UI Capture run `25968169216`, `25968290999`는 job 로그 생성 전 실패했고, run `25968358824`는 desktop 거래 탭 selector 누락으로 실패했다. 캡처 스크립트 대기/visible 탭 클릭 보정 후 재실행 대상이다.
+- 원격 UI Capture run `25968169216`, `25968290999`는 job 로그 생성 전 실패했고, run `25968358824`는 desktop 거래 탭 selector 누락으로 실패했다. 최신 run `25988086163`, `25988086871`에서 보정 후 성공했다.
 - `gh` CLI는 `/home/vscode/.local/bin/gh`에 설치되어 있고 GitHub 계정 `jhonkim91` 인증 상태를 확인했다.
 - 워크트리에는 이번 요청 전부터 `data/portfolio.db`, 로컬 도구 디렉터리, 캡처 산출물 등 여러 변경/미추적 파일이 함께 있었다.
 - 커밋 시 요청 관련 파일만 선별하고 `data/portfolio.db`, `.local/`, `.playtools*/`, `.playwright-browsers/`, `.vscode/`, `artifacts/`, `data/kis_cache/` 등 로컬 산출물은 제외한다.

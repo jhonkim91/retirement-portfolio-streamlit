@@ -3,9 +3,21 @@
 ## 기준
 - 이 문서는 `Memory.md`에서 분리한 완료 변경 이력 요약이다.
 - 날짜별 상세 로그 원문은 `docs/archive/memory-YYYY-MM-DD.md`에 보존했다.
-- 정리 기준일은 `2026-05-16`이다.
+- 정리 기준일은 `2026-05-17`이다.
 
 ## 최근 완료 변경 요약
+
+### 2026-05-17
+- 거래 상품 검색 dropdown 및 필수 입력 노출 개선.
+  - 상품 등록 검색 결과를 카드 내부 고정 높이 박스에서 compact dropdown으로 변경.
+  - 자산 구분, 거래일자, 메모 입력을 한 줄 meta 영역으로 묶어 항상 보이도록 정리하고 모바일에서는 세로 배치되도록 CSS를 보강.
+  - 검색 dropdown 구조와 CSS selector 회귀 테스트를 추가.
+  - `tests/test_app_dashboard.py`, 전체 compileall/unittest discover, 거래 페이지 desktop/tablet/mobile strict 캡처 검증 완료.
+- 로그인 화면 사이드바 노출 핫픽스.
+  - 인증/온보딩 화면에서도 Streamlit 기본 사이드바 컨테이너가 생성되고, 기존 CSS가 `stSidebarNav`만 숨겨 빈 사이드바가 남는 원인을 확인.
+  - `.auth-page-shell`/`.empty-state-shell` 화면에 한해 `stSidebar`, `stSidebarCollapsedControl`, `stSidebarNav`를 숨기도록 CSS selector를 보강.
+  - 인증 화면 전용 사이드바 숨김 selector 회귀 테스트를 추가.
+  - CSS 중괄호 균형, `ThemeStylesheetTests`, 전체 compileall/unittest discover, 로컬 Streamlit 로그인 화면 브라우저 검증 완료.
 
 ### 2026-05-16
 - UI Capture GitHub Actions 시작 실패 보정.
